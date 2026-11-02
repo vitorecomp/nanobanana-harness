@@ -1,13 +1,8 @@
 /**
- * Social Authentication Service (Google OAuth 2.0 & Facebook Login)
+ * Social & Local Authentication Service for Nano Banana Studio (Tauri v2 + Local SQLite)
  *
- * Connects to Flask + SQLAlchemy endpoints:
- * - `POST /api/auth/google`
- * - `POST /api/auth/facebook`
- *
- * SECURITY INVARIANT:
- * - Authenticates user identity via Google or Facebook OAuth.
- * - Never touches, stores, or transmits the user's Gemini / Nano Banana API Key.
+ * Persists creator profiles into the local SQLite `users` table (`src-tauri/src/db.rs`
+ * or browser dev SQLite bridge).
  */
 
 import {
@@ -16,13 +11,15 @@ import {
   GOOGLE_CLIENT_ID,
   IS_AUTH_REQUIRED,
 } from "@/core/config/env";
-import { fetchBackendApi } from "@/core/http/backendClient";
+import {
+  localDbUpdateUserProfile,
+  localDbUpsertUser,
+} from "@/core/tauri/tauriBridge";
 import {
   AuthProvider,
   FacebookAuthRequestPayload,
   GoogleAuthRequestPayload,
   GoogleUserProfile,
-  SocialAuthBackendResponse,
 } from "../types/auth.types";
 
 export { GOOGLE_CLIENT_ID, FACEBOOK_APP_ID, IS_AUTH_REQUIRED };
@@ -53,164 +50,91 @@ export const LOCAL_DEV_USER: GoogleUserProfile = {
   email: "dev@localhost",
   picture: buildInitialsAvatarDataUrl("Local Studio", "google"),
   provider: "google",
-  authenticatedAt: "Dev Mode (Auth Optional)",
+  authenticatedAt: "Local SQLite Studio",
 };
+
+function simpleHashId(seed: string, prefix: string): string {
+  let hash = 0;
+  for (let i = 0; i < seed.length; i++) {
+    hash = (hash << 5) - hash + seed.charCodeAt(i);
+    hash |= 0;
+  }
+  return `${prefix}_${Math.abs(hash).toString(16).padStart(8, "0")}`;
+}
 
 export async function authenticateWithGoogle(
   payload: GoogleAuthRequestPayload
 ): Promise<{ user: GoogleUserProfile; verifiedByBackend: boolean }> {
-  const fallbackName =
-    payload.dev_profile?.name?.trim() || "Nano Banana Creator";
-  const fallbackEmail =
-    payload.dev_profile?.email?.trim() || "creator@google.com";
-  const fallbackPicture =
-    payload.dev_profile?.picture ||
-    buildInitialsAvatarDataUrl(fallbackName, "google");
+  const name = payload.dev_profile?.name?.trim() || "Nano Banana Creator";
+  const email = (
+    payload.dev_profile?.email?.trim() || "creator@google.com"
+  ).toLowerCase();
+  const picture =
+    payload.dev_profile?.picture || buildInitialsAvatarDataUrl(name, "google");
+  const userId = simpleHashId(email, "usr");
 
-  try {
-    const response = await fetchBackendApi("/api/auth/google", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Accept: "application/json",
-      },
-      body: JSON.stringify(payload),
-    });
+  const saved = await localDbUpsertUser({
+    id: userId,
+    provider: "google",
+    google_sub: `google-${userId}`,
+    email,
+    name,
+    picture,
+  });
 
-    if (!response.ok) {
-      const errBody = await response.json().catch(() => ({}));
-      throw new Error(
-        errBody.detail ||
-          `Google authentication failed (HTTP ${response.status})`
-      );
-    }
-
-    const data = (await response.json()) as SocialAuthBackendResponse;
-    if (!data.authenticated || !data.user) {
-      throw new Error("Invalid Google authentication response.");
-    }
-
-    return {
-      user: {
-        id: data.user.id || `google-${Date.now()}`,
-        name: data.user.name || fallbackName,
-        email: data.user.email || fallbackEmail,
-        picture:
-          data.user.picture ||
-          buildInitialsAvatarDataUrl(data.user.name || fallbackName, "google"),
-        provider: "google",
-        authenticatedAt: new Date().toLocaleTimeString("en-US", {
-          hour: "2-digit",
-          minute: "2-digit",
-        }),
-      },
-      verifiedByBackend: true,
-    };
-  } catch (err) {
-    if (
-      payload.credential &&
-      !payload.dev_profile &&
-      err instanceof Error &&
-      err.message.includes("HTTP 4")
-    ) {
-      throw err;
-    }
-
-    return {
-      user: {
-        id: `google-local-${Date.now()}`,
-        name: fallbackName,
-        email: fallbackEmail,
-        picture: fallbackPicture,
-        provider: "google",
-        authenticatedAt: new Date().toLocaleTimeString("en-US", {
-          hour: "2-digit",
-          minute: "2-digit",
-        }),
-      },
-      verifiedByBackend: false,
-    };
-  }
+  return {
+    user: {
+      id: saved.id,
+      name: saved.name,
+      email: saved.email,
+      picture:
+        saved.picture || buildInitialsAvatarDataUrl(saved.name, "google"),
+      provider: "google",
+      authenticatedAt: new Date().toLocaleTimeString("en-US", {
+        hour: "2-digit",
+        minute: "2-digit",
+      }),
+    },
+    verifiedByBackend: true,
+  };
 }
 
 export async function authenticateWithFacebook(
   payload: FacebookAuthRequestPayload
 ): Promise<{ user: GoogleUserProfile; verifiedByBackend: boolean }> {
-  const fallbackName =
-    payload.dev_profile?.name?.trim() || "Facebook Creator";
-  const fallbackEmail =
-    payload.dev_profile?.email?.trim() || "creator@facebook.com";
-  const fallbackPicture =
+  const name = payload.dev_profile?.name?.trim() || "Facebook Creator";
+  const email = (
+    payload.dev_profile?.email?.trim() || "creator@facebook.com"
+  ).toLowerCase();
+  const picture =
     payload.dev_profile?.picture ||
-    buildInitialsAvatarDataUrl(fallbackName, "facebook");
+    buildInitialsAvatarDataUrl(name, "facebook");
+  const userId = simpleHashId(email, "usr_fb");
 
-  try {
-    const response = await fetchBackendApi("/api/auth/facebook", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Accept: "application/json",
-      },
-      body: JSON.stringify(payload),
-    });
+  const saved = await localDbUpsertUser({
+    id: userId,
+    provider: "facebook",
+    google_sub: `fb-${userId}`,
+    email,
+    name,
+    picture,
+  });
 
-    if (!response.ok) {
-      const errBody = await response.json().catch(() => ({}));
-      throw new Error(
-        errBody.detail ||
-          `Facebook authentication failed (HTTP ${response.status})`
-      );
-    }
-
-    const data = (await response.json()) as SocialAuthBackendResponse;
-    if (!data.authenticated || !data.user) {
-      throw new Error("Invalid Facebook authentication response.");
-    }
-
-    return {
-      user: {
-        id: data.user.id || `fb-${Date.now()}`,
-        name: data.user.name || fallbackName,
-        email: data.user.email || fallbackEmail,
-        picture:
-          data.user.picture ||
-          buildInitialsAvatarDataUrl(
-            data.user.name || fallbackName,
-            "facebook"
-          ),
-        provider: "facebook",
-        authenticatedAt: new Date().toLocaleTimeString("en-US", {
-          hour: "2-digit",
-          minute: "2-digit",
-        }),
-      },
-      verifiedByBackend: true,
-    };
-  } catch (err) {
-    if (
-      payload.access_token &&
-      !payload.dev_profile &&
-      err instanceof Error &&
-      err.message.includes("HTTP 4")
-    ) {
-      throw err;
-    }
-
-    return {
-      user: {
-        id: `facebook-local-${Date.now()}`,
-        name: fallbackName,
-        email: fallbackEmail,
-        picture: fallbackPicture,
-        provider: "facebook",
-        authenticatedAt: new Date().toLocaleTimeString("en-US", {
-          hour: "2-digit",
-          minute: "2-digit",
-        }),
-      },
-      verifiedByBackend: false,
-    };
-  }
+  return {
+    user: {
+      id: saved.id,
+      name: saved.name,
+      email: saved.email,
+      picture:
+        saved.picture || buildInitialsAvatarDataUrl(saved.name, "facebook"),
+      provider: "facebook",
+      authenticatedAt: new Date().toLocaleTimeString("en-US", {
+        hour: "2-digit",
+        minute: "2-digit",
+      }),
+    },
+    verifiedByBackend: true,
+  };
 }
 
 export async function updateUserProfile(
@@ -227,43 +151,18 @@ export async function updateUserProfile(
     updates.picture.trim() ||
     buildInitialsAvatarDataUrl(cleanName, currentUser.provider);
 
-  try {
-    const response = await fetchBackendApi(
-      `/api/users/${encodeURIComponent(currentUser.id)}/profile`,
-      {
-        method: "PATCH",
-        headers: {
-          "Content-Type": "application/json",
-          Accept: "application/json",
-        },
-        body: JSON.stringify({
-          name: cleanName,
-          email: cleanEmail,
-          picture: cleanPicture,
-          provider: currentUser.provider,
-        }),
-      }
-    );
-
-    if (response.ok) {
-      const data = await response.json();
-      if (data?.user) {
-        return {
-          ...currentUser,
-          name: data.user.name || cleanName,
-          email: data.user.email || cleanEmail,
-          picture: data.user.picture || cleanPicture,
-        };
-      }
-    }
-  } catch {
-    // Fallback to in-memory update if backend is temporarily unreachable
-  }
-
-  return {
-    ...currentUser,
+  const saved = await localDbUpdateUserProfile({
+    userId: currentUser.id,
     name: cleanName,
     email: cleanEmail,
     picture: cleanPicture,
+    provider: currentUser.provider,
+  });
+
+  return {
+    ...currentUser,
+    name: saved.name || cleanName,
+    email: saved.email || cleanEmail,
+    picture: saved.picture || cleanPicture,
   };
 }

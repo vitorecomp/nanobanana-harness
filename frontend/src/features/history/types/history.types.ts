@@ -1,7 +1,15 @@
+export interface SavedGenerationVariant {
+  label: string;
+  prompt: string;
+  imageUrl: string;
+  imagePath?: string | null;
+}
+
 export interface SavedTurnRecord {
   id: string;
   conversation_id: string;
   turn_number: number;
+  parent_turn_number?: number | null;
   role: string;
   raw_idea: string;
   master_prompt: string;
@@ -14,6 +22,8 @@ export interface SavedTurnRecord {
   aspect_ratio?: string | null;
   model_used?: string | null;
   is_published?: boolean;
+  variants?: SavedGenerationVariant[];
+  selected_variant_index?: number;
   storage_status?: string;
   created_at?: string;
 }

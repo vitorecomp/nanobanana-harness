@@ -1,20 +1,12 @@
 /** @type {import('next').NextConfig} */
+const isProd = process.env.NODE_ENV === "production";
+
 const nextConfig = {
+  ...(isProd ? { output: "export" } : {}),
   reactStrictMode: true,
+  devIndicators: false,
   images: {
     unoptimized: true,
-  },
-  async rewrites() {
-    const backendInternalUrl =
-      process.env.BACKEND_INTERNAL_URL ||
-      process.env.NEXT_PUBLIC_BACKEND_URL ||
-      "http://localhost:8000";
-    return [
-      {
-        source: "/api/:path*",
-        destination: `${backendInternalUrl.replace(/\/$/, "")}/api/:path*`,
-      },
-    ];
   },
 };
 

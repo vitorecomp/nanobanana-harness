@@ -2,153 +2,130 @@
 
 import React, { useState } from "react";
 import Link from "next/link";
-import { usePathname, useSearchParams } from "next/navigation";
-import { ProfileEditModal } from "@/features/auth";
+import { usePathname } from "next/navigation";
+import { LOCAL_DEV_USER, ProfileEditModal } from "@/features/auth";
 import { useStudioSession } from "@/core/context/StudioSessionContext";
 
 export default function Navbar() {
   const pathname = usePathname();
-  const searchParams = useSearchParams();
-  const { user, isAuthenticated, setUser, logout } = useStudioSession();
-  const [isProfileModalOpen, setIsProfileModalOpen] = useState<boolean>(false);
+  const { user, setUser, hasKeyInRam, rememberKeyInVault } = useStudioSession();
+  const [modalOpen, setModalOpen] = useState<boolean>(false);
 
-  const currentTab = searchParams?.get("tab");
-  const isHome = pathname === "/";
-  const isGalleryPublic =
-    pathname === "/gallery" && currentTab !== "personal";
-  const isGalleryPersonal =
-    pathname === "/gallery" && currentTab === "personal";
-  const isCreate = pathname === "/create";
-  const isLogin = pathname === "/login";
+  const activeUser = user || LOCAL_DEV_USER;
+  const isProjects =
+    pathname === "/gallery" || pathname?.startsWith("/projects");
+  const isCreate = !isProjects;
+
+  const currentViewTitle = isProjects ? "Projects Graph" : "Creation Studio";
 
   return (
     <>
-      <header className="top-header-bar">
-        {/* Top-Left Brand Mark ("nanobanana✦") */}
-        <div className="brand-logo-wrap">
-          <Link
-            href="/"
-            id="brand-logo-home-link"
-            className="brand-logo-link"
+      <header className="ref-folder-topbar">
+        {/* Compact Raised Left Folder Tab (#DFDFDA) with S-Curve Shoulder */}
+        <div className="ref-raised-title-tab">
+          <span className="ref-tab-heading">{currentViewTitle}</span>
+          <svg
+            className="ref-tab-scurve-svg"
+            viewBox="0 0 92 70"
+            preserveAspectRatio="none"
+            aria-hidden="true"
           >
-            <span>nanobanana</span>
-            <span className="brand-mark-badge" aria-hidden="true">
-              <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
-                <path
-                  d="M10 1L12.6 7.4L19 10L12.6 12.6L10 19L7.4 12.6L1 10L7.4 7.4L10 1Z"
-                  fill="#0B0B0B"
-                />
-              </svg>
-            </span>
-          </Link>
+            <path
+              d="M0 0 C42 0 50 70 92 70 L0 70 Z"
+              fill="var(--ref-canvas)"
+            />
+          </svg>
         </div>
 
-        {/* Top-Center Straight-Angled (65°) Notched Black Navigation Bar */}
+        {/* Top-Right Recessed Olive Channel with Compact Pill Navigation Tabs */}
         <nav
-          className="notched-nav-container"
+          className="ref-top-pill-nav"
           aria-label="Nano Banana Studio Primary Navigation"
         >
-          <ul className="notched-nav-list">
-            <li>
-              <Link
-                href="/"
-                id="nav-link-home"
-                className="notched-nav-btn"
-                aria-current={isHome ? "page" : undefined}
-                style={{ textDecoration: "none" }}
-              >
-                Home
-              </Link>
-            </li>
-            <li>
-              <Link
-                href="/gallery"
-                id="nav-link-gallery"
-                className="notched-nav-btn"
-                aria-current={isGalleryPublic ? "page" : undefined}
-                style={{ textDecoration: "none" }}
-              >
-                Published Gallery
-              </Link>
-            </li>
-            <li>
-              <Link
-                href="/gallery?tab=personal"
-                id="nav-link-personal-gallery"
-                className="notched-nav-btn"
-                aria-current={isGalleryPersonal ? "page" : undefined}
-                style={{ textDecoration: "none" }}
-              >
-                My Gallery
-              </Link>
-            </li>
-            <li>
-              <Link
-                href="/create"
-                id="nav-link-create"
-                className="notched-nav-btn"
-                aria-current={isCreate ? "page" : undefined}
-                style={{ textDecoration: "none" }}
-              >
-                Create Studio
-              </Link>
-            </li>
-            <li>
-              {isAuthenticated && user ? (
-                <button
-                  type="button"
-                  id="nav-btn-profile"
-                  className="notched-nav-btn"
-                  onClick={() => setIsProfileModalOpen(true)}
-                  title="Edit Creator Profile"
-                  style={{
-                    gap: "8px",
-                    padding: "4px 12px 4px 6px",
-                  }}
-                >
-                  <img
-                    src={user.picture}
-                    alt={user.name}
-                    style={{
-                      width: "26px",
-                      height: "26px",
-                      borderRadius: "50%",
-                      border: "1.5px solid var(--accent-yellow)",
-                      objectFit: "cover",
-                      flexShrink: 0,
-                      backgroundColor: "var(--bg-surface)",
-                    }}
-                  />
-                  <span>{user.name}</span>
-                </button>
-              ) : (
-                <Link
-                  href="/login"
-                  id="nav-link-login"
-                  className="notched-nav-btn"
-                  aria-current={isLogin ? "page" : undefined}
-                  style={{ textDecoration: "none" }}
-                >
-                  Login
-                </Link>
-              )}
-            </li>
-          </ul>
-        </nav>
+          <Link
+            href="/create"
+            id="nav-link-create"
+            className={`ref-top-nav-pill ${isCreate ? "active" : ""}`}
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+              <circle
+                cx="11"
+                cy="11"
+                r="7"
+                stroke="currentColor"
+                strokeWidth="2.2"
+              />
+              <path
+                d="M16.5 16.5L21 21"
+                stroke="currentColor"
+                strokeWidth="2.2"
+                strokeLinecap="round"
+              />
+            </svg>
+            <span>Studio</span>
+          </Link>
 
-        {/* Right Grid Spacer to keep the Notched Navbar centered */}
-        <div className="header-cta-wrap" aria-hidden="true" />
+          <Link
+            href="/gallery"
+            id="nav-link-projects"
+            className={`ref-top-nav-pill ${isProjects ? "active" : ""}`}
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+              <rect
+                x="3"
+                y="4"
+                width="18"
+                height="16"
+                rx="3"
+                stroke="currentColor"
+                strokeWidth="2"
+              />
+              <path d="M8 9H16M8 14H13" stroke="currentColor" strokeWidth="2" />
+            </svg>
+            <span>Projects</span>
+          </Link>
+
+          <button
+            type="button"
+            id="nav-btn-vault"
+            className="ref-top-nav-pill"
+            onClick={() => setModalOpen(true)}
+            title={
+              hasKeyInRam
+                ? rememberKeyInVault
+                  ? "Config (Vault Key Active)"
+                  : "Config (RAM Key Active)"
+                : "Config"
+            }
+            aria-label="Config"
+            style={{ width: "32px", padding: 0, justifyContent: "center" }}
+          >
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none">
+              <circle
+                cx="12"
+                cy="12"
+                r="3.2"
+                stroke="currentColor"
+                strokeWidth="2"
+              />
+              <path
+                d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9c.26.604.852.997 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1Z"
+                stroke="currentColor"
+                strokeWidth="1.9"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </svg>
+          </button>
+        </nav>
       </header>
 
-      {isAuthenticated && user && (
-        <ProfileEditModal
-          isOpen={isProfileModalOpen}
-          user={user}
-          onClose={() => setIsProfileModalOpen(false)}
-          onSave={(updatedUser) => setUser(updatedUser)}
-          onLogout={() => logout()}
-        />
-      )}
+      <ProfileEditModal
+        isOpen={modalOpen}
+        user={activeUser}
+        onClose={() => setModalOpen(false)}
+        onSave={(updatedUser) => setUser(updatedUser)}
+      />
     </>
   );
 }

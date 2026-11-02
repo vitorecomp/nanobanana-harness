@@ -1,19 +1,18 @@
 "use client";
 
 import React from "react";
-import { useRouter } from "next/navigation";
 import { InteractiveStudio } from "@/features/studio";
 import { useStudioSession } from "@/core/context/StudioSessionContext";
 
 export default function CreateStudioPage() {
-  const router = useRouter();
   const {
     bootstrapData,
     backendOnline,
     apiKey,
     setApiKey,
+    rememberKeyInVault,
+    setRememberKeyInVault,
     user,
-    logout,
     pendingRemix,
   } = useStudioSession();
 
@@ -23,9 +22,9 @@ export default function CreateStudioPage() {
       backendOnline={backendOnline}
       apiKey={apiKey}
       setApiKey={setApiKey}
+      rememberKeyInVault={rememberKeyInVault}
+      setRememberKeyInVault={setRememberKeyInVault}
       googleUser={user}
-      onRequestGoogleLogin={() => router.push("/login")}
-      onGoogleLogout={logout}
       externalPresetRequest={pendingRemix}
     />
   );

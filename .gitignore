@@ -1,42 +1,18 @@
-# Python / Backend
-__pycache__/
-*.py[cod]
-*$py.class
-*.so
-.Python
-backend/.venv/
-.venv/
-venv/
-ENV/
-.pytest_cache/
-.coverage
-htmlcov/
-*.db
-backend/.bucket_storage/
-.bucket_storage/
-
-# Node / Next.js Frontend
-frontend/node_modules/
+# Node & Next.js
 node_modules/
+frontend/node_modules/
 frontend/.next/
-.next/
 frontend/out/
-out/
-build/
-dist/
-*.tsbuildinfo
-next-env.d.ts
+npm-debug.log*
 
-# Environment & Secrets (Zero-Storage Policy: API keys must NEVER be stored on disk)
+# Tauri v2 & Rust
+src-tauri/target/
+src-tauri/gen/
+
+# Local SQLite & Environment
+*.sqlite3
+*.sqlite3-shm
+*.sqlite3-wal
 .env
-.env.*
-*.pem
-*.key
-
-# OS & Editor
+.env.local
 .DS_Store
-Thumbs.db
-.vscode/
-.idea/
-*.swp
-*.swo

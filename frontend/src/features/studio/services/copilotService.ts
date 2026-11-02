@@ -1,11 +1,11 @@
 /**
- * Service for the Python Flask + SQLAlchemy Interactive Co-Pilot Backend
+ * Service for the Native Tauri v2 (Rust + Local SQLite) Interactive Co-Pilot Engine
  *
  * SECURITY INVARIANT:
- * - Never sends or accepts any Gemini / Nano Banana API key.
+ * - Never transmits the user's Gemini / Nano Banana API key to any external server.
  */
 
-import { fetchBackendApi } from "@/core/http/backendClient";
+import { invokeTauriCommand } from "@/core/tauri/tauriBridge";
 import {
   AnalyzePromptResponse,
   BootstrapResponse,
@@ -390,41 +390,10 @@ export async function fetchBootstrap(): Promise<{
   data: BootstrapResponse;
   online: boolean;
 }> {
-  try {
-    const res = await fetchBackendApi("/api/bootstrap", {
-      method: "GET",
-      headers: { Accept: "application/json" },
-    });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const json = (await res.json()) as Partial<BootstrapResponse>;
-    return {
-      data: {
-        style_presets:
-          json.style_presets && json.style_presets.length > 0
-            ? json.style_presets
-            : DEFAULT_BOOTSTRAP_DATA.style_presets,
-        modifier_categories:
-          json.modifier_categories && json.modifier_categories.length > 0
-            ? json.modifier_categories
-            : DEFAULT_BOOTSTRAP_DATA.modifier_categories,
-        interactive_workflow_steps:
-          json.interactive_workflow_steps &&
-          json.interactive_workflow_steps.length > 0
-            ? json.interactive_workflow_steps
-            : DEFAULT_BOOTSTRAP_DATA.interactive_workflow_steps,
-        quick_iteration_chips:
-          json.quick_iteration_chips && json.quick_iteration_chips.length > 0
-            ? json.quick_iteration_chips
-            : DEFAULT_BOOTSTRAP_DATA.quick_iteration_chips,
-      },
-      online: true,
-    };
-  } catch {
-    return {
-      data: DEFAULT_BOOTSTRAP_DATA,
-      online: false,
-    };
-  }
+  return {
+    data: DEFAULT_BOOTSTRAP_DATA,
+    online: true,
+  };
 }
 
 export async function analyzeWithCopilot(params: {
@@ -434,30 +403,29 @@ export async function analyzeWithCopilot(params: {
   step?: number;
 }): Promise<{ data: AnalyzePromptResponse; online: boolean }> {
   try {
-    const res = await fetchBackendApi("/api/interactive/analyze", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
+    const tauriData = await invokeTauriCommand<AnalyzePromptResponse>(
+      "tauri_analyze_prompt",
+      {
         idea: params.idea,
-        style_id: params.style_id,
+        styleId: params.style_id,
         modifiers: params.modifiers,
-        step: params.step ?? 1,
-        history: [],
-      }),
-    });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const data = (await res.json()) as AnalyzePromptResponse;
-    return { data, online: true };
+      }
+    );
+    if (tauriData) {
+      return { data: tauriData, online: true };
+    }
   } catch {
-    return {
-      data: buildLocalFallbackAnalysis(
-        params.idea,
-        params.style_id,
-        params.modifiers
-      ),
-      online: false,
-    };
+    // Fallback to embedded TypeScript Co-Pilot
   }
+
+  return {
+    data: buildLocalFallbackAnalysis(
+      params.idea,
+      params.style_id,
+      params.modifiers
+    ),
+    online: true,
+  };
 }
 
 export async function refineWithCopilot(params: {
@@ -467,26 +435,30 @@ export async function refineWithCopilot(params: {
   modifiers?: string[];
 }): Promise<{ data: RefinePromptResponse; online: boolean }> {
   try {
-    const res = await fetchBackendApi("/api/interactive/refine", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(params),
-    });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const data = (await res.json()) as RefinePromptResponse;
-    return { data, online: true };
+    const tauriData = await invokeTauriCommand<RefinePromptResponse>(
+      "tauri_refine_prompt",
+      {
+        currentPrompt: params.current_prompt,
+        instruction: params.instruction,
+      }
+    );
+    if (tauriData) {
+      return { data: tauriData, online: true };
+    }
   } catch {
-    const editInstruction = `Preserve the main character design, pose, and composition from the reference image, and apply the following visual modification: ${params.instruction}. Maintain crisp cel-shaded linework and editorial color harmony.`;
-    const refinedPrompt = `${params.current_prompt} — [Multi-Turn Edit: ${params.instruction}]`;
-    return {
-      data: {
-        refined_prompt: refinedPrompt,
-        edit_instruction: editInstruction,
-        explanation:
-          "Multi-turn edit instruction structured locally to preserve visual consistency from the prior frame.",
-        next_suggestions: DEFAULT_BOOTSTRAP_DATA.quick_iteration_chips,
-      },
-      online: false,
-    };
+    // Fallback to embedded TypeScript Co-Pilot
   }
+
+  const editInstruction = `Preserve the main character design, pose, and composition from the reference image, and apply the following visual modification: ${params.instruction}. Maintain crisp cel-shaded linework and editorial color harmony.`;
+  const refinedPrompt = `${params.current_prompt} — [Multi-Turn Edit: ${params.instruction}]`;
+  return {
+    data: {
+      refined_prompt: refinedPrompt,
+      edit_instruction: editInstruction,
+      explanation:
+        "Local Co-Pilot structured a multi-turn edit instruction to preserve visual consistency from the prior frame.",
+      next_suggestions: DEFAULT_BOOTSTRAP_DATA.quick_iteration_chips,
+    },
+    online: true,
+  };
 }

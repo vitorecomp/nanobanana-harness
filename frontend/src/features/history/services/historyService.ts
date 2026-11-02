@@ -1,12 +1,23 @@
 /**
- * PostgreSQL Conversation History, Community Public Gallery & RustFS Bucket Image Gallery Service
+ * Local SQLite Conversation History & Native Filesystem Image Service
  *
  * SECURITY INVARIANT:
- * - Only persists prompts, conversation turns, metadata, and generated images.
- * - The user's Gemini / Nano Banana API Key NEVER touches these requests.
+ * - Only persists prompts, conversation turns, metadata, and generated images locally in SQLite.
+ * - Zero mocked gallery rows or hardcoded showcase fallback images.
  */
 
-import { fetchBackendApi } from "@/core/http/backendClient";
+import {
+  localDbCreateConversation,
+  localDbDeleteConversation,
+  localDbGetConversationDetail,
+  localDbGetPublishedTurns,
+  localDbGetUserGallery,
+  localDbListConversations,
+  localDbSaveConversationTurn,
+  localDbToggleTurnPublish,
+  localDbUpdateConversationTitle,
+  localDbUpdateTurnSelection,
+} from "@/core/tauri/tauriBridge";
 import {
   BucketGalleryItem,
   SavedConversationDetail,
@@ -14,130 +25,10 @@ import {
   SavedTurnRecord,
 } from "../types/history.types";
 
-export const FALLBACK_PUBLIC_GALLERY: BucketGalleryItem[] = [
-  {
-    id: "showcase_turn_portrait",
-    turn_id: "showcase_turn_portrait",
-    conversation_id: "showcase_conv_crypko",
-    conversation_title: "Editorial Anime Portrait Series",
-    turn_number: 1,
-    author_name: "Nano Banana Studio",
-    author_id: "studio_editorial",
-    raw_idea:
-      "Editorial anime explorer character wearing an olive utility jacket and aviator goggles on forehead",
-    master_prompt:
-      "Editorial anime character portrait of a young explorer with copper hair and aviator goggles resting on the forehead, wearing a structured olive-green utility jacket over a crisp white tee. High-craft cel-shaded ink linework, graphic flat shadow blocks, warm bone-cream paper backdrop (#E9E7DF), acid-yellow (#F2FA3C) graphic accents, 85mm f/1.4 prime lens.",
-    edit_instruction: "Flagship Editorial Cover (Turn #1)",
-    style_id: "editorial-anime",
-    modifiers: ["golden-hour", "lens-85mm", "cream-ink-acid"],
-    aspect_ratio: "3:4",
-    image_bucket_key: "showcase/hero-portrait.png",
-    image_url: "/showcase/hero-portrait.png",
-    model_used: "gemini-2.5-flash-image",
-    is_published: true,
-    is_curated: true,
-    created_at: "2026-11-02T12:00:00Z",
-  },
-  {
-    id: "showcase_turn_scene",
-    turn_id: "showcase_turn_scene",
-    conversation_id: "showcase_conv_street",
-    conversation_title: "Sunlit Urban Duo Exploration",
-    turn_number: 1,
-    author_name: "Nano Banana Studio",
-    author_id: "studio_editorial",
-    raw_idea:
-      "Two urban explorers walking down a sunlit street beneath a pastel teal sky",
-    master_prompt:
-      "Wide cinematic street scene of two anime urban explorers walking side by side down a sunlit avenue under a pastel teal sky. High-craft editorial anime illustration, 35mm street photography perspective, warm golden hour rim lighting, overhead power lines, crisp carbon-black ink outlines.",
-    edit_instruction: "Cinematic Street Narrative (Turn #1)",
-    style_id: "editorial-anime",
-    modifiers: ["golden-hour", "lens-35mm", "pastel-teal-warm"],
-    aspect_ratio: "16:9",
-    image_bucket_key: "showcase/hero-scene.png",
-    image_url: "/showcase/hero-scene.png",
-    model_used: "gemini-2.5-flash-image",
-    is_published: true,
-    is_curated: true,
-    created_at: "2026-11-02T12:05:00Z",
-  },
-  {
-    id: "showcase_turn_step1",
-    turn_id: "showcase_turn_step1",
-    conversation_id: "showcase_conv_evolution",
-    conversation_title: "Multi-Turn Explorer Evolution",
-    turn_number: 1,
-    author_name: "Art Director Co-Pilot",
-    author_id: "studio_editorial",
-    raw_idea: "Futuristic explorer character with aviator goggles on a sunlit street",
-    master_prompt:
-      "Portrait of a young anime explorer with copper hair, aviator goggles resting on forehead, olive-green utility jacket over white tee, high-craft editorial anime illustration, crisp cel-shaded ink linework, warm bone backdrop #E9E7DF.",
-    edit_instruction: "Base Concept Diagnosis (Turn #1)",
-    style_id: "editorial-anime",
-    modifiers: ["studio-softbox", "lens-85mm"],
-    aspect_ratio: "3:4",
-    image_bucket_key: "showcase/step-1-base.png",
-    image_url: "/showcase/step-1-base.png",
-    model_used: "gemini-2.5-flash-image",
-    is_published: true,
-    is_curated: true,
-    created_at: "2026-11-02T12:10:00Z",
-  },
-  {
-    id: "showcase_turn_step2",
-    turn_id: "showcase_turn_step2",
-    conversation_id: "showcase_conv_evolution",
-    conversation_title: "Multi-Turn Explorer Evolution",
-    turn_number: 2,
-    author_name: "Art Director Co-Pilot",
-    author_id: "studio_editorial",
-    raw_idea: "Futuristic explorer character with golden hour chiaroscuro lighting",
-    master_prompt:
-      "Keep exact character identity from Turn #1 and bathe the scene in dramatic Golden Hour sunset lighting with warm amber rim light, long diagonal cast shadows, and a pastel teal sky backdrop.",
-    edit_instruction: "Make lighting dramatic Golden Hour (Turn #2)",
-    style_id: "editorial-anime",
-    modifiers: ["golden-hour", "lens-85mm", "pastel-teal-warm"],
-    aspect_ratio: "3:4",
-    image_bucket_key: "showcase/step-2-lighting.png",
-    image_url: "/showcase/step-2-lighting.png",
-    model_used: "gemini-2.5-flash-image",
-    is_published: true,
-    is_curated: true,
-    created_at: "2026-11-02T12:15:00Z",
-  },
-  {
-    id: "showcase_turn_step3",
-    turn_id: "showcase_turn_step3",
-    conversation_id: "showcase_conv_evolution",
-    conversation_title: "Multi-Turn Explorer Evolution",
-    turn_number: 3,
-    author_name: "Art Director Co-Pilot",
-    author_id: "studio_editorial",
-    raw_idea: "Cyberpunk nocturnal Tokyo refinement with glowing acid-yellow visor",
-    master_prompt:
-      "Preserve exact character identity from Turn #2 and transform the setting into a cyberpunk Tokyo night with wet asphalt neon reflections and a translucent glowing acid-yellow (#F2FA3C) visor.",
-    edit_instruction: "Add acid-yellow cyber visor & Tokyo night (Turn #3)",
-    style_id: "cyberpunk-3d",
-    modifiers: ["neon-rain", "acid-rim", "lens-85mm"],
-    aspect_ratio: "3:4",
-    image_bucket_key: "showcase/step-3-cyber.png",
-    image_url: "/showcase/step-3-cyber.png",
-    model_used: "gemini-2.5-flash-image",
-    is_published: true,
-    is_curated: true,
-    created_at: "2026-11-02T12:20:00Z",
-  },
-];
+export const FALLBACK_PUBLIC_GALLERY: BucketGalleryItem[] = [];
 
 export function resolveBucketImageUrl(url?: string | null): string {
-  if (!url) return "/showcase/step-1-base.png";
-  if (url.startsWith("data:") || url.startsWith("/showcase/")) {
-    return url;
-  }
-  const bucketMatch = url.match(/\/api\/bucket\/.+$/);
-  if (bucketMatch) {
-    return bucketMatch[0];
-  }
+  if (!url) return "";
   return url;
 }
 
@@ -145,28 +36,12 @@ export async function listUserConversations(
   userId: string
 ): Promise<SavedConversationSummary[]> {
   try {
-    const res = await fetchBackendApi(
-      `/api/conversations?user_id=${encodeURIComponent(userId)}`,
-      {
-        method: "GET",
-        headers: { Accept: "application/json" },
-      }
-    );
-    if (!res.ok) return [];
-    const data = await res.json();
-    const list: SavedConversationSummary[] = Array.isArray(data)
-      ? data
-      : Array.isArray(data.conversations)
-      ? data.conversations
-      : [];
-
+    const list = await localDbListConversations(userId);
     return list.map((item) => ({
       ...item,
       id: String(item.id),
       turn_count: Number(item.turn_count ?? 0),
-      preview_image_url: item.preview_image_url
-        ? resolveBucketImageUrl(item.preview_image_url)
-        : null,
+      preview_image_url: item.preview_image_url || null,
     }));
   } catch {
     return [];
@@ -179,14 +54,7 @@ export async function createConversation(params: {
   style_id?: string;
 }): Promise<SavedConversationSummary | null> {
   try {
-    const res = await fetchBackendApi("/api/conversations", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(params),
-    });
-    if (!res.ok) return null;
-    const data = await res.json();
-    const conv = data.conversation || data;
+    const conv = await localDbCreateConversation(params);
     return {
       id: String(conv.id),
       user_id: String(conv.user_id || params.user_id),
@@ -194,9 +62,7 @@ export async function createConversation(params: {
       style_id: conv.style_id || params.style_id,
       turn_count: Number(conv.turn_count ?? 0),
       latest_prompt: conv.latest_prompt || null,
-      preview_image_url: conv.preview_image_url
-        ? resolveBucketImageUrl(conv.preview_image_url)
-        : null,
+      preview_image_url: conv.preview_image_url || null,
       created_at: conv.created_at,
       updated_at: conv.updated_at,
     };
@@ -205,38 +71,33 @@ export async function createConversation(params: {
   }
 }
 
+export async function deleteConversation(
+  conversationId: string
+): Promise<boolean> {
+  try {
+    return await localDbDeleteConversation(conversationId);
+  } catch {
+    return false;
+  }
+}
+
 export async function getConversationDetail(
   conversationId: string,
   userId?: string
 ): Promise<SavedConversationDetail | null> {
   try {
-    const query = userId ? `?user_id=${encodeURIComponent(userId)}` : "";
-    const res = await fetchBackendApi(
-      `/api/conversations/${encodeURIComponent(conversationId)}${query}`,
-      {
-        method: "GET",
-        headers: { Accept: "application/json" },
-      }
-    );
-    if (!res.ok) return null;
-    const data = await res.json();
-    const conv = data.conversation || data;
-    const rawTurns: SavedTurnRecord[] = Array.isArray(conv.turns)
-      ? conv.turns
-      : Array.isArray(data.turns)
-      ? data.turns
-      : [];
+    const conv = await localDbGetConversationDetail(conversationId);
+    if (!conv) return null;
+    const rawTurns = Array.isArray(conv.turns) ? conv.turns : [];
 
     return {
       id: String(conv.id || conversationId),
       user_id: String(conv.user_id || userId || ""),
-      title: conv.title || "Creative Conversation",
+      title: conv.title || "Untitled Project",
       style_id: conv.style_id,
       turn_count: rawTurns.length,
-      latest_prompt: conv.latest_prompt,
-      preview_image_url: conv.preview_image_url
-        ? resolveBucketImageUrl(conv.preview_image_url)
-        : null,
+      latest_prompt: conv.latest_prompt || undefined,
+      preview_image_url: conv.preview_image_url || null,
       created_at: conv.created_at,
       updated_at: conv.updated_at,
       turns: rawTurns.map((t, idx) => ({
@@ -244,7 +105,7 @@ export async function getConversationDetail(
         id: String(t.id || `turn-${idx + 1}`),
         conversation_id: String(t.conversation_id || conversationId),
         turn_number: Number(t.turn_number ?? idx + 1),
-        image_url: resolveBucketImageUrl(t.image_url),
+        image_url: t.image_url || undefined,
         is_published: Boolean(t.is_published),
       })),
     };
@@ -257,6 +118,8 @@ export async function saveConversationTurn(
   conversationId: string,
   payload: {
     user_id: string;
+    title?: string;
+    parent_turn_number?: number | null;
     role?: string;
     raw_idea: string;
     master_prompt: string;
@@ -269,34 +132,53 @@ export async function saveConversationTurn(
     aspect_ratio?: string;
     model_used?: string;
     is_published?: boolean;
+    variants?: Array<{
+      label: string;
+      prompt: string;
+      image_data_url: string;
+    }>;
+    selected_variant_index?: number;
   }
 ): Promise<SavedTurnRecord | null> {
   try {
-    const res = await fetchBackendApi(
-      `/api/conversations/${encodeURIComponent(conversationId)}/turns`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          ...payload,
-          role: payload.role || "assistant",
-        }),
-      }
-    );
-    if (!res.ok) return null;
-    const data = await res.json();
-    const turn = data.turn || data;
+    const turn = await localDbSaveConversationTurn(conversationId, payload);
     return {
       ...turn,
       id: String(turn.id || `turn-${Date.now()}`),
       conversation_id: String(turn.conversation_id || conversationId),
       turn_number: Number(turn.turn_number ?? 1),
-      image_url: resolveBucketImageUrl(turn.image_url || payload.image_data_url),
+      image_url: turn.image_url || payload.image_data_url,
       image_bucket_key: turn.image_bucket_key || null,
       is_published: Boolean(turn.is_published),
+      variants: turn.variants || [],
+      selected_variant_index: turn.selected_variant_index ?? 0,
     };
   } catch {
     return null;
+  }
+}
+
+export async function updateTurnSelection(params: {
+  turnId: string;
+  selectedVariantIndex: number;
+  masterPrompt: string;
+  imageDataUrl?: string;
+}): Promise<boolean> {
+  try {
+    return await localDbUpdateTurnSelection(params);
+  } catch {
+    return false;
+  }
+}
+
+export async function updateConversationTitle(
+  conversationId: string,
+  title: string
+): Promise<boolean> {
+  try {
+    return await localDbUpdateConversationTitle({ conversationId, title });
+  } catch {
+    return false;
   }
 }
 
@@ -305,22 +187,18 @@ export async function toggleTurnPublish(
   isPublished?: boolean
 ): Promise<SavedTurnRecord | null> {
   try {
-    const res = await fetchBackendApi(
-      `/api/turns/${encodeURIComponent(turnId)}/publish`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(
-          typeof isPublished === "boolean" ? { is_published: isPublished } : {}
-        ),
-      }
-    );
-    if (!res.ok) return null;
-    const data = await res.json();
+    const res = await localDbToggleTurnPublish(turnId, isPublished);
+    if (!res) return null;
     return {
-      ...data,
-      id: String(data.id || turnId),
-      is_published: Boolean(data.is_published),
+      id: String(res.id || turnId),
+      conversation_id: "",
+      turn_number: 1,
+      role: "assistant",
+      raw_idea: "",
+      master_prompt: "",
+      style_id: "editorial-anime",
+      modifiers: [],
+      is_published: Boolean(res.is_published),
     };
   } catch {
     return null;
@@ -331,31 +209,29 @@ export async function fetchUserBucketGallery(
   userId: string
 ): Promise<BucketGalleryItem[]> {
   try {
-    const res = await fetchBackendApi(
-      `/api/users/${encodeURIComponent(userId)}/gallery`,
-      {
-        method: "GET",
-        headers: { Accept: "application/json" },
-      }
-    );
-    if (!res.ok) return [];
-    const data = await res.json();
-    const items: BucketGalleryItem[] = Array.isArray(data)
-      ? data
-      : Array.isArray(data.items)
-      ? data.items
-      : Array.isArray(data.gallery)
-      ? data.gallery
-      : [];
-
+    const items = await localDbGetUserGallery(userId);
     return items.map((item, idx) => ({
-      ...item,
       id: String(item.turn_id || item.id || `gallery-${idx}`),
       turn_id: String(item.turn_id || item.id || `gallery-${idx}`),
       conversation_id: String(item.conversation_id || ""),
+      conversation_title: String(item.conversation_title || "Project"),
       turn_number: Number(item.turn_number ?? idx + 1),
-      image_url: resolveBucketImageUrl(item.image_url),
+      author_name: String(item.author_name || "Creator"),
+      author_id: String(item.author_id || userId),
+      raw_idea: String(item.raw_idea || ""),
+      master_prompt: String(item.master_prompt || ""),
+      edit_instruction: item.edit_instruction
+        ? String(item.edit_instruction)
+        : undefined,
+      style_id: String(item.style_id || "editorial-anime"),
+      modifiers: Array.isArray(item.modifiers) ? (item.modifiers as string[]) : [],
+      aspect_ratio: String(item.aspect_ratio || "3:4"),
+      image_bucket_key: String(item.image_bucket_key || ""),
+      image_url: String(item.image_url || ""),
+      model_used: String(item.model_used || "gemini-2.5-flash-image"),
       is_published: Boolean(item.is_published),
+      is_curated: Boolean(item.is_curated),
+      created_at: String(item.created_at || ""),
     }));
   } catch {
     return [];
@@ -364,30 +240,31 @@ export async function fetchUserBucketGallery(
 
 export async function fetchPublicGallery(): Promise<BucketGalleryItem[]> {
   try {
-    const res = await fetchBackendApi("/api/gallery/public", {
-      method: "GET",
-      headers: { Accept: "application/json" },
-    });
-    if (!res.ok) return FALLBACK_PUBLIC_GALLERY;
-    const data = await res.json();
-    const items: BucketGalleryItem[] = Array.isArray(data)
-      ? data
-      : Array.isArray(data.items)
-      ? data.items
-      : [];
-
-    if (items.length === 0) return FALLBACK_PUBLIC_GALLERY;
-
-    return items.map((item, idx) => ({
-      ...item,
+    const published = await localDbGetPublishedTurns();
+    return published.map((item, idx) => ({
       id: String(item.turn_id || item.id || `public-${idx}`),
       turn_id: String(item.turn_id || item.id || `public-${idx}`),
       conversation_id: String(item.conversation_id || ""),
+      conversation_title: String(item.conversation_title || "Project"),
       turn_number: Number(item.turn_number ?? idx + 1),
-      image_url: resolveBucketImageUrl(item.image_url),
+      author_name: String(item.author_name || "Creator"),
+      author_id: String(item.author_id || ""),
+      raw_idea: String(item.raw_idea || ""),
+      master_prompt: String(item.master_prompt || ""),
+      edit_instruction: item.edit_instruction
+        ? String(item.edit_instruction)
+        : undefined,
+      style_id: String(item.style_id || "editorial-anime"),
+      modifiers: Array.isArray(item.modifiers) ? (item.modifiers as string[]) : [],
+      aspect_ratio: String(item.aspect_ratio || "3:4"),
+      image_bucket_key: String(item.image_bucket_key || ""),
+      image_url: String(item.image_url || ""),
+      model_used: String(item.model_used || "gemini-2.5-flash-image"),
       is_published: true,
+      is_curated: Boolean(item.is_curated),
+      created_at: String(item.created_at || ""),
     }));
   } catch {
-    return FALLBACK_PUBLIC_GALLERY;
+    return [];
   }
 }

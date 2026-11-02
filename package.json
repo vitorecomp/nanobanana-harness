@@ -1,0 +1,12 @@
+{
+  "name": "nanobanana-studio",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Nano Banana Interactive Studio — Installable Desktop & Web Application (Tauri v2 + React 19 + Local SQLite + Native Filesystem)",
+  "scripts": {
+    "dev": "npm --prefix frontend run dev",
+    "build": "npm --prefix frontend run build",
+    "tauri:dev": "npx @tauri-apps/cli@latest dev",
+    "tauri:build": "npx @tauri-apps/cli@latest build"
+  }
+}

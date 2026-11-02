@@ -186,75 +186,238 @@ export async function generateWithNanoBanana({
   };
 }
 
-export function simulateNanoBananaTurn(
-  turnNumber: number,
-  prompt: string
-): GenerateNanoBananaResult {
-  const lower = prompt.toLowerCase();
+export interface QuadPromptVariation {
+  label: string;
+  prompt: string;
+}
 
-  let selectedPath = "/showcase/step-1-base.png";
-  let note =
-    "Interactive Simulation Turn #1: Base concept rendered in Editorial Anime style with crisp cel-shaded linework.";
+export interface QuadGeneratedSlot {
+  label: string;
+  prompt: string;
+  imageUrl: string;
+  mimeType: string;
+  base64Data: string;
+}
 
-  if (
-    turnNumber >= 3 ||
-    lower.includes("neon") ||
-    lower.includes("cyber") ||
-    lower.includes("rain") ||
-    lower.includes("acid") ||
-    lower.includes("visor")
-  ) {
-    selectedPath = "/showcase/step-3-cyber.png";
-    note =
-      "Multi-Turn Interactive Simulation: Added acid-yellow (#F2FA3C) tactical visor, nocturnal Tokyo atmosphere, and rain reflections while preserving character identity.";
-  } else if (
-    turnNumber === 2 ||
-    lower.includes("golden") ||
-    lower.includes("sunset") ||
-    lower.includes("dramatic") ||
-    lower.includes("tokyo") ||
-    lower.includes("street")
-  ) {
-    selectedPath = "/showcase/step-2-lighting.png";
-    note =
-      "Multi-Turn Interactive Simulation: Lighting evolved into dramatic Golden Hour sunlight with urban street perspective in the background.";
+/**
+ * Takes the user's base prompt and asks Gemini to create 3 additional versions
+ * with different emphases on each part of the prompt (Lighting/Atmosphere,
+ * Composition/Camera, and Details/Subject), returning 4 prompts total.
+ */
+export async function generateFourPromptVariations(params: {
+  apiKey: string;
+  basePrompt: string;
+  styleLabel?: string;
+  modifierLabels?: string[];
+  aspectRatio?: string;
+}): Promise<QuadPromptVariation[]> {
+  const cleanBase = params.basePrompt.trim();
+  const styleSuffix = params.styleLabel ? ` [${params.styleLabel}]` : "";
+  const ratioSuffix = params.aspectRatio
+    ? ` (Proporção ${params.aspectRatio})`
+    : "";
+  const modSuffix =
+    params.modifierLabels && params.modifierLabels.length > 0
+      ? `, ${params.modifierLabels.join(", ")}`
+      : "";
+
+  const fallbackVariations: QuadPromptVariation[] = [
+    {
+      label: "1 • Prompt Base",
+      prompt: `${cleanBase}${styleSuffix}${modSuffix}${ratioSuffix}`,
+    },
+    {
+      label: "2 • Ênfase: Luz & Atmosfera",
+      prompt: `${cleanBase} — com foco dramático na iluminação volumétrica, contraste de sombras, atmosfera imersiva e gradação de cor cinematográfica${styleSuffix}${modSuffix}${ratioSuffix}`,
+    },
+    {
+      label: "3 • Ênfase: Composição & Lente",
+      prompt: `${cleanBase} — com ênfase no enquadramento editorial dinâmico, perspectiva de lente, profundidade de campo e geometria espacial da cena${styleSuffix}${modSuffix}${ratioSuffix}`,
+    },
+    {
+      label: "4 • Ênfase: Textura & Detalhes",
+      prompt: `${cleanBase} — com ênfase máxima em micro-texturas de superfície, nitidez de materiais, expressão do sujeito e riqueza de detalhes finos${styleSuffix}${modSuffix}${ratioSuffix}`,
+    },
+  ];
+
+  const trimmedKey = params.apiKey.trim();
+  if (!trimmedKey) {
+    return fallbackVariations;
   }
 
+  try {
+    const endpoint =
+      "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent";
+    const systemPrompt = [
+      "Você é um especialista em engenharia de prompts visuais para geração de imagens.",
+      "Analise o prompt base do usuário e identifique 3 partes ou elementos distintos da cena descrita.",
+      "Crie 3 novas versões completas do prompt (mantendo o idioma do usuário), cada uma dando ênfase especial a uma dessas partes da cena.",
+      params.styleLabel ? `Estilo visual selecionado: ${params.styleLabel}.` : "",
+      params.aspectRatio
+        ? `Proporção da imagem (Aspect Ratio): ${params.aspectRatio}.`
+        : "",
+      params.modifierLabels?.length
+        ? `Modificadores ativos: ${params.modifierLabels.join(", ")}.`
+        : "",
+      'Retorne APENAS um JSON válido no formato: {"variations": [{"title": "curto título da ênfase 1 (máx 3 palavras)", "prompt": "..."}, {"title": "curto título da ênfase 2 (máx 3 palavras)", "prompt": "..."}, {"title": "curto título da ênfase 3 (máx 3 palavras)", "prompt": "..."}]}',
+      `Prompt base do usuário: "${cleanBase}"`,
+    ]
+      .filter(Boolean)
+      .join("\n");
+
+    const response = await fetch(endpoint, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-goog-api-key": trimmedKey,
+      },
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: systemPrompt }] }],
+        generationConfig: {
+          responseMimeType: "application/json",
+        },
+      }),
+      cache: "no-store",
+    });
+
+    if (!response.ok) {
+      return fallbackVariations;
+    }
+
+    const data = (await response.json()) as GeminiGenerateContentResponse;
+    const rawText =
+      data.candidates?.[0]?.content?.parts
+        ?.map((p) => p.text || "")
+        .join("")
+        .trim() || "";
+
+    if (!rawText) return fallbackVariations;
+
+    const parsed = JSON.parse(rawText) as {
+      variations?: Array<{ title?: string; prompt?: string }>;
+      v1?: string;
+      v2?: string;
+      v3?: string;
+    };
+
+    const vList = Array.isArray(parsed.variations) ? parsed.variations : [];
+
+    return [
+      {
+        label: "1 • Prompt Base",
+        prompt: `${cleanBase}${styleSuffix}${modSuffix}${ratioSuffix}`,
+      },
+      {
+        label: vList[0]?.title
+          ? `2 • Ênfase: ${vList[0].title}`
+          : fallbackVariations[1].label,
+        prompt: (
+          vList[0]?.prompt ||
+          parsed.v1 ||
+          fallbackVariations[1].prompt
+        ).trim(),
+      },
+      {
+        label: vList[1]?.title
+          ? `3 • Ênfase: ${vList[1].title}`
+          : fallbackVariations[2].label,
+        prompt: (
+          vList[1]?.prompt ||
+          parsed.v2 ||
+          fallbackVariations[2].prompt
+        ).trim(),
+      },
+      {
+        label: vList[2]?.title
+          ? `4 • Ênfase: ${vList[2].title}`
+          : fallbackVariations[3].label,
+        prompt: (
+          vList[2]?.prompt ||
+          parsed.v3 ||
+          fallbackVariations[3].prompt
+        ).trim(),
+      },
+    ];
+  } catch {
+    return fallbackVariations;
+  }
+}
+
+export async function generateQuadWithNanoBanana(params: {
+  apiKey: string;
+  model: GenerateNanoBananaRequest["model"];
+  basePrompt: string;
+  styleLabel?: string;
+  modifierLabels?: string[];
+  aspectRatio?: string;
+  referenceImage?: InlineImagePart | null;
+}): Promise<QuadGeneratedSlot[]> {
+  const variations = await generateFourPromptVariations({
+    apiKey: params.apiKey,
+    basePrompt: params.basePrompt,
+    styleLabel: params.styleLabel,
+    modifierLabels: params.modifierLabels,
+    aspectRatio: params.aspectRatio,
+  });
+
+  const trimmedKey = params.apiKey.trim();
+  if (!trimmedKey) {
+    // Do NOT create mocked images — leave imageUrl empty when no API key is configured
+    return variations.map((v) => ({
+      label: v.label,
+      prompt: v.prompt,
+      imageUrl: "",
+      mimeType: "image/png",
+      base64Data: "",
+    }));
+  }
+
+  const settled = await Promise.allSettled(
+    variations.map((v) =>
+      generateWithNanoBanana({
+        apiKey: trimmedKey,
+        model: params.model,
+        prompt: v.prompt,
+        referenceImage: params.referenceImage,
+      })
+    )
+  );
+
+  return variations.map((v, idx) => {
+    const res = settled[idx];
+    if (res.status === "fulfilled") {
+      return {
+        label: v.label,
+        prompt: v.prompt,
+        imageUrl: res.value.imageDataUrl,
+        mimeType: res.value.mimeType,
+        base64Data: res.value.base64Data,
+      };
+    }
+    return {
+      label: v.label,
+      prompt: v.prompt,
+      imageUrl: "",
+      mimeType: "image/png",
+      base64Data: "",
+    };
+  });
+}
+
+export function simulateNanoBananaTurn(
+  turnNumber: number,
+  _prompt: string
+): GenerateNanoBananaResult {
   return {
-    imageDataUrl: selectedPath,
+    imageDataUrl: "",
     mimeType: "image/png",
     base64Data: "",
-    modelText: note,
-    modelUsed: "gemini-2.5-flash-image (Simulation)",
+    modelText: `Turn #${turnNumber}`,
+    modelUsed: "gemini-2.5-flash-image",
     mode: "simulation",
   };
 }
 
-export function getShowcaseFallbackDataUrl(srcPath: string): string {
-  const isStep3 = srcPath.includes("step-3") || srcPath.includes("cyber");
-  const isStep2 = srcPath.includes("step-2") || srcPath.includes("lighting");
-
-  const bg = isStep3 ? "#141824" : isStep2 ? "#D98A4E" : "#E9E7DF";
-  const accent = isStep3 ? "#F2FA3C" : isStep2 ? "#FDE047" : "#5E7A6E";
-  const label = isStep3
-    ? "TURN #3 • ACID VISOR & NEON RAIN"
-    : isStep2
-    ? "TURN #2 • GOLDEN HOUR IN TOKYO"
-    : "TURN #1 • EDITORIAL ANIME BASE";
-
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 500" width="800" height="500">
-    <rect width="800" height="500" fill="${bg}"/>
-    <circle cx="400" cy="230" r="165" fill="${accent}" stroke="#0B0B0B" stroke-width="5"/>
-    <path d="M250 500 L300 315 Q400 285 500 315 L550 500 Z" fill="#374B4A" stroke="#0B0B0B" stroke-width="6"/>
-    <circle cx="400" cy="210" r="72" fill="#FADEC8" stroke="#0B0B0B" stroke-width="6"/>
-    ${
-      isStep3
-        ? '<rect x="336" y="188" width="128" height="32" rx="8" fill="#F2FA3C" stroke="#0B0B0B" stroke-width="4"/>'
-        : '<rect x="340" y="142" width="120" height="28" rx="12" fill="#4A5568" stroke="#0B0B0B" stroke-width="4"/>'
-    }
-    <rect x="24" y="432" width="420" height="44" rx="22" fill="#0B0B0B"/>
-    <text x="48" y="460" fill="#F2FA3C" font-family="monospace" font-weight="bold" font-size="16">${label}</text>
-  </svg>`;
-
-  return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
+export function getShowcaseFallbackDataUrl(_srcPath: string): string {
+  return "";
 }

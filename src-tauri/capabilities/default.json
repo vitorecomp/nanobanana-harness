@@ -1,0 +1,9 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "Default capability for Nano Banana Studio Desktop Window",
+  "windows": ["main"],
+  "permissions": [
+    "core:default"
+  ]
+}

@@ -104,7 +104,7 @@ export interface SessionFrame {
   turn: number;
   imageUrl: string;
   mimeType: string;
-  base64Data: string;
+  base64Data?: string;
   promptUsed: string;
   instructionUsed?: string;
   explanation?: string;

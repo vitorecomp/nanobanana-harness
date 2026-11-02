@@ -17,6 +17,13 @@ import {
   DEFAULT_BOOTSTRAP_DATA,
   fetchBootstrap,
 } from "@/features/studio";
+import {
+  vaultClearApiKey,
+  vaultGetImagesOutputDir,
+  vaultGetSavedApiKey,
+  vaultSaveApiKey,
+  vaultSetImagesOutputDir,
+} from "@/core/tauri/tauriBridge";
 
 export interface RemixPresetRequest {
   idea: string;
@@ -29,10 +36,14 @@ export interface RemixPresetRequest {
 }
 
 interface StudioSessionContextValue {
-  /** Volatile RAM-only Gemini API Key — NEVER persisted to disk or sent to backend */
+  /** Hybrid Gemini API Key: Volatile RAM-only by default, or persisted in Local App Vault when `rememberKeyInVault` is true */
   apiKey: string;
   setApiKey: (key: string) => void;
+  rememberKeyInVault: boolean;
+  setRememberKeyInVault: (remember: boolean) => void;
   hasKeyInRam: boolean;
+  imagesOutputDir: string;
+  setImagesOutputDir: (dirPath: string) => Promise<string>;
   user: GoogleUserProfile | null;
   isAuthenticated: boolean;
   setUser: (user: GoogleUserProfile | null) => void;
@@ -49,8 +60,12 @@ const StudioSessionContext = createContext<
 >(undefined);
 
 export function StudioSessionProvider({ children }: { children: ReactNode }) {
-  // Volatile RAM-only API Key state (NEVER persisted to disk or backend)
-  const [apiKey, setApiKey] = useState<string>("");
+  const [apiKey, setApiKeyState] = useState<string>("");
+  const [rememberKeyInVault, setRememberKeyInVaultState] =
+    useState<boolean>(true);
+  const [imagesOutputDir, setImagesOutputDirState] = useState<string>(
+    "~/Pictures/nanobanana"
+  );
   const [user, setUserState] = useState<GoogleUserProfile | null>(
     IS_AUTH_REQUIRED ? null : LOCAL_DEV_USER
   );
@@ -58,7 +73,7 @@ export function StudioSessionProvider({ children }: { children: ReactNode }) {
   const [bootstrapData, setBootstrapData] = useState<BootstrapResponse>(
     DEFAULT_BOOTSTRAP_DATA
   );
-  const [backendOnline, setBackendOnline] = useState<boolean>(false);
+  const [backendOnline, setBackendOnline] = useState<boolean>(true);
   const [pendingRemix, setPendingRemix] = useState<RemixPresetRequest | null>(
     null
   );
@@ -68,12 +83,52 @@ export function StudioSessionProvider({ children }: { children: ReactNode }) {
     setIsAuthenticated(Boolean(nextUser));
   };
 
+  const setApiKey = (nextKey: string) => {
+    setApiKeyState(nextKey);
+    if (rememberKeyInVault) {
+      if (nextKey.trim()) {
+        void vaultSaveApiKey(nextKey);
+      } else {
+        void vaultClearApiKey();
+      }
+    }
+  };
+
+  const setRememberKeyInVault = (remember: boolean) => {
+    setRememberKeyInVaultState(remember);
+    if (remember && apiKey.trim()) {
+      void vaultSaveApiKey(apiKey);
+    } else if (!remember) {
+      void vaultClearApiKey();
+    }
+  };
+
+  const setImagesOutputDir = async (dirPath: string): Promise<string> => {
+    setImagesOutputDirState(dirPath);
+    const saved = await vaultSetImagesOutputDir(dirPath);
+    setImagesOutputDirState(saved);
+    return saved;
+  };
+
   useEffect(() => {
     let mounted = true;
     fetchBootstrap().then((res) => {
       if (!mounted) return;
       setBootstrapData(res.data);
       setBackendOnline(res.online);
+    });
+    vaultGetSavedApiKey().then((savedKey) => {
+      if (!mounted) return;
+      if (savedKey && savedKey.trim()) {
+        setApiKeyState(savedKey);
+        setRememberKeyInVaultState(true);
+      }
+    });
+    vaultGetImagesOutputDir().then((savedDir) => {
+      if (!mounted) return;
+      if (savedDir && savedDir.trim()) {
+        setImagesOutputDirState(savedDir);
+      }
     });
     return () => {
       mounted = false;
@@ -83,7 +138,9 @@ export function StudioSessionProvider({ children }: { children: ReactNode }) {
   const logout = () => {
     setUserState(IS_AUTH_REQUIRED ? null : LOCAL_DEV_USER);
     setIsAuthenticated(false);
-    setApiKey("");
+    setApiKeyState("");
+    setRememberKeyInVaultState(false);
+    void vaultClearApiKey();
   };
 
   const hasKeyInRam = apiKey.trim().length > 0;
@@ -93,7 +150,11 @@ export function StudioSessionProvider({ children }: { children: ReactNode }) {
       value={{
         apiKey,
         setApiKey,
+        rememberKeyInVault,
+        setRememberKeyInVault,
         hasKeyInRam,
+        imagesOutputDir,
+        setImagesOutputDir,
         user,
         isAuthenticated,
         setUser,
