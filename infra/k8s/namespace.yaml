@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: nanobanana
+  labels:
+    app.kubernetes.io/name: nanobanana-studio
+    app.kubernetes.io/part-of: nanobanana

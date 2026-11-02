@@ -1,0 +1,84 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nanobanana-backend
+  namespace: nanobanana
+  labels:
+    app.kubernetes.io/name: nanobanana-backend
+    app.kubernetes.io/component: backend
+    app.kubernetes.io/part-of: nanobanana
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: nanobanana-backend
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: nanobanana-backend
+        app.kubernetes.io/component: backend
+        app.kubernetes.io/part-of: nanobanana
+    spec:
+      initContainers:
+        - name: nanobanana-db-migrate
+          image: ghcr.io/nanobanana/nanobanana-backend:latest
+          imagePullPolicy: IfNotPresent
+          command: ["alembic", "upgrade", "head"]
+          envFrom:
+            - configMapRef:
+                name: nanobanana-config
+            - secretRef:
+                name: nanobanana-secrets
+      containers:
+        - name: backend
+          image: ghcr.io/nanobanana/nanobanana-backend:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8000
+              protocol: TCP
+          envFrom:
+            - configMapRef:
+                name: nanobanana-config
+            - secretRef:
+                name: nanobanana-secrets
+          readinessProbe:
+            httpGet:
+              path: /api/health
+              port: 8000
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 3
+          livenessProbe:
+            httpGet:
+              path: /api/health
+              port: 8000
+            initialDelaySeconds: 15
+            periodSeconds: 20
+            timeoutSeconds: 5
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "256Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nanobanana-backend
+  namespace: nanobanana
+  labels:
+    app.kubernetes.io/name: nanobanana-backend
+    app.kubernetes.io/component: backend
+    app.kubernetes.io/part-of: nanobanana
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: nanobanana-backend
+  ports:
+    - name: http
+      port: 8000
+      targetPort: 8000
+      protocol: TCP

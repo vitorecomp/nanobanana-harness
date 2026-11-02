@@ -1,0 +1,456 @@
+# ==============================================================================
+# Nano Banana Studio — Kubernetes Application Deployment Manifest
+# ==============================================================================
+# IMPORTANT ARCHITECTURAL ASSUMPTIONS:
+# 1. Externally Provisioned Infrastructure:
+#    PostgreSQL 16 and the S3-Compatible Bucket (RustFS / AWS S3 / GCS / MinIO)
+#    are ALREADY provisioned externally. This manifest deploys ONLY the
+#    stateless application tier:
+#      - nanobanana-backend  (Flask + SQLAlchemy Prompt Co-Pilot, Auth & Persistence API)
+#      - nanobanana-frontend (Next.js 14 UI & Direct Browser Nano Banana Client)
+#      - nanobanana-gateway  (Nginx 1.27 Reverse Proxy Gateway)
+#      - Ingress & HorizontalPodAutoscalers
+#
+# 2. Zero-Storage Gemini API Key Guarantee:
+#    User Gemini / Nano Banana (`gemini-2.5-flash-image`) API keys are NEVER
+#    stored in Kubernetes Secrets, ConfigMaps, PostgreSQL, or Backend logs.
+#    All calls to Google's Nano Banana API happen directly from the user's
+#    browser (`https://generativelanguage.googleapis.com`) using volatile RAM.
+#
+# Usage:
+#   kubectl apply -f infra/deployment.yaml
+# ==============================================================================
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: nanobanana
+  labels:
+    app.kubernetes.io/name: nanobanana-studio
+    app.kubernetes.io/part-of: nanobanana
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: nanobanana-config
+  namespace: nanobanana
+  labels:
+    app.kubernetes.io/name: nanobanana-config
+    app.kubernetes.io/part-of: nanobanana
+data:
+  FLASK_APP: "wsgi:app"
+  # External S3-compatible Bucket configuration (already provisioned)
+  BUCKET_PROVIDER: "rustfs"
+  BUCKET_NAME: "nanobanana-images"
+  BUCKET_ENDPOINT_URL: "https://s3.internal.example.com"
+  BUCKET_PUBLIC_URL: "https://cdn.example.com"
+  # Internal Kubernetes service discovery
+  BACKEND_INTERNAL_URL: "http://nanobanana-backend:8000"
+  NEXT_PUBLIC_BACKEND_URL: ""
+  # Public Google OAuth 2.0 & Facebook Login IDs for browser Sign-In
+  REQUIRE_AUTH: "true"
+  NEXT_PUBLIC_REQUIRE_AUTH: "true"
+  NEXT_PUBLIC_GOOGLE_CLIENT_ID: "your-google-client-id.apps.googleusercontent.com"
+  NEXT_PUBLIC_FACEBOOK_APP_ID: "your-facebook-app-id"
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: nanobanana-nginx-config
+  namespace: nanobanana
+  labels:
+    app.kubernetes.io/name: nanobanana-nginx-config
+    app.kubernetes.io/part-of: nanobanana
+data:
+  nginx.conf: |
+    worker_processes auto;
+
+    events {
+        worker_connections 1024;
+    }
+
+    http {
+        include       /etc/nginx/mime.types;
+        default_type  application/octet-stream;
+
+        sendfile        on;
+        keepalive_timeout  65;
+        client_max_body_size 50M;
+
+        map $http_upgrade $connection_upgrade {
+            default upgrade;
+            ''      close;
+        }
+
+        upstream frontend_upstream {
+            server nanobanana-frontend:3000;
+        }
+
+        upstream backend_upstream {
+            server nanobanana-backend:8000;
+        }
+
+        server {
+            listen 80;
+            server_name _;
+
+            location = /nginx-health {
+                default_type application/json;
+                return 200 '{"status":"ok","gateway":"nginx"}';
+            }
+
+            location /api/ {
+                proxy_pass http://backend_upstream/api/;
+                proxy_http_version 1.1;
+                proxy_set_header Host $host;
+                proxy_set_header X-Real-IP $remote_addr;
+                proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+                proxy_set_header X-Forwarded-Proto $scheme;
+            }
+
+            location / {
+                proxy_pass http://frontend_upstream;
+                proxy_http_version 1.1;
+                proxy_set_header Host $host;
+                proxy_set_header X-Real-IP $remote_addr;
+                proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+                proxy_set_header X-Forwarded-Proto $scheme;
+                proxy_set_header Upgrade $http_upgrade;
+                proxy_set_header Connection $connection_upgrade;
+            }
+        }
+    }
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: nanobanana-secrets
+  namespace: nanobanana
+  labels:
+    app.kubernetes.io/name: nanobanana-secrets
+    app.kubernetes.io/part-of: nanobanana
+type: Opaque
+stringData:
+  # Connection URI to the EXTERNALLY provisioned PostgreSQL 16 database
+  DATABASE_URL: "postgresql+psycopg://nanobanana:CHANGE_ME@external-postgres.db.svc.cluster.local:5432/nanobanana"
+  # Credentials for the EXTERNALLY provisioned RustFS / S3-compatible Bucket
+  BUCKET_ACCESS_KEY: "CHANGE_ME_BUCKET_ACCESS_KEY"
+  BUCKET_SECRET_KEY: "CHANGE_ME_BUCKET_SECRET_KEY"
+  # Google OAuth 2.0 Client ID & Facebook App ID verified by the backend
+  GOOGLE_CLIENT_ID: "your-google-client-id.apps.googleusercontent.com"
+  FACEBOOK_APP_ID: "your-facebook-app-id"
+  # NOTE: User Gemini / Nano Banana API keys are NEVER stored in Kubernetes Secrets!
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nanobanana-backend
+  namespace: nanobanana
+  labels:
+    app.kubernetes.io/name: nanobanana-backend
+    app.kubernetes.io/component: backend
+    app.kubernetes.io/part-of: nanobanana
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: nanobanana-backend
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: nanobanana-backend
+        app.kubernetes.io/component: backend
+        app.kubernetes.io/part-of: nanobanana
+    spec:
+      initContainers:
+        - name: nanobanana-db-migrate
+          image: ghcr.io/nanobanana/nanobanana-backend:latest
+          imagePullPolicy: IfNotPresent
+          command: ["alembic", "upgrade", "head"]
+          envFrom:
+            - configMapRef:
+                name: nanobanana-config
+            - secretRef:
+                name: nanobanana-secrets
+      containers:
+        - name: backend
+          image: ghcr.io/nanobanana/nanobanana-backend:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8000
+              protocol: TCP
+          envFrom:
+            - configMapRef:
+                name: nanobanana-config
+            - secretRef:
+                name: nanobanana-secrets
+          readinessProbe:
+            httpGet:
+              path: /api/health
+              port: 8000
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 3
+          livenessProbe:
+            httpGet:
+              path: /api/health
+              port: 8000
+            initialDelaySeconds: 15
+            periodSeconds: 20
+            timeoutSeconds: 5
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "256Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nanobanana-backend
+  namespace: nanobanana
+  labels:
+    app.kubernetes.io/name: nanobanana-backend
+    app.kubernetes.io/component: backend
+    app.kubernetes.io/part-of: nanobanana
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: nanobanana-backend
+  ports:
+    - name: http
+      port: 8000
+      targetPort: 8000
+      protocol: TCP
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nanobanana-frontend
+  namespace: nanobanana
+  labels:
+    app.kubernetes.io/name: nanobanana-frontend
+    app.kubernetes.io/component: frontend
+    app.kubernetes.io/part-of: nanobanana
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: nanobanana-frontend
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: nanobanana-frontend
+        app.kubernetes.io/component: frontend
+        app.kubernetes.io/part-of: nanobanana
+    spec:
+      containers:
+        - name: frontend
+          image: ghcr.io/nanobanana/nanobanana-frontend:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 3000
+              protocol: TCP
+          env:
+            - name: NODE_ENV
+              value: "production"
+          envFrom:
+            - configMapRef:
+                name: nanobanana-config
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 3000
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 3
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 3000
+            initialDelaySeconds: 15
+            periodSeconds: 20
+            timeoutSeconds: 5
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "256Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nanobanana-frontend
+  namespace: nanobanana
+  labels:
+    app.kubernetes.io/name: nanobanana-frontend
+    app.kubernetes.io/component: frontend
+    app.kubernetes.io/part-of: nanobanana
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: nanobanana-frontend
+  ports:
+    - name: http
+      port: 3000
+      targetPort: 3000
+      protocol: TCP
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nanobanana-nginx
+  namespace: nanobanana
+  labels:
+    app.kubernetes.io/name: nanobanana-nginx
+    app.kubernetes.io/component: gateway
+    app.kubernetes.io/part-of: nanobanana
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: nanobanana-nginx
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: nanobanana-nginx
+        app.kubernetes.io/component: gateway
+        app.kubernetes.io/part-of: nanobanana
+    spec:
+      containers:
+        - name: nginx
+          image: nginx:1.27-alpine
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 80
+              protocol: TCP
+          volumeMounts:
+            - name: nginx-config
+              mountPath: /etc/nginx/nginx.conf
+              subPath: nginx.conf
+              readOnly: true
+          readinessProbe:
+            httpGet:
+              path: /nginx-health
+              port: 80
+            initialDelaySeconds: 3
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /nginx-health
+              port: 80
+            initialDelaySeconds: 10
+            periodSeconds: 20
+          resources:
+            requests:
+              cpu: "50m"
+              memory: "64Mi"
+            limits:
+              cpu: "200m"
+              memory: "128Mi"
+      volumes:
+        - name: nginx-config
+          configMap:
+            name: nanobanana-nginx-config
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nanobanana-gateway
+  namespace: nanobanana
+  labels:
+    app.kubernetes.io/name: nanobanana-nginx
+    app.kubernetes.io/component: gateway
+    app.kubernetes.io/part-of: nanobanana
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: nanobanana-nginx
+  ports:
+    - name: http
+      port: 80
+      targetPort: 80
+      protocol: TCP
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: nanobanana-ingress
+  namespace: nanobanana
+  labels:
+    app.kubernetes.io/name: nanobanana-ingress
+    app.kubernetes.io/part-of: nanobanana
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-body-size: "50m"
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: nanobanana.example.com
+      http:
+        paths:
+          - path: /api
+            pathType: Prefix
+            backend:
+              service:
+                name: nanobanana-backend
+                port:
+                  number: 8000
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: nanobanana-frontend
+                port:
+                  number: 3000
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: nanobanana-backend-hpa
+  namespace: nanobanana
+  labels:
+    app.kubernetes.io/name: nanobanana-backend-hpa
+    app.kubernetes.io/part-of: nanobanana
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: nanobanana-backend
+  minReplicas: 2
+  maxReplicas: 10
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 75
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: nanobanana-frontend-hpa
+  namespace: nanobanana
+  labels:
+    app.kubernetes.io/name: nanobanana-frontend-hpa
+    app.kubernetes.io/part-of: nanobanana
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: nanobanana-frontend
+  minReplicas: 2
+  maxReplicas: 10
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 75
