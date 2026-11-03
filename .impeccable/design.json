@@ -1,0 +1,299 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-11-02T19:55:43-03:00",
+  "title": "Design System: Nano Banana Studio",
+  "extensions": {
+    "colorMeta": {
+      "prussian-ink": {
+        "role": "primary",
+        "displayName": "Prussian Ink",
+        "canonical": "#003049",
+        "tonalRamp": [
+          "oklch(18% 0.05 240)",
+          "oklch(28% 0.075 240)",
+          "oklch(38% 0.085 240)",
+          "oklch(48% 0.09 240)",
+          "oklch(60% 0.08 240)",
+          "oklch(72% 0.06 240)",
+          "oklch(84% 0.035 240)",
+          "oklch(94% 0.015 240)"
+        ]
+      },
+      "crimson-vermilion": {
+        "role": "primary",
+        "displayName": "Crimson Vermilion",
+        "canonical": "#d62828",
+        "tonalRamp": [
+          "oklch(22% 0.09 27)",
+          "oklch(34% 0.14 27)",
+          "oklch(46% 0.19 27)",
+          "oklch(56% 0.215 27)",
+          "oklch(66% 0.18 27)",
+          "oklch(76% 0.13 27)",
+          "oklch(86% 0.07 27)",
+          "oklch(95% 0.025 27)"
+        ]
+      },
+      "tangerine-signal": {
+        "role": "tertiary",
+        "displayName": "Tangerine Signal",
+        "canonical": "#f77f00",
+        "tonalRamp": [
+          "oklch(24% 0.07 55)",
+          "oklch(38% 0.12 55)",
+          "oklch(52% 0.16 55)",
+          "oklch(64% 0.19 55)",
+          "oklch(72% 0.195 55)",
+          "oklch(80% 0.15 55)",
+          "oklch(88% 0.09 55)",
+          "oklch(95% 0.035 55)"
+        ]
+      },
+      "solar-amber": {
+        "role": "secondary",
+        "displayName": "Solar Amber",
+        "canonical": "#fcbf49",
+        "tonalRamp": [
+          "oklch(26% 0.06 80)",
+          "oklch(40% 0.10 80)",
+          "oklch(54% 0.13 80)",
+          "oklch(68% 0.15 80)",
+          "oklch(82% 0.155 80)",
+          "oklch(88% 0.12 80)",
+          "oklch(93% 0.07 80)",
+          "oklch(97% 0.03 80)"
+        ]
+      },
+      "warm-parchment": {
+        "role": "neutral",
+        "displayName": "Warm Parchment",
+        "canonical": "#eae2b7",
+        "tonalRamp": [
+          "oklch(25% 0.03 95)",
+          "oklch(38% 0.04 95)",
+          "oklch(52% 0.05 95)",
+          "oklch(66% 0.055 95)",
+          "oklch(78% 0.06 95)",
+          "oklch(86% 0.055 95)",
+          "oklch(91% 0.05 95)",
+          "oklch(96% 0.025 95)"
+        ]
+      },
+      "ivory-card-surface": {
+        "role": "neutral",
+        "displayName": "Ivory Cream Surface",
+        "canonical": "#f5f0d5",
+        "tonalRamp": [
+          "oklch(28% 0.025 95)",
+          "oklch(42% 0.035 95)",
+          "oklch(56% 0.04 95)",
+          "oklch(70% 0.045 95)",
+          "oklch(82% 0.045 95)",
+          "oklch(90% 0.04 95)",
+          "oklch(95% 0.035 95)",
+          "oklch(98% 0.015 95)"
+        ]
+      },
+      "ivory-card-elevated": {
+        "role": "neutral",
+        "displayName": "Elevated Ivory Cream",
+        "canonical": "#fbf8e8",
+        "tonalRamp": [
+          "oklch(30% 0.02 95)",
+          "oklch(45% 0.03 95)",
+          "oklch(60% 0.035 95)",
+          "oklch(74% 0.035 95)",
+          "oklch(85% 0.03 95)",
+          "oklch(92% 0.025 95)",
+          "oklch(97% 0.02 95)",
+          "oklch(99% 0.01 95)"
+        ]
+      },
+      "parchment-dock": {
+        "role": "neutral",
+        "displayName": "Parchment Dock",
+        "canonical": "#f7f2da",
+        "tonalRamp": [
+          "oklch(28% 0.025 95)",
+          "oklch(42% 0.035 95)",
+          "oklch(56% 0.04 95)",
+          "oklch(70% 0.045 95)",
+          "oklch(82% 0.045 95)",
+          "oklch(90% 0.04 95)",
+          "oklch(96% 0.03 95)",
+          "oklch(98% 0.015 95)"
+        ]
+      }
+    },
+    "typographyMeta": {
+      "display": {
+        "displayName": "Display Telemetry",
+        "purpose": "Numeric telemetry readouts and primary focal counters (tabular-nums)."
+      },
+      "headline": {
+        "displayName": "Folder-Tab Headline",
+        "purpose": "Sculpted top-left folder tab brand title (NANOBANANA // STUDIO)."
+      },
+      "title": {
+        "displayName": "Project & Card Title",
+        "purpose": "Project titles in Gallery cards and active project header inputs."
+      },
+      "body": {
+        "displayName": "Prompt & Studio Body",
+        "purpose": "Prompt editor textarea, lightbox prompt inspection copy, and card prompt descriptions."
+      },
+      "label": {
+        "displayName": "Uppercase Section Label",
+        "purpose": "Section headers, variant badges (Variação 1..4), and parameter group titles."
+      }
+    },
+    "shadows": [
+      {
+        "name": "card-rest",
+        "value": "0 4px 16px rgba(0, 48, 73, 0.05)",
+        "purpose": "Subtle lift separating the 4 generated image cards from the Warm Parchment canvas."
+      },
+      {
+        "name": "card-selected-ring",
+        "value": "0 0 0 2px #003049, 0 8px 22px rgba(0, 48, 73, 0.12)",
+        "purpose": "High-confidence selection lock combining a 2px Prussian Ink ring with ambient lift."
+      },
+      {
+        "name": "project-card-hover",
+        "value": "0 10px 28px rgba(0, 48, 73, 0.12)",
+        "purpose": "Tactile elevation on hovered Gallery project cards."
+      },
+      {
+        "name": "bottom-scrubber-dock",
+        "value": "0 6px 22px rgba(24, 26, 23, 0.05)",
+        "purpose": "Anchors the bottom project bar slightly above the parchment floor."
+      },
+      {
+        "name": "modal-overlay",
+        "value": "0 24px 60px rgba(0, 48, 73, 0.35)",
+        "purpose": "Deep theatrical focus for the Lightbox and API Key / Folder Configuration modal."
+      }
+    ],
+    "motion": [
+      {
+        "name": "ease-atelier",
+        "value": "0.15s ease",
+        "purpose": "Snappy tactile transition for pill buttons, chips, and card selection states."
+      },
+      {
+        "name": "ease-card-lift",
+        "value": "0.16s ease",
+        "purpose": "Gallery project card hover lift (translateY(-2px)) and border transition."
+      }
+    ],
+    "breakpoints": [
+      {
+        "name": "desktop-viewport",
+        "value": "100vw x 100vh"
+      }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Pill Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "Primary capsule CTA button in Prussian Ink that shifts to Crimson Vermilion on hover.",
+      "html": "<button class=\"ds-btn-primary\"><span>✦ Gerar 4 Variações</span><span class=\"ds-btn-badge\">4x</span></button>",
+      "css": ".ds-btn-primary { height: 40px; padding: 0 18px; border-radius: 999px; border: none; background-color: var(--ref-charcoal, #003049); color: var(--ref-canvas, #eae2b7); font-family: 'Plus Jakarta Sans', sans-serif; font-size: 0.8rem; font-weight: 600; display: inline-flex; align-items: center; gap: 8px; cursor: pointer; transition: background-color 0.15s ease, color 0.15s ease, transform 0.15s ease; } .ds-btn-primary:hover { background-color: var(--ref-red-accent, #d62828); color: #FFFFFF; } .ds-btn-primary:focus-visible { outline: 2px solid var(--ref-orange-accent, #f77f00); outline-offset: 2px; } .ds-btn-badge { height: 20px; min-width: 20px; padding: 0 6px; border-radius: 999px; background-color: var(--ref-lime-accent, #fcbf49); color: var(--ref-ink-primary, #003049); font-size: 0.68rem; font-weight: 800; display: inline-flex; align-items: center; justify-content: center; }"
+    },
+    {
+      "name": "Parameter & Filter Pill Chip",
+      "kind": "chip",
+      "refersTo": "chip-pill",
+      "description": "Selectable capsule chip for style presets, aspect ratios, scene modifiers, and category filters.",
+      "html": "<div class=\"ds-chip-group\"><button class=\"ds-chip active\">Editorial Anime</button><button class=\"ds-chip\">Cyberpunk Noir</button></div>",
+      "css": ".ds-chip-group { display: inline-flex; gap: 8px; align-items: center; } .ds-chip { height: 36px; padding: 0 14px; border-radius: 999px; border: 1px solid rgba(0, 48, 73, 0.16); background-color: rgba(255, 255, 255, 0.45); color: var(--ref-ink-primary, #003049); font-family: 'Plus Jakarta Sans', sans-serif; font-size: 0.78rem; font-weight: 500; display: inline-flex; align-items: center; gap: 6px; cursor: pointer; transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease; } .ds-chip:hover { background-color: rgba(252, 191, 73, 0.35); border-color: var(--ref-orange-accent, #f77f00); } .ds-chip.active { background-color: var(--ref-lime-accent, #fcbf49); border-color: var(--ref-orange-accent, #f77f00); color: var(--ref-ink-primary, #003049); font-weight: 700; } .ds-chip:focus-visible { outline: 2px solid var(--ref-orange-accent, #f77f00); outline-offset: 2px; }"
+    },
+    {
+      "name": "Top Channel Navigation Pill",
+      "kind": "nav",
+      "refersTo": "nav-pill",
+      "description": "Navigation pill housed inside the recessed Prussian Ink top bar.",
+      "html": "<nav class=\"ds-top-nav\"><a class=\"ds-nav-pill active\" href=\"#studio\">Studio</a><a class=\"ds-nav-pill\" href=\"#gallery\">Galeria (4)</a></nav>",
+      "css": ".ds-top-nav { background-color: var(--ref-moss-outer, #003049); padding: 8px 14px; border-radius: 999px; display: inline-flex; gap: 8px; align-items: center; } .ds-nav-pill { height: 32px; padding: 0 14px; border-radius: 999px; border: 1px solid rgba(234, 226, 183, 0.25); background-color: rgba(234, 226, 183, 0.16); color: var(--ref-canvas, #eae2b7); font-family: 'Plus Jakarta Sans', sans-serif; font-size: 0.76rem; font-weight: 600; display: inline-flex; align-items: center; text-decoration: none; transition: background-color 0.15s ease, color 0.15s ease, transform 0.15s ease; } .ds-nav-pill:hover { background-color: rgba(252, 191, 73, 0.28); color: var(--ref-lime-accent, #fcbf49); transform: translateY(-1px); } .ds-nav-pill.active { background-color: var(--ref-lime-accent, #fcbf49); border-color: var(--ref-lime-accent, #fcbf49); color: var(--ref-ink-primary, #003049); font-weight: 700; box-shadow: 0 4px 14px rgba(0, 0, 0, 0.18); }"
+    },
+    {
+      "name": "Studio Quad Image Card",
+      "kind": "card",
+      "refersTo": "card-quad-image",
+      "description": "Selectable 2x2 variation card with emphasis badge, full-screen expand button, and prompt caption.",
+      "html": "<div class=\"ds-quad-card selected\"><div class=\"ds-quad-header\"><span class=\"ds-quad-badge\">Variação 2 • Iluminação</span><button class=\"ds-quad-expand\" title=\"Expandir\">⤢</button></div><div class=\"ds-quad-frame\"><span>1024 × 1024 PNG</span></div><p class=\"ds-quad-caption\">Ênfase dramática nos reflexos âmbar e contraluz volumétrica</p></div>",
+      "css": ".ds-quad-card { width: 260px; background-color: var(--ref-card-surface, #f5f0d5); border: 1.5px solid rgba(0, 48, 73, 0.15); border-radius: 24px; padding: 12px 14px; display: flex; flex-direction: column; gap: 8px; cursor: pointer; box-shadow: 0 4px 16px rgba(0, 48, 73, 0.05); font-family: 'Plus Jakarta Sans', sans-serif; transition: background-color 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease; } .ds-quad-card:hover { border-color: var(--ref-orange-accent, #f77f00); } .ds-quad-card.selected { background-color: var(--ref-card-elevated, #fbf8e8); border-color: var(--ref-ink-primary, #003049); box-shadow: 0 0 0 2px #003049, 0 8px 22px rgba(0, 48, 73, 0.12); } .ds-quad-header { display: flex; align-items: center; justify-content: space-between; gap: 8px; } .ds-quad-badge { height: 24px; padding: 0 10px; border-radius: 999px; background-color: var(--ref-canvas, #eae2b7); border: 1px solid rgba(0, 48, 73, 0.16); color: var(--ref-ink-primary, #003049); font-size: 0.72rem; font-weight: 700; display: inline-flex; align-items: center; } .ds-quad-expand { width: 30px; height: 30px; border-radius: 50%; border: 1px solid rgba(0, 48, 73, 0.18); background-color: var(--ref-canvas, #eae2b7); color: var(--ref-ink-primary, #003049); font-size: 0.74rem; font-weight: 700; cursor: pointer; transition: background-color 0.15s ease, color 0.15s ease, transform 0.15s ease; } .ds-quad-expand:hover { background-color: var(--ref-orange-accent, #f77f00); border-color: var(--ref-orange-accent, #f77f00); color: #FFFFFF; transform: scale(1.05); } .ds-quad-frame { height: 120px; border-radius: 16px; background-color: rgba(0, 48, 73, 0.08); display: flex; align-items: center; justify-content: center; color: rgba(0, 48, 73, 0.56); font-size: 0.75rem; font-weight: 600; } .ds-quad-caption { font-size: 0.72rem; color: rgba(0, 48, 73, 0.78); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin: 0; }"
+    },
+    {
+      "name": "Timeline Interaction Lineage Card",
+      "kind": "custom",
+      "refersTo": "card-interaction",
+      "description": "Compact interaction node in the top 15% timeline strip showing branch origin badges.",
+      "html": "<div class=\"ds-timeline-row\"><span class=\"ds-branch-badge\">de #1 ➔</span><button class=\"ds-interaction-card active\"><div class=\"ds-interaction-thumb\">#3</div><div class=\"ds-interaction-meta\"><div class=\"ds-interaction-title\">Interação #3 <span class=\"ds-origin-tag\">#1 ➔ #3</span></div><div class=\"ds-interaction-sub\">Samurai sob chuva neon...</div></div></button></div>",
+      "css": ".ds-timeline-row { display: inline-flex; align-items: center; gap: 8px; font-family: 'Plus Jakarta Sans', sans-serif; } .ds-branch-badge { height: 22px; padding: 0 8px; border-radius: 999px; background-color: var(--ref-orange-accent, #f77f00); color: #FFFFFF; font-size: 0.66rem; font-weight: 700; display: inline-flex; align-items: center; } .ds-interaction-card { height: 58px; padding: 6px 12px 6px 8px; border-radius: 16px; border: 1.5px solid rgba(0, 48, 73, 0.16); background-color: var(--ref-card-surface, #f5f0d5); display: inline-flex; align-items: center; gap: 10px; cursor: pointer; text-align: left; transition: background-color 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease; } .ds-interaction-card:hover { background-color: var(--ref-card-elevated, #fbf8e8); border-color: var(--ref-orange-accent, #f77f00); } .ds-interaction-card.active { background-color: var(--ref-card-elevated, #fbf8e8); border-color: var(--ref-ink-primary, #003049); box-shadow: 0 0 0 2px #003049; } .ds-interaction-thumb { width: 40px; height: 40px; border-radius: 10px; background-color: rgba(0, 48, 73, 0.12); color: var(--ref-ink-primary, #003049); font-size: 0.74rem; font-weight: 700; display: flex; align-items: center; justify-content: center; } .ds-interaction-meta { display: flex; flex-direction: column; gap: 2px; } .ds-interaction-title { font-size: 0.72rem; font-weight: 700; color: var(--ref-ink-primary, #003049); display: flex; align-items: center; gap: 6px; } .ds-origin-tag { height: 18px; padding: 0 6px; border-radius: 999px; background-color: var(--ref-lime-accent, #fcbf49); color: var(--ref-ink-primary, #003049); font-size: 0.62rem; font-weight: 700; display: inline-flex; align-items: center; } .ds-interaction-sub { font-size: 0.68rem; color: rgba(0, 48, 73, 0.78); }"
+    },
+    {
+      "name": "Atelier Prompt Input & Textarea",
+      "kind": "input",
+      "refersTo": "input-field",
+      "description": "Elevated Ivory input field that shifts border to Tangerine Signal and background to crisp white on focus.",
+      "html": "<input class=\"ds-input\" type=\"text\" placeholder=\"Buscar projeto por título ou prompt...\" />",
+      "css": ".ds-input { width: 280px; height: 42px; padding: 0 14px; border-radius: 14px; border: 1.5px solid rgba(0, 48, 73, 0.22); background-color: var(--ref-card-elevated, #fbf8e8); color: var(--ref-ink-primary, #003049); font-family: 'Plus Jakarta Sans', sans-serif; font-size: 0.84rem; font-weight: 500; outline: none; transition: border-color 0.15s ease, background-color 0.15s ease; } .ds-input::placeholder { color: rgba(0, 48, 73, 0.56); } .ds-input:focus { border-color: var(--ref-orange-accent, #f77f00); background-color: #FFFFFF; }"
+    },
+    {
+      "name": "Bottom Project Scrubber Dock",
+      "kind": "custom",
+      "refersTo": "bottom-scrubber-dock",
+      "description": "Floating bottom capsule hosting the editable project name on the left and the + Novo Projeto button on the right.",
+      "html": "<div class=\"ds-bottom-dock\"><div class=\"ds-project-pill\"><span class=\"ds-project-label\">PROJETO:</span><input class=\"ds-project-input\" value=\"Samurai Neon\" readonly /></div><button class=\"ds-btn-new\">+ Novo Projeto</button></div>",
+      "css": ".ds-bottom-dock { height: 56px; width: 100%; max-width: 520px; background-color: var(--ref-white-dock, #f7f2da); border-radius: 999px; padding: 6px 14px; display: flex; align-items: center; justify-content: space-between; gap: 12px; box-shadow: 0 6px 22px rgba(24, 26, 23, 0.05); font-family: 'Plus Jakarta Sans', sans-serif; } .ds-project-pill { display: inline-flex; align-items: center; gap: 8px; height: 40px; padding: 0 14px; border-radius: 999px; background-color: var(--ref-canvas, #eae2b7); border: 1px solid rgba(0, 48, 73, 0.16); } .ds-project-label { font-size: 0.7rem; font-weight: 700; color: rgba(0, 48, 73, 0.78); letter-spacing: 0.04em; } .ds-project-input { border: none; background: transparent; font-size: 0.86rem; font-weight: 600; color: var(--ref-ink-primary, #003049); outline: none; width: 140px; } .ds-btn-new { height: 40px; padding: 0 18px; border-radius: 999px; border: none; background-color: var(--ref-charcoal, #003049); color: var(--ref-canvas, #eae2b7); font-size: 0.8rem; font-weight: 600; cursor: pointer; transition: background-color 0.15s ease, color 0.15s ease; } .ds-btn-new:hover { background-color: var(--ref-red-accent, #d62828); color: #FFFFFF; }"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Warm Prussian Atelier",
+    "overview": "Nano Banana Studio is designed as a tactile, sunlit art-direction workstation framed inside a deep Prussian-blue architectural shell. Rather than mimicking a generic dark-mode SaaS dashboard or a cluttered node-graph IDE, the interface pairs a recessed Prussian Ink outer bezel with a warm parchment drafting canvas joined by an organic sculpted folder tab and S-curve bridge. Every interaction feels physical, grounded, and deliberate—inviting illustrators and concept artists to compare four simultaneous scene interpretations and trace their creative lineage without visual fatigue.\n\nStructural clarity replaces decorative container nesting. Major workspace zones—the top 15% timeline and filter header, the 60% active quad-generation canvas, and the 40% prompt and parameter studio—are separated by crisp Prussian hairline dividers directly on the parchment surface. Elevated cards are reserved strictly for the artifacts that represent creative output: Gallery projects, the four generated images in the 2×2 grid, and individual interaction nodes along the branching timeline.\n\nThe system explicitly rejects nested card-in-card containers, full-page scrollbars, pure #000000 black or washed-out neutral grays, and decorative gradients. All surfaces, borders, and typographic hierarchies derive harmonically from the five-color atelier palette.",
+    "keyCharacteristics": [
+      "Sculpted desktop frame in Prussian Ink (#003049) housing a Warm Parchment (#eae2b7) canvas with a raised left title tab and smooth S-curve SVG transition.",
+      "Fixed full-viewport geometry (100vw × 100vh, zero page scroll) partitioned into a 15% top context bar, an 85% main workspace, and a floating pill dock at the bottom.",
+      "Architectural hairline dividers (1.5px solid rgba(0, 48, 73, 0.2)) between workspace sections instead of outer wrapper cards.",
+      "Strictly scoped card surfaces (#f5f0d5 and #fbf8e8) reserved solely for Gallery projects, the 4 quad-generation images, and timeline interaction items.",
+      "Warm solar signal hierarchy using Solar Amber (#fcbf49) for active states, Tangerine Signal (#f77f00) for branch lineage and focus rings, and Crimson Vermilion (#d62828) for primary action hover and destructive confirmation."
+    ],
+    "rules": [
+      {
+        "name": "The Prussian Contrast Rule",
+        "body": "All dark typography, structural borders, and primary button fills use Prussian Ink (#003049) or its alpha steps—never pure #000000 black or untinted gray.",
+        "section": "colors"
+      },
+      {
+        "name": "The Solar Signal Rule",
+        "body": "Solar Amber (#fcbf49), Tangerine Signal (#f77f00), and Crimson Vermilion (#d62828) are reserved for interactive states, lineage badges, and focal CTAs; they must never flood large background zones.",
+        "section": "colors"
+      },
+      {
+        "name": "The Tabular Telemetry Rule",
+        "body": "All turn numbers (#1, #2), aspect ratio labels (1:1, 16:9), and counter badges enforce font-variant-numeric: tabular-nums so layout width never jitters across iterations.",
+        "section": "typography"
+      },
+      {
+        "name": "The Scoped Elevation Rule",
+        "body": "Only Gallery project cards, the 4 quad-generation cards, timeline interaction cards, the bottom pill dock, and modals carry background fills or shadows; all surrounding layout sections remain flat and transparent on #eae2b7.",
+        "section": "elevation"
+      }
+    ],
+    "dos": [
+      "Do restrict all colors strictly to the five-color Warm Prussian Atelier palette (#003049, #d62828, #f77f00, #fcbf49, #eae2b7) and its direct ivory/alpha derivatives (#f5f0d5, #fbf8e8, #f7f2da).",
+      "Do separate major workspace zones (top 15% bar, left 60% quad grid, right 40% prompt/parameters) using 1.5px solid rgba(0, 48, 73, 0.2) structural dividers directly on the #eae2b7 canvas.",
+      "Do reserve card containers exclusively for Gallery projects (.ref-project-card), the 4 generated quad images (.ref-quad-image-card), and timeline interaction nodes (.ref-interaction-history-item).",
+      "Do maintain the 100vw × 100vh zero-scroll desktop viewport constraint across all routes."
+    ],
+    "donts": [
+      "Don't wrap the top 15% bar, the 60% image area, or the 40% parameter column in outer card boxes or nested container backgrounds.",
+      "Don't introduce pure #000000 black, untinted neutral grays, or legacy neon lime (#F2FA3C / #ECFF3B) into text, borders, or badges.",
+      "Don't populate new projects with placeholder or mocked images; empty slots in the 2×2 grid must render honest empty states until the user triggers generation.",
+      "Don't allow full-page vertical or horizontal scrollbars on html, body, or .ref-desktop-shell."
+    ]
+  }
+}

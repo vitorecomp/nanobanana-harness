@@ -62,32 +62,6 @@ export const DEFAULT_BOOTSTRAP_DATA: BootstrapResponse = {
   ],
   modifier_categories: [
     {
-      id: "lighting",
-      title: "Lighting",
-      options: [
-        {
-          id: "golden-hour",
-          label: "Warm Golden Hour",
-          token: "warm golden hour rim lighting, long atmospheric shadows",
-        },
-        {
-          id: "acid-rim",
-          label: "Acid-Yellow Rim Light (#F2FA3C)",
-          token: "sharp acid-yellow rim light, deep ink chiaroscuro shadows",
-        },
-        {
-          id: "studio-softbox",
-          label: "Diffused Editorial Softbox",
-          token: "soft diffused editorial studio key light, clean shadow separation",
-        },
-        {
-          id: "neon-rain",
-          label: "Neon Nocturne & Reflections",
-          token: "wet asphalt neon reflections, nocturnal cyan and yellow glow",
-        },
-      ],
-    },
-    {
       id: "camera",
       title: "Camera & Lens",
       options: [
@@ -102,30 +76,66 @@ export const DEFAULT_BOOTSTRAP_DATA: BootstrapResponse = {
           token: "85mm portrait telephoto lens, creamy background separation",
         },
         {
+          id: "isometric-tele",
+          label: "135mm Compressed Telephoto",
+          token: "135mm telephoto compression, graphic flattened background layers",
+        },
+        {
+          id: "anamorphic-50mm",
+          label: "50mm Anamorphic Cinema",
+          token: "50mm anamorphic cinema lens, oval bokeh and horizontal flare",
+        },
+      ],
+    },
+    {
+      id: "clothing",
+      title: "Clothing & Wardrobe",
+      options: [
+        {
+          id: "techwear-urban",
+          label: "Urban Utilitarian Techwear",
+          token: "functional matte black techwear jacket, tactical straps, waterproof cargo silhouette",
+        },
+        {
+          id: "editorial-tailoring",
+          label: "Minimalist Editorial Tailoring",
+          token: "structured oversized wool coat, crisp architectural tailoring, luxury editorial drape",
+        },
+        {
+          id: "cyber-kimono",
+          label: "Contemporary Street Kimono",
+          token: "layered modern street kimono with graphic textile patterns and wide obi belt",
+        },
+        {
+          id: "vintage-90s-street",
+          label: "90s Vintage Streetwear",
+          token: "heavyweight boxy vintage bomber jacket, distressed denim, retro sneakers",
+        },
+      ],
+    },
+    {
+      id: "angle",
+      title: "Angle & Framing",
+      options: [
+        {
           id: "low-angle-24mm",
           label: "24mm Heroic Low Angle",
           token: "dynamic low-angle heroic perspective looking slightly up",
         },
         {
-          id: "isometric-tele",
-          label: "135mm Compressed Telephoto",
-          token: "135mm telephoto compression, graphic flattened background layers",
+          id: "birds-eye-top",
+          label: "Overhead Bird's-Eye View",
+          token: "high overhead bird's-eye view looking straight down with geometric ground alignment",
         },
-      ],
-    },
-    {
-      id: "composition",
-      title: "Composition",
-      options: [
+        {
+          id: "dutch-tilt",
+          label: "Dynamic Dutch Angle",
+          token: "tilted editorial dutch angle creating kinetic tension and diagonal energy",
+        },
         {
           id: "rule-of-thirds",
           label: "Asymmetric Rule of Thirds",
           token: "off-center editorial magazine composition with negative space",
-        },
-        {
-          id: "diagonal-action",
-          label: "Dynamic Diagonal Motion",
-          token: "dynamic diagonal leading lines, mid-stride motion energy",
         },
         {
           id: "centered-iconic",
@@ -135,23 +145,49 @@ export const DEFAULT_BOOTSTRAP_DATA: BootstrapResponse = {
       ],
     },
     {
-      id: "palette",
-      title: "Color Palette",
+      id: "lighting",
+      title: "Lighting & Mood",
       options: [
         {
-          id: "cream-ink-acid",
-          label: "Cream, Carbon Ink & Acid Yellow",
-          token: "warm bone cream #E9E7DF, deep carbon black #0B0B0B, acid yellow #F2FA3C accents",
+          id: "golden-hour",
+          label: "Warm Golden Hour",
+          token: "warm golden hour rim lighting, long atmospheric shadows",
+        },
+        {
+          id: "acid-rim",
+          label: "Amber Rim Light",
+          token: "sharp warm amber rim light, deep ink chiaroscuro shadows",
+        },
+        {
+          id: "studio-softbox",
+          label: "Diffused Editorial Softbox",
+          token: "soft diffused editorial studio key light, clean shadow separation",
+        },
+        {
+          id: "neon-rain",
+          label: "Neon Nocturne & Reflections",
+          token: "wet asphalt neon reflections, nocturnal cyan and amber glow",
+        },
+      ],
+    },
+    {
+      id: "palette",
+      title: "Atmosphere & Color",
+      options: [
+        {
+          id: "diagonal-action",
+          label: "Dynamic Diagonal Motion",
+          token: "dynamic diagonal leading lines, mid-stride motion energy",
         },
         {
           id: "pastel-teal-warm",
           label: "Pastel Teal Sky & Warm Ochre",
-          token: "soft pastel teal sky, warm ochre and olive utility jacket tones",
+          token: "soft pastel teal sky, warm ochre and olive utility tones",
         },
         {
           id: "monochrome-duotone",
           label: "High-Contrast Graphic Duotone",
-          token: "high-contrast monochrome black ink with isolated spot yellow highlights",
+          token: "high-contrast monochrome black ink with isolated amber gold highlights",
         },
       ],
     },

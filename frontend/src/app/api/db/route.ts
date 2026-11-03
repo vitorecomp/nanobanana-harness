@@ -40,7 +40,7 @@ function sanitizeProjectFolderName(title: string, fallbackId?: string): string {
     .replace(/[<>:"/\\|?*\x00-\x1F]/g, "_")
     .replace(/\s+/g, " ")
     .trim();
-  return cleaned || fallbackId || "Novo_Projeto";
+  return cleaned || fallbackId || "New_Project";
 }
 
 function getConfiguredImagesDir(db: DatabaseSync): string {
@@ -230,7 +230,7 @@ function getDb(): DatabaseSync {
             fs.renameSync(curPath, targetPath);
             changed = true;
             return {
-              label: v.label || `Versão #${idx + 1}`,
+              label: v.label || `Variation #${idx + 1}`,
               prompt: v.prompt || "",
               imagePath: targetPath,
             };
@@ -358,7 +358,7 @@ export async function POST(req: NextRequest) {
               imageUrl?: string;
             }>;
             return arr.map((v, i) => ({
-              label: String(v.label || `Versão #${i + 1}`),
+              label: String(v.label || `Variation #${i + 1}`),
               prompt: String(v.prompt || ""),
               imagePath: v.imagePath || null,
               imageUrl: v.imagePath
@@ -428,7 +428,7 @@ export async function POST(req: NextRequest) {
 
     if (action === "create_conversation") {
       const userId = String(payload.user_id || "usr_local_dev");
-      const title = String(payload.title || "Novo Projeto");
+      const title = String(payload.title || "New Project");
       const styleId = String(payload.style_id || "editorial-anime");
       const convId = `conv_${crypto.randomUUID().replace(/-/g, "").slice(0, 12)}`;
 
@@ -463,7 +463,7 @@ export async function POST(req: NextRequest) {
       const userId = String(payload.user_id || "usr_local_dev");
       const turnId = `turn_${crypto.randomUUID().replace(/-/g, "").slice(0, 12)}`;
       const projectTitle = String(
-        payload.title || payload.raw_idea || "Novo Projeto"
+        payload.title || payload.raw_idea || "New Project"
       ).slice(0, 64);
 
       db.prepare(`
@@ -527,14 +527,14 @@ export async function POST(req: NextRequest) {
 
       const dbVariants = rawVariants.map((v, idx) => {
         const vDataUrl = v.image_data_url ? String(v.image_data_url) : "";
-        const fileName = `interacao_${nextTurnNumber}_slot_${idx + 1}_${turnId}.png`;
+        const fileName = `interaction_${nextTurnNumber}_slot_${idx + 1}_${turnId}.png`;
         const savedPath = saveBase64PngToDir(
           projectOutputDir,
           fileName,
           vDataUrl
         );
         return {
-          label: String(v.label || `Versão #${idx + 1}`),
+          label: String(v.label || `Variation #${idx + 1}`),
           prompt: String(v.prompt || ""),
           imagePath: savedPath,
         };
@@ -552,7 +552,7 @@ export async function POST(req: NextRequest) {
       ) {
         imagePath = saveBase64PngToDir(
           projectOutputDir,
-          `interacao_${nextTurnNumber}_${turnId}.png`,
+          `interaction_${nextTurnNumber}_${turnId}.png`,
           String(payload.image_data_url)
         );
       }
@@ -636,7 +636,7 @@ export async function POST(req: NextRequest) {
 
     if (action === "update_conversation_title") {
       const conversationId = String(payload.conversationId || "");
-      const title = String(payload.title || "").trim() || "Sem título";
+      const title = String(payload.title || "").trim() || "Untitled Project";
 
       const oldConv = db
         .prepare(`SELECT title FROM conversations WHERE id = ?`)
@@ -781,6 +781,39 @@ export async function POST(req: NextRequest) {
         ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at
       `).run(resolved, now);
       return NextResponse.json({ ok: true, data: resolved });
+    }
+
+    if (action === "vault_get_modifiers") {
+      const row = db
+        .prepare(
+          `SELECT value FROM app_vault WHERE key = 'modifier_categories_json'`
+        )
+        .get() as { value: string } | undefined;
+      if (!row?.value) {
+        return NextResponse.json({ ok: true, data: null });
+      }
+      try {
+        return NextResponse.json({ ok: true, data: JSON.parse(row.value) });
+      } catch {
+        return NextResponse.json({ ok: true, data: null });
+      }
+    }
+
+    if (action === "vault_set_modifiers") {
+      const categories = payload.categories;
+      if (!Array.isArray(categories)) {
+        return NextResponse.json(
+          { ok: false, error: "Invalid categories array" },
+          { status: 400 }
+        );
+      }
+      const serialized = JSON.stringify(categories);
+      db.prepare(`
+        INSERT INTO app_vault (key, value, updated_at)
+        VALUES ('modifier_categories_json', ?, ?)
+        ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at
+      `).run(serialized, now);
+      return NextResponse.json({ ok: true, data: categories });
     }
 
     return NextResponse.json(

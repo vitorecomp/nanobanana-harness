@@ -544,6 +544,28 @@ fn tauri_vault_clear_api_key(state: State<'_, AppDatabase>) -> Result<bool, Stri
     Ok(true)
 }
 
+#[tauri::command]
+fn tauri_window_minimize(window: tauri::Window) -> Result<(), String> {
+    window.minimize().map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn tauri_window_toggle_maximize(window: tauri::Window) -> Result<bool, String> {
+    let is_max = window.is_maximized().unwrap_or(false);
+    if is_max {
+        window.unmaximize().map_err(|e| e.to_string())?;
+        Ok(false)
+    } else {
+        window.maximize().map_err(|e| e.to_string())?;
+        Ok(true)
+    }
+}
+
+#[tauri::command]
+fn tauri_window_close(window: tauri::Window) -> Result<(), String> {
+    window.close().map_err(|e| e.to_string())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -583,6 +605,9 @@ pub fn run() {
             tauri_vault_get_api_key,
             tauri_vault_set_api_key,
             tauri_vault_clear_api_key,
+            tauri_window_minimize,
+            tauri_window_toggle_maximize,
+            tauri_window_close,
         ])
         .run(tauri::generate_context!())
         .expect("error while running Nano Banana Studio Tauri application");

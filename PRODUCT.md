@@ -1,58 +1,80 @@
-# PRODUCT.md — Product Context & Value Proposition (Impeccable Init) 🍌✦
+# Product
 
-This document establishes the durable product vision, user personas, experience architecture, and security boundaries of **Nano Banana Studio**.
+<!-- impeccable:product-schema 1 -->
 
----
+## Platform
 
-## 1. Product Vision
+web
 
-**Nano Banana Studio** is an interactive web studio for AI-assisted art direction and multi-turn conversational image creation powered by **Google Nano Banana (`gemini-2.5-flash-image`)**.
+## Users
 
-Unlike conventional text-to-image generators that present an empty prompt box ("trial-and-error prompting"), **Nano Banana Studio** acts as an **Interactive Art Director (Python Flask + SQLAlchemy Co-Pilot)** that diagnoses the creator's initial idea, detects missing cinematic dimensions (lighting, camera/lens optics, composition, mood, environment), asks guided questions with clickable answer chips, and orchestrates multi-turn visual refinement while preserving character identity across frames.
+1. **Ilustradores, Concept Artists e Diretores de Arte**:
+   - Criadores que buscam refinar cenas iterativamente com controle sobre enquadramento, iluminação, estilo e composição, comparando variações lado a lado e evoluindo a imagem a partir da melhor alternativa de cada rodada.
+2. **Desenvolvedores e Criadores Desktop Locais (Local-First)**:
+   - Usuários que utilizam sua própria chave da API Google Gemini (`AIza...`) em uma aplicação desktop instalável (**Tauri v2**) ou servidor local, com persistência local em **SQLite** e arquivos `.png` salvos diretamente no sistema de arquivos do sistema operacional, sem dependência de containers externos, bancos em nuvem ou buckets remotos.
 
----
+## Product Purpose
 
-## 2. Target User Personas
+**Nano Banana Studio** é um estúdio interativo desktop e web (`Tauri v2` + `Next.js` + `SQLite`) para criação e refinamento multi-turno de imagens com **Google Nano Banana (`gemini-2.5-flash-image`)** e **Gemini (`gemini-2.5-flash`)**.
 
-1. **Illustrators, Concept Artists & Art Directors**:
-   - Need high aesthetic precision (such as *Crypko-inspired Editorial Anime cel-shading*, *35mm Analog Photography*, or *Neo-Brutalist Illustration*) and granular control over camera framing and lighting without losing character consistency across iterations.
-2. **Privacy-Conscious Developers Running a Local Instance**:
-   - Own a personal Google AI Studio API key (`AIza...`) and want to spin up a local instance (`compose.yaml`) where they can jump straight into the Interactive Studio **without any login barrier** (`REQUIRE_AUTH=false`), while keeping their API key **100% in volatile browser RAM (`Zero-Storage`)** and saving their prompt history in local PostgreSQL and images in local RustFS.
-3. **Multi-Session Cloud Creators (Google & Facebook OAuth)**:
-   - In production Kubernetes environments (`infra/deployment.yaml` & `infra/k8s/`, `REQUIRE_AUTH=true`), creators sign in with their **Google** or **Facebook** account so all their creative conversations, evolved prompts, and generated images are isolated and persisted in **PostgreSQL** and the **RustFS S3 Bucket** for later consultation and 1-click branching.
+O produto existe para substituir a tentativa-e-erro de um único prompt estático por um fluxo de exploração estruturada em 4 variações simultâneas e histórico ramificado por projeto. O sucesso significa permitir que o criador:
+- Gere 4 interpretações visuais a cada rodada (`1 Prompt Base + 3 Ênfases Dinâmicas do Gemini` em diferentes partes da cena);
+- Selecione qualquer uma das 4 imagens geradas para carregar seu prompt específico e continuar iterando (com ou sem referência visual `inlineData`);
+- Navegue livremente por todo o histórico de interações do projeto, criando ramificações a partir de qualquer interação anterior sem perder o rastreio de origem;
+- Tenha todas as imagens salvas automaticamente como arquivos `.png` organizados por pasta de projeto no computador (`~/Pictures/nanobanana/<nome-do-projeto>/`).
 
----
+## Positioning
 
-## 3. Experience Architecture: Showcase, Auth Modes & Interactive Studio
+Diferente de geradores text-to-image convencionais que produzem uma única saída linear ou variações com a mesma instrução textual, o **Nano Banana Studio** combina:
+1. **Expansão Dinâmica de Cena (`1 + 3`)**: O `gemini-2.5-flash` analisa os elementos da cena descrita pelo usuário e formula 3 versões adicionais do prompt dando ênfase criativa a partes distintas da cena, gerando as 4 imagens em paralelo via `gemini-2.5-flash-image`.
+2. **Linhagem Ramificada de Interações**: Cada nova geração registra de qual interação anterior ela partiu (`parent_turn_number`), exibindo indicadores visuais de origem (`de #X ➔`) na linha do tempo superior.
+3. **Arquitetura Local-First (SQLite + Filesystem Nativo)**: O banco SQLite armazena exclusivamente metadados, prompts e caminhos de arquivo (`image_path`), enquanto os binários `.png` residem diretamente no diretório configurável do usuário (`~/Pictures/nanobanana/<nome-do-projeto>/`), sincronizando renomeações de projeto com a pasta no disco e preservando os arquivos mesmo quando um projeto é removido da galeria.
 
-### 3.1 Editorial Showcase Area (Discovery, Transparency & Visual Simulation)
-Visitors immediately understand how the system works:
-- **High-Impact Editorial Hero**: Showcases the Crypko-inspired Neo-Brutalist design with a rotating circular text seal around a 20-point starburst CTA (`INICIAR CRIAÇÃO ★`).
-- **4-Stage Interactive Workflow Walkthrough** & **3-Turn Visual Evolution Simulator** (`/showcase/step-1-base.png` → `/showcase/step-2-lighting.png` → `/showcase/step-3-cyber.png`).
-- **Zero-Storage Privacy Architecture Diagram**: Explains why the Gemini API key never leaves browser RAM.
+## Operating Context
 
-### 3.2 Authentication Modes: Local Dev Instance (`compose.yaml`) vs. Production Kubernetes OAuth
-- **Local / Dev Mode (`REQUIRE_AUTH=false`, default in `compose.yaml`)**:
-  - Login is **not required**. Clicking **"INICIAR CRIAÇÃO ★"**, **"Abrir Studio"**, or **"CRIAR AGORA"** launches the Interactive Studio immediately using the auto-provisioned `usr_local_dev` (`Local Dev Instance`) profile in PostgreSQL.
-  - Optional **Google (`POST /api/auth/google`)** and **Facebook (`POST /api/auth/facebook`)** sign-in remains accessible from the navbar whenever the developer wants to test social login flows.
-- **Production Mode on Kubernetes (`REQUIRE_AUTH=true`, in `infra/deployment.yaml` & `infra/k8s/`)**:
-  - Clicking Studio entry CTAs opens the social authentication modal supporting **Google OAuth 2.0** and **Facebook Login**, upserting the verified user into PostgreSQL via SQLAlchemy.
+- **Aplicação Desktop Full-Viewport (`100vw × 100vh`, Zero-Scroll)**:
+  - Opera em janela fixa sem rolagem de página, dividida em barra superior de `15%` (linha do tempo de interações no Studio; último projeto trabalhado, busca e filtros por categoria na Galeria), área central de `85%` (no Studio: grade `2×2` de geração ativa em `60%` à esquerda + painel de prompt e parâmetros em `40%` à direita; na Galeria: grade de cards de projetos) e barra inferior com nome editável do projeto à esquerda e botão `+ Novo Projeto` à direita.
+- **Inspeção e Seleção no Fluxo de Trabalho**:
+  - Clique simples em um dos 4 cards seleciona a variação (`✓ Escolhida`) e carrega seu prompt no editor lateral; o botão `⤢` (ou duplo-clique) abre a imagem em tela cheia (Lightbox).
+  - O toggle `Referência Visual: ON / OFF` define se a imagem escolhida é enviada como `inlineData` para guiar a próxima rodada.
 
-### 3.3 Interactive Studio + PostgreSQL History + RustFS Bucket Gallery
-- **Volatile RAM API Key Bar**: Password input isolated in `React.useState` with an instant `"Clear from RAM"` button and an `"Interactive Simulation Mode"` toggle.
-- **Left Column — Python Flask Prompt Co-Pilot**: Completeness meter (`0–100%`), 6 style presets, 5 modifier categories, clickable guided questions, 3 complete prompt variations, and quick multi-turn refinement chips.
-- **Right Column — Live Canvas & Branchable Timeline**: Renders the generated `gemini-2.5-flash-image` frame, supports side-by-side comparison with previous turns, PNG download, and branching from any historical node.
-- **PostgreSQL Conversation History & RustFS Bucket Gallery (Later Consultation)**:
-  - Lists all past conversations stored in **PostgreSQL** (`GET /api/conversations`).
-  - Provides the **RustFS Bucket Gallery** (`GET /api/users/<id>/gallery`), where every image stored in the `nanobanana-images` bucket can be inspected alongside its exact prompt metadata and resumed with 1 click.
+## Capabilities and Constraints
 
----
+- **Modelos Utilizados**:
+  - `gemini-2.5-flash` para análise da cena e geração das 3 variações de prompt com ênfases dinâmicas.
+  - `gemini-2.5-flash-image` para geração paralela das 4 imagens (e refinamento multimodal quando `Referência Visual` está ativa).
+- **Armazenamento de Imagens no Filesystem**:
+  - Diretório padrão: `~/Pictures/nanobanana/<nome-do-projeto>/` (configurável no modal `⚙ Config` via chave `images_output_dir` na tabela `app_vault`).
+  - Nenhuma imagem em base64 (`image_data_url`) é persistida no SQLite; o banco guarda apenas `image_path` e `variants_json` apontando para os caminhos locais, servidos via `/api/image?path=...`.
+  - Novos projetos iniciam com os 4 slots vazios (sem imagens mockadas).
+- **Persistência SQLite (`~/.local/share/com.nanobanana.studio/nanobanana.sqlite3`)**:
+  - Tabelas: `users`, `conversations`, `conversation_turns` (incluindo `variants_json` e `parent_turn_number`) e `app_vault`.
+  - Excluir um projeto na Galeria remove os registros do SQLite, mas preserva intencionalmente a pasta e os arquivos `.png` em `~/Pictures/nanobanana/`.
+- **Gerenciamento de Chave de API (`AIza...`)**:
+  - Configurável no modal `⚙ Config`, com opção ativada por padrão para persistir localmente no `app_vault` do SQLite do usuário.
 
-## 4. Non-Negotiable Security & Storage Boundary
+## Brand Commitments
 
-| Asset / Credential | Where It Lives / Is Processed | Security Policy |
-| :--- | :--- | :--- |
-| **Google Gemini API Key (`AIza...`)** | Exclusively in `React.useState` (Browser Volatile RAM) | **ZERO-STORAGE**: Never saved in `localStorage`, `cookies`, PostgreSQL, or RustFS. Actively rejected with HTTP 400 by the Python Flask backend. |
-| **User Identity (`local_dev`, `google`, `facebook`)** | PostgreSQL `users` table (via SQLAlchemy) | Identifies the owner of saved conversations and gallery images. |
-| **Conversations, Prompts & Guided Answers** | PostgreSQL `conversations` & `conversation_turns` tables | Persisted for later consultation and multi-turn resumption. |
-| **Generated & Iterated Images (`PNG`)** | **RustFS** S3 Bucket (`nanobanana-images`) | Persisted and streamed via `/api/bucket/...` for the User Gallery. |
+- **Identidade**: **Nano Banana Studio** (`NANOBANANA // STUDIO`).
+- **Idioma da Interface**: Português (`pt-BR`).
+- **Restrições Visuais Vinculantes Definidas pelo Usuário**:
+  - Paleta de 5 cores obrigatória: `["#003049", "#d62828", "#f77f00", "#fcbf49", "#eae2b7"]`.
+  - Divisores estruturais entre seções da tela no lugar de containers em card; o uso de cards é restrito exclusivamente aos projetos na Galeria, às 4 imagens geradas no grid `2×2` e a cada item de interação da timeline.
+
+## Evidence on Hand
+
+- **Código-Fonte e Rotas Ativas**:
+  - Estúdio Interativo em `frontend/src/features/studio/components/InteractiveStudio.tsx` (`/` e `/create`).
+  - Galeria de Projetos em `frontend/src/app/gallery/page.tsx` (`/gallery`).
+  - Cliente Gemini / Nano Banana em `frontend/src/features/studio/services/nanobananaClient.ts`.
+  - Persistência SQLite e gerenciamento de pastas no filesystem em `frontend/src/app/api/db/route.ts` e `src-tauri/src/db.rs`.
+  - Streaming local de imagens em `frontend/src/app/api/image/route.ts`.
+- **Ausências Confirmadas (Não Fabricar)**:
+  - Sem depoimentos de clientes, métricas comerciais externas, planos de preços ou infraestrutura multi-tenant em nuvem.
+
+## Product Principles
+
+1. **Exploração Paralela sobre Tentativa Linear**: Sempre oferecer ao criador 4 interpretações reais da cena (`1 Base + 3 Ênfases Dinâmicas do Gemini`) em vez de forçar ajustes cegos em uma única imagem por vez.
+2. **Propriedade Real dos Arquivos (Filesystem-First)**: As imagens geradas pertencem diretamente às pastas do usuário em `~/Pictures/nanobanana/<projeto>/`, legíveis fora do aplicativo e preservadas mesmo se o projeto for removido da listagem.
+3. **Rastreabilidade Não-Destrutiva**: Toda iteração preserva sua linhagem (`parent_turn_number`), permitindo voltar a qualquer ponto da história, inspecionar as 4 variações daquela rodada e abrir novos ramos criativos.
+4. **Foco Total na Tela (`100vw × 100vh` Zero-Scroll)**: Toda a operação criativa — linha do tempo, grade `2×2` de geração e controles de prompt/parâmetros — deve caber e responder dentro do viewport fixo sem barras de rolagem de página.

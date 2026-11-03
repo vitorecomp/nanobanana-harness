@@ -11,6 +11,8 @@ import {
   GenerateNanoBananaRequest,
   GenerateNanoBananaResult,
   InlineImagePart,
+  ModifierCategory,
+  ModifierOption,
 } from "../types/studio.types";
 
 interface GeminiCandidatePart {
@@ -214,7 +216,7 @@ export async function generateFourPromptVariations(params: {
   const cleanBase = params.basePrompt.trim();
   const styleSuffix = params.styleLabel ? ` [${params.styleLabel}]` : "";
   const ratioSuffix = params.aspectRatio
-    ? ` (Proporção ${params.aspectRatio})`
+    ? ` (Aspect Ratio ${params.aspectRatio})`
     : "";
   const modSuffix =
     params.modifierLabels && params.modifierLabels.length > 0
@@ -223,20 +225,20 @@ export async function generateFourPromptVariations(params: {
 
   const fallbackVariations: QuadPromptVariation[] = [
     {
-      label: "1 • Prompt Base",
+      label: "1 • Base Prompt",
       prompt: `${cleanBase}${styleSuffix}${modSuffix}${ratioSuffix}`,
     },
     {
-      label: "2 • Ênfase: Luz & Atmosfera",
-      prompt: `${cleanBase} — com foco dramático na iluminação volumétrica, contraste de sombras, atmosfera imersiva e gradação de cor cinematográfica${styleSuffix}${modSuffix}${ratioSuffix}`,
+      label: "2 • Emphasis: Light & Atmosphere",
+      prompt: `${cleanBase} — with dramatic focus on volumetric lighting, shadow contrast, immersive atmosphere, and cinematic color grading${styleSuffix}${modSuffix}${ratioSuffix}`,
     },
     {
-      label: "3 • Ênfase: Composição & Lente",
-      prompt: `${cleanBase} — com ênfase no enquadramento editorial dinâmico, perspectiva de lente, profundidade de campo e geometria espacial da cena${styleSuffix}${modSuffix}${ratioSuffix}`,
+      label: "3 • Emphasis: Composition & Lens",
+      prompt: `${cleanBase} — with emphasis on dynamic editorial framing, lens perspective, depth of field, and spatial scene geometry${styleSuffix}${modSuffix}${ratioSuffix}`,
     },
     {
-      label: "4 • Ênfase: Textura & Detalhes",
-      prompt: `${cleanBase} — com ênfase máxima em micro-texturas de superfície, nitidez de materiais, expressão do sujeito e riqueza de detalhes finos${styleSuffix}${modSuffix}${ratioSuffix}`,
+      label: "4 • Emphasis: Texture & Details",
+      prompt: `${cleanBase} — with maximum emphasis on surface micro-textures, material sharpness, subject expression, and fine detail richness${styleSuffix}${modSuffix}${ratioSuffix}`,
     },
   ];
 
@@ -249,18 +251,18 @@ export async function generateFourPromptVariations(params: {
     const endpoint =
       "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent";
     const systemPrompt = [
-      "Você é um especialista em engenharia de prompts visuais para geração de imagens.",
-      "Analise o prompt base do usuário e identifique 3 partes ou elementos distintos da cena descrita.",
-      "Crie 3 novas versões completas do prompt (mantendo o idioma do usuário), cada uma dando ênfase especial a uma dessas partes da cena.",
-      params.styleLabel ? `Estilo visual selecionado: ${params.styleLabel}.` : "",
+      "You are an expert in visual prompt engineering for image generation.",
+      "Analyze the user's base prompt and identify 3 distinct parts or elements of the described scene.",
+      "Create 3 complete new versions of the prompt (in English), each giving special emphasis to one of those parts of the scene.",
+      params.styleLabel ? `Selected visual style: ${params.styleLabel}.` : "",
       params.aspectRatio
-        ? `Proporção da imagem (Aspect Ratio): ${params.aspectRatio}.`
+        ? `Image aspect ratio: ${params.aspectRatio}.`
         : "",
       params.modifierLabels?.length
-        ? `Modificadores ativos: ${params.modifierLabels.join(", ")}.`
+        ? `Active modifiers: ${params.modifierLabels.join(", ")}.`
         : "",
-      'Retorne APENAS um JSON válido no formato: {"variations": [{"title": "curto título da ênfase 1 (máx 3 palavras)", "prompt": "..."}, {"title": "curto título da ênfase 2 (máx 3 palavras)", "prompt": "..."}, {"title": "curto título da ênfase 3 (máx 3 palavras)", "prompt": "..."}]}',
-      `Prompt base do usuário: "${cleanBase}"`,
+      'Return ONLY valid JSON in the format: {"variations": [{"title": "short emphasis title 1 (max 3 words)", "prompt": "..."}, {"title": "short emphasis title 2 (max 3 words)", "prompt": "..."}, {"title": "short emphasis title 3 (max 3 words)", "prompt": "..."}]}',
+      `User base prompt: "${cleanBase}"`,
     ]
       .filter(Boolean)
       .join("\n");
@@ -304,12 +306,12 @@ export async function generateFourPromptVariations(params: {
 
     return [
       {
-        label: "1 • Prompt Base",
+        label: "1 • Base Prompt",
         prompt: `${cleanBase}${styleSuffix}${modSuffix}${ratioSuffix}`,
       },
       {
         label: vList[0]?.title
-          ? `2 • Ênfase: ${vList[0].title}`
+          ? `2 • Emphasis: ${vList[0].title}`
           : fallbackVariations[1].label,
         prompt: (
           vList[0]?.prompt ||
@@ -319,7 +321,7 @@ export async function generateFourPromptVariations(params: {
       },
       {
         label: vList[1]?.title
-          ? `3 • Ênfase: ${vList[1].title}`
+          ? `3 • Emphasis: ${vList[1].title}`
           : fallbackVariations[2].label,
         prompt: (
           vList[1]?.prompt ||
@@ -329,7 +331,7 @@ export async function generateFourPromptVariations(params: {
       },
       {
         label: vList[2]?.title
-          ? `4 • Ênfase: ${vList[2].title}`
+          ? `4 • Emphasis: ${vList[2].title}`
           : fallbackVariations[3].label,
         prompt: (
           vList[2]?.prompt ||
@@ -351,6 +353,8 @@ export async function generateQuadWithNanoBanana(params: {
   modifierLabels?: string[];
   aspectRatio?: string;
   referenceImage?: InlineImagePart | null;
+  onVariationsReady?: (variations: QuadPromptVariation[]) => void;
+  onSlotCompleted?: (index: number, slot: QuadGeneratedSlot) => void;
 }): Promise<QuadGeneratedSlot[]> {
   const variations = await generateFourPromptVariations({
     apiKey: params.apiKey,
@@ -359,6 +363,10 @@ export async function generateQuadWithNanoBanana(params: {
     modifierLabels: params.modifierLabels,
     aspectRatio: params.aspectRatio,
   });
+
+  if (params.onVariationsReady) {
+    params.onVariationsReady(variations);
+  }
 
   const trimmedKey = params.apiKey.trim();
   if (!trimmedKey) {
@@ -373,26 +381,31 @@ export async function generateQuadWithNanoBanana(params: {
   }
 
   const settled = await Promise.allSettled(
-    variations.map((v) =>
-      generateWithNanoBanana({
+    variations.map(async (v, idx) => {
+      const result = await generateWithNanoBanana({
         apiKey: trimmedKey,
         model: params.model,
         prompt: v.prompt,
         referenceImage: params.referenceImage,
-      })
-    )
+      });
+      const completedSlot: QuadGeneratedSlot = {
+        label: v.label,
+        prompt: v.prompt,
+        imageUrl: result.imageDataUrl,
+        mimeType: result.mimeType,
+        base64Data: result.base64Data,
+      };
+      if (params.onSlotCompleted) {
+        params.onSlotCompleted(idx, completedSlot);
+      }
+      return completedSlot;
+    })
   );
 
   return variations.map((v, idx) => {
     const res = settled[idx];
     if (res.status === "fulfilled") {
-      return {
-        label: v.label,
-        prompt: v.prompt,
-        imageUrl: res.value.imageDataUrl,
-        mimeType: res.value.mimeType,
-        base64Data: res.value.base64Data,
-      };
+      return res.value;
     }
     return {
       label: v.label,
@@ -420,4 +433,184 @@ export function simulateNanoBananaTurn(
 
 export function getShowcaseFallbackDataUrl(_srcPath: string): string {
   return "";
+}
+
+function slugifyId(text: string, prefix: string): string {
+  const clean = text
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 28);
+  return clean || `${prefix}-${Date.now().toString(36)}`;
+}
+
+function buildFallbackCategories(
+  instruction: string,
+  targetCategoryTitle?: string
+): ModifierCategory[] {
+  const clean = instruction.trim() || "Cinematic Art Direction";
+  const categoryTitle =
+    targetCategoryTitle?.trim() ||
+    (clean.length <= 32 ? clean : `AI • ${clean.slice(0, 26)}`);
+  const catId = slugifyId(categoryTitle, "cat");
+  const stamp = Date.now().toString(36).slice(-4);
+
+  const options: ModifierOption[] = [
+    {
+      id: `${catId}-editorial-${stamp}-1`,
+      label: `${clean.slice(0, 22)} • Editorial Prime`,
+      token: `${clean}, crisp editorial framing, refined material definition and high-contrast visual balance`,
+    },
+    {
+      id: `${catId}-cinematic-${stamp}-2`,
+      label: `${clean.slice(0, 22)} • Dramatic Atmosphere`,
+      token: `${clean}, dramatic volumetric lighting, deep atmospheric perspective and expressive texture`,
+    },
+    {
+      id: `${catId}-minimal-${stamp}-3`,
+      label: `${clean.slice(0, 22)} • Sculptural Minimal`,
+      token: `${clean}, clean sculptural silhouette, intentional negative space and studio precision`,
+    },
+    {
+      id: `${catId}-kinetic-${stamp}-4`,
+      label: `${clean.slice(0, 22)} • Kinetic Motion`,
+      token: `${clean}, kinetic diagonal tension, natural motion energy and authentic documentary detail`,
+    },
+  ];
+
+  return [
+    {
+      id: `${catId}-${stamp}`,
+      title: categoryTitle,
+      options,
+    },
+  ];
+}
+
+/**
+ * Uses Gemini 2.5 Flash to generate either:
+ * - New Modifier Categories with 4-5 Modifiers each (when `targetCategoryTitle` is omitted), OR
+ * - New Modifiers tailored to a specific existing Category (when `targetCategoryTitle` is provided).
+ */
+export async function generateModifiersWithGemini(params: {
+  apiKey: string;
+  instruction: string;
+  targetCategoryTitle?: string;
+}): Promise<{ categories: ModifierCategory[]; usedAiApi: boolean }> {
+  const trimmedKey = params.apiKey.trim();
+  const cleanInstruction = params.instruction.trim();
+  const fallback = buildFallbackCategories(
+    cleanInstruction,
+    params.targetCategoryTitle
+  );
+
+  if (!trimmedKey) {
+    return { categories: fallback, usedAiApi: false };
+  }
+
+  try {
+    const endpoint =
+      "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent";
+
+    const systemTask = params.targetCategoryTitle
+      ? `You are a visual art-direction assistant for an AI image studio.
+The user wants to generate new visual modifiers for the existing category "${params.targetCategoryTitle}" based on this request: "${cleanInstruction}".
+Return ONLY a valid JSON array with 1 category object matching this exact schema:
+[
+  {
+    "title": "${params.targetCategoryTitle}",
+    "options": [
+      {
+        "label": "Short English display name (max 28 chars)",
+        "token": "Detailed English visual prompt modifier phrase to append to image generation prompts (10-18 words)"
+      }
+    ]
+  }
+]
+Generate 4 distinct, high-craft options.`
+      : `You are a visual art-direction assistant for an AI image studio.
+The user wants to create new modifier categories and modifiers based on this request: "${cleanInstruction}" (examples of categories: Camera & Lens, Clothing & Wardrobe, Angle & Framing, Lighting, Pose, Environment, Texture, etc.).
+Return ONLY a valid JSON array of 1 to 3 category objects matching this exact schema:
+[
+  {
+    "title": "Category Title in English (e.g. Cyberpunk Wardrobe, Cinematic Angles, etc.)",
+    "options": [
+      {
+        "label": "Short English display name (max 28 chars)",
+        "token": "Detailed English visual prompt modifier phrase to append to image generation prompts (10-18 words)"
+      }
+    ]
+  }
+]
+Each category must contain 4 distinct, high-craft options.`;
+
+    const res = await fetch(endpoint, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-goog-api-key": trimmedKey,
+      },
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: systemTask }] }],
+        generationConfig: {
+          responseMimeType: "application/json",
+          temperature: 0.75,
+        },
+      }),
+      cache: "no-store",
+    });
+
+    if (!res.ok) {
+      return { categories: fallback, usedAiApi: false };
+    }
+
+    const data = (await res.json()) as GeminiGenerateContentResponse;
+    const rawText = data.candidates?.[0]?.content?.parts?.[0]?.text || "";
+    const parsed = JSON.parse(rawText) as Array<{
+      title?: string;
+      options?: Array<{ label?: string; token?: string }>;
+    }>;
+
+    if (!Array.isArray(parsed) || parsed.length === 0) {
+      return { categories: fallback, usedAiApi: false };
+    }
+
+    const stamp = Date.now().toString(36).slice(-4);
+    const normalized: ModifierCategory[] = parsed
+      .map((cat, cIdx) => {
+        const title = String(
+          cat.title || params.targetCategoryTitle || `AI Category #${cIdx + 1}`
+        ).trim();
+        const catSlug = slugifyId(title, `cat-${cIdx}`);
+        const opts: ModifierOption[] = Array.isArray(cat.options)
+          ? cat.options
+              .filter((o) => o && (o.label || o.token))
+              .map((o, oIdx) => {
+                const label = String(o.label || `Modifier #${oIdx + 1}`).trim();
+                const token = String(o.token || label).trim();
+                return {
+                  id: `${catSlug}-${slugifyId(label, `mod-${oIdx}`)}-${stamp}-${oIdx}`,
+                  label,
+                  token,
+                };
+              })
+          : [];
+        return {
+          id: `${catSlug}-${stamp}-${cIdx}`,
+          title,
+          options: opts,
+        };
+      })
+      .filter((c) => c.options.length > 0);
+
+    if (normalized.length === 0) {
+      return { categories: fallback, usedAiApi: false };
+    }
+
+    return { categories: normalized, usedAiApi: true };
+  } catch {
+    return { categories: fallback, usedAiApi: false };
+  }
 }

@@ -491,3 +491,70 @@ export async function vaultSetImagesOutputDir(
   });
   return res || imagesOutputDir;
 }
+
+export async function vaultGetModifierCategories<T = unknown>(): Promise<
+  T[] | null
+> {
+  return await querySqliteApi<T[] | null>("vault_get_modifiers");
+}
+
+export async function vaultSetModifierCategories<T = unknown>(
+  categories: T[]
+): Promise<T[]> {
+  const res = await querySqliteApi<T[]>("vault_set_modifiers", {
+    categories,
+  });
+  return res || categories;
+}
+
+export async function minimizeAppWindow(): Promise<void> {
+  if (isTauriDesktop()) {
+    try {
+      await invokeTauriCommand("tauri_window_minimize");
+      return;
+    } catch {
+      await invokeTauriCommand("plugin:window|minimize");
+    }
+  }
+}
+
+export async function toggleMaximizeAppWindow(): Promise<boolean> {
+  if (isTauriDesktop()) {
+    try {
+      const res = await invokeTauriCommand<boolean>(
+        "tauri_window_toggle_maximize"
+      );
+      if (typeof res === "boolean") return res;
+    } catch {
+      await invokeTauriCommand("plugin:window|toggle_maximize");
+    }
+  }
+  if (typeof document !== "undefined") {
+    try {
+      if (!document.fullscreenElement) {
+        await document.documentElement.requestFullscreen();
+        return true;
+      } else {
+        await document.exitFullscreen();
+        return false;
+      }
+    } catch {
+      // Ignore fullscreen permissions errors
+    }
+  }
+  return false;
+}
+
+export async function closeAppWindow(): Promise<void> {
+  if (isTauriDesktop()) {
+    try {
+      await invokeTauriCommand("tauri_window_close");
+      return;
+    } catch {
+      await invokeTauriCommand("plugin:window|close");
+    }
+  }
+  if (typeof window !== "undefined") {
+    window.close();
+  }
+}

@@ -15,14 +15,17 @@ import {
 import {
   BootstrapResponse,
   DEFAULT_BOOTSTRAP_DATA,
+  ModifierCategory,
   fetchBootstrap,
 } from "@/features/studio";
 import {
   vaultClearApiKey,
   vaultGetImagesOutputDir,
+  vaultGetModifierCategories,
   vaultGetSavedApiKey,
   vaultSaveApiKey,
   vaultSetImagesOutputDir,
+  vaultSetModifierCategories,
 } from "@/core/tauri/tauriBridge";
 
 export interface RemixPresetRequest {
@@ -53,6 +56,14 @@ interface StudioSessionContextValue {
   setBackendOnline: (online: boolean) => void;
   pendingRemix: RemixPresetRequest | null;
   setPendingRemix: (remix: RemixPresetRequest | null) => void;
+  activeProjectId: string | null;
+  setActiveProjectId: (id: string | null) => void;
+  activeProjectTitle: string;
+  setActiveProjectTitle: (title: string) => void;
+  newProjectNonce: number;
+  triggerNewProject: () => void;
+  updateModifierCategories: (categories: ModifierCategory[]) => Promise<void>;
+  resetModifierCategories: () => Promise<void>;
 }
 
 const StudioSessionContext = createContext<
@@ -77,6 +88,17 @@ export function StudioSessionProvider({ children }: { children: ReactNode }) {
   const [pendingRemix, setPendingRemix] = useState<RemixPresetRequest | null>(
     null
   );
+  const [activeProjectId, setActiveProjectId] = useState<string | null>(null);
+  const [activeProjectTitle, setActiveProjectTitle] =
+    useState<string>("New Project");
+  const [newProjectNonce, setNewProjectNonce] = useState<number>(0);
+
+  const triggerNewProject = () => {
+    setActiveProjectId(null);
+    setActiveProjectTitle("New Project");
+    setPendingRemix(null);
+    setNewProjectNonce((n) => n + 1);
+  };
 
   const setUser = (nextUser: GoogleUserProfile | null) => {
     setUserState(nextUser);
@@ -110,11 +132,64 @@ export function StudioSessionProvider({ children }: { children: ReactNode }) {
     return saved;
   };
 
+  const updateModifierCategories = async (
+    categories: ModifierCategory[]
+  ): Promise<void> => {
+    setBootstrapData((prev) => ({
+      ...prev,
+      modifier_categories: categories,
+    }));
+    await vaultSetModifierCategories(categories);
+  };
+
+  const resetModifierCategories = async (): Promise<void> => {
+    const defaults = DEFAULT_BOOTSTRAP_DATA.modifier_categories;
+    setBootstrapData((prev) => ({
+      ...prev,
+      modifier_categories: defaults,
+    }));
+    await vaultSetModifierCategories(defaults);
+  };
+
   useEffect(() => {
     let mounted = true;
-    fetchBootstrap().then((res) => {
+    Promise.all([
+      fetchBootstrap(),
+      vaultGetModifierCategories<ModifierCategory>(),
+    ]).then(([res, savedCategories]) => {
       if (!mounted) return;
-      setBootstrapData(res.data);
+      const PT_TO_EN_CATEGORY_TITLES: Record<string, string> = {
+        "Camera & Lente": "Camera & Lens",
+        "Roupas & Figurino": "Clothing & Wardrobe",
+        "Ângulo & Enquadramento": "Angle & Framing",
+        "Iluminação (Light)": "Lighting & Mood",
+        "Atmosfera & Cor": "Atmosphere & Color",
+      };
+      const PT_TO_EN_OPTION_LABELS: Record<string, string> = {
+        "Techwear Utilitário Urbano": "Urban Utilitarian Techwear",
+        "Alfaiataria Editorial Minimalista": "Minimalist Editorial Tailoring",
+        "Kimono Contemporâneo": "Contemporary Street Kimono",
+        "Streetwear Vintage Anos 90": "90s Vintage Streetwear",
+        "Zenital / Bird's-Eye View": "Overhead Bird's-Eye View",
+        "Dutch Angle Dinâmico": "Dynamic Dutch Angle",
+      };
+      const resolvedCategories =
+        Array.isArray(savedCategories) && savedCategories.length > 0
+          ? savedCategories.map((cat) => ({
+              ...cat,
+              title: PT_TO_EN_CATEGORY_TITLES[cat.title] || cat.title,
+              options: Array.isArray(cat.options)
+                ? cat.options.map((opt) => ({
+                    ...opt,
+                    label: PT_TO_EN_OPTION_LABELS[opt.label] || opt.label,
+                  }))
+                : [],
+            }))
+          : res.data.modifier_categories;
+      setBootstrapData({
+        ...res.data,
+        modifier_categories: resolvedCategories,
+      });
       setBackendOnline(res.online);
     });
     vaultGetSavedApiKey().then((savedKey) => {
@@ -164,6 +239,14 @@ export function StudioSessionProvider({ children }: { children: ReactNode }) {
         setBackendOnline,
         pendingRemix,
         setPendingRemix,
+        activeProjectId,
+        setActiveProjectId,
+        activeProjectTitle,
+        setActiveProjectTitle,
+        newProjectNonce,
+        triggerNewProject,
+        updateModifierCategories,
+        resetModifierCategories,
       }}
     >
       {children}

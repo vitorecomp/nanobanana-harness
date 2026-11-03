@@ -19,12 +19,29 @@ export default function ProjectsWorkspacePage() {
   const [loading, setLoading] = useState<boolean>(true);
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [selectedCategory, setSelectedCategory] = useState<string>("all");
+  const [galleryNotice, setGalleryNotice] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!galleryNotice) return;
+    const timer = window.setTimeout(() => setGalleryNotice(null), 4000);
+    return () => window.clearTimeout(timer);
+  }, [galleryNotice]);
 
   const loadProjectsFromDb = useCallback(async () => {
     setLoading(true);
     try {
       const list = await listUserConversations(activeUser.id);
-      setProjects(list);
+      setProjects(
+        list.map((p) => ({
+          ...p,
+          title:
+            !p.title ||
+            p.title.trim() === "Novo Projeto" ||
+            p.title.trim() === "Sem título"
+              ? "New Project"
+              : p.title,
+        }))
+      );
     } finally {
       setLoading(false);
     }
@@ -48,12 +65,15 @@ export default function ProjectsWorkspacePage() {
 
   const handleDeleteProject = async (
     e: React.MouseEvent,
-    projectId: string
+    proj: SavedConversationSummary
   ) => {
     e.stopPropagation();
-    const ok = await deleteConversation(projectId);
+    const ok = await deleteConversation(proj.id);
     if (ok) {
-      setProjects((prev) => prev.filter((p) => p.id !== projectId));
+      setProjects((prev) => prev.filter((p) => p.id !== proj.id));
+      setGalleryNotice(
+        `✓ "${proj.title}" removed from Gallery • PNG files preserved in ~/Pictures/nanobanana/`
+      );
     }
   };
 
@@ -80,17 +100,17 @@ export default function ProjectsWorkspacePage() {
         {/* ==================== TOP 15%: LAST WORKED PROJECT + SEARCH BAR + CATEGORY FILTERS ==================== */}
         <section
           className="ref-studio-top-interactions"
-          aria-label="Último projeto, busca e filtro por categorias"
+          aria-label="Latest project, search, and category filters"
         >
           {/* Left: Last Worked Project */}
           <div className="ref-gallery-last-project-box">
-            <span className="ref-interactions-label">Último Projeto</span>
+            <span className="ref-interactions-label">Latest Project</span>
             {latestWorkedProject ? (
               <button
                 type="button"
                 className="ref-interaction-history-item active"
                 onClick={() => handleOpenProjectInStudio(latestWorkedProject)}
-                title="Continuar trabalhando neste projeto"
+                title="Continue working on this project"
               >
                 {latestWorkedProject.preview_image_url ? (
                   <img
@@ -107,13 +127,13 @@ export default function ProjectsWorkspacePage() {
                   </span>
                   <span className="ref-interaction-prompt-snippet">
                     {latestWorkedProject.latest_prompt ||
-                      "Clique para abrir no Studio"}
+                      "Click to open in Studio"}
                   </span>
                 </div>
               </button>
             ) : (
               <div className="ref-gallery-last-project-empty">
-                Nenhum projeto trabalhado
+                No recent project
               </div>
             )}
           </div>
@@ -125,7 +145,7 @@ export default function ProjectsWorkspacePage() {
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="ref-input ref-gallery-search-input"
-              placeholder="Buscar projeto por nome ou prompt..."
+              placeholder="Search projects by title or prompt..."
             />
           </div>
 
@@ -133,7 +153,7 @@ export default function ProjectsWorkspacePage() {
           <div
             className="ref-gallery-categories-strip"
             role="group"
-            aria-label="Filtro por categorias"
+            aria-label="Filter by category"
           >
             <button
               type="button"
@@ -142,7 +162,7 @@ export default function ProjectsWorkspacePage() {
               }`}
               onClick={() => setSelectedCategory("all")}
             >
-              Todas
+              All
             </button>
             {bootstrapData.style_presets.map((preset) => (
               <button
@@ -162,45 +182,143 @@ export default function ProjectsWorkspacePage() {
         {/* ==================== BOTTOM 85%: CARDS-ONLY PROJECTS GRID (SELECT FROM SQLITE) ==================== */}
         <div className="ref-projects-cards-grid">
           {!loading &&
-            filteredProjects.map((proj) => (
-              <article
-                key={proj.id}
-                className="ref-project-card"
-                onClick={() => handleOpenProjectInStudio(proj)}
-              >
-                <div className="ref-project-card-header-row">
-                  <h2 className="ref-project-card-title">{proj.title}</h2>
-                  <button
-                    type="button"
-                    className="ref-card-expand-circle"
-                    onClick={(e) => handleDeleteProject(e, proj.id)}
-                    title="Remover projeto da Galeria (mantém arquivos PNG em ~/Pictures/nanobanana)"
-                    aria-label={`Remover projeto ${proj.title}`}
-                  >
-                    ✕
-                  </button>
-                </div>
+            filteredProjects.map((proj, projIdx) => {
+              const styleLabel =
+                bootstrapData.style_presets
+                  .find((s) => s.id === proj.style_id)
+                  ?.title.split(" (")[0] || proj.style_id;
+              const turnCount = Number(proj.turn_count || 0);
+              const filledDots = Math.min(6, Math.max(1, turnCount));
 
-                <div className="ref-project-card-image-frame">
-                  {proj.preview_image_url ? (
-                    <img
-                      src={proj.preview_image_url}
-                      alt={proj.title}
-                      className="ref-project-card-img"
-                    />
-                  ) : null}
-                </div>
+              return (
+                <article
+                  key={proj.id}
+                  className="ref-project-card"
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => handleOpenProjectInStudio(proj)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      handleOpenProjectInStudio(proj);
+                    }
+                  }}
+                >
+                  {/* 1. TOP ROUNDED ARTWORK FRAME */}
+                  <div className="ref-project-card-image-frame">
+                    {proj.preview_image_url ? (
+                      <img
+                        src={proj.preview_image_url}
+                        alt={proj.title}
+                        className="ref-project-card-img"
+                      />
+                    ) : (
+                      <span className="ref-project-card-no-image">
+                        No rendered preview • {styleLabel}
+                      </span>
+                    )}
+                  </div>
 
-                <p className="ref-project-card-prompt">
-                  {proj.latest_prompt || "Sem prompt registrado."}
-                </p>
-              </article>
-            ))}
+                  {/* 2. MIDDLE METADATA BLOCK (Matches reference card layout) */}
+                  <div className="ref-mura-card-body">
+                    <div className="ref-mura-title-row">
+                      <h2 className="ref-mura-card-title">
+                        {proj.title} #{String(projIdx + 1).padStart(2, "0")}
+                      </h2>
+                      <span className="ref-mura-card-price-tag">
+                        ({turnCount} {turnCount === 1 ? "round" : "rounds"})
+                      </span>
+                    </div>
+
+                    <div className="ref-mura-kv-row">
+                      <span className="ref-mura-kv-label">Visual Style:</span>
+                      <span className="ref-mura-kv-value">{styleLabel}</span>
+                    </div>
+
+                    <div className="ref-mura-kv-row">
+                      <span className="ref-mura-kv-label">Interactions:</span>
+                      <span
+                        className="ref-mura-dots"
+                        aria-label={`${turnCount} interactions`}
+                      >
+                        {[0, 1, 2, 3, 4, 5].map((dotIdx) => (
+                          <i
+                            key={dotIdx}
+                            className={`ref-mura-dot ${
+                              dotIdx < filledDots ? "filled" : ""
+                            } ${dotIdx === filledDots - 1 ? "current" : ""}`}
+                          />
+                        ))}
+                      </span>
+                    </div>
+
+                    <p className="ref-project-card-prompt">
+                      {proj.latest_prompt || "No prompt recorded."}
+                    </p>
+
+                    {/* 3. BOTTOM ACTION PILLS ROW ([Solid Pill] [Outlined Pill]) */}
+                    <div className="ref-mura-actions-row">
+                      <button
+                        type="button"
+                        className="ref-mura-btn-solid"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleOpenProjectInStudio(proj);
+                        }}
+                      >
+                        Open Studio
+                      </button>
+                      <button
+                        type="button"
+                        className="ref-mura-btn-outline danger"
+                        onClick={(e) => handleDeleteProject(e, proj)}
+                        title="Remove project from Gallery (keeps PNG files in ~/Pictures/nanobanana)"
+                        aria-label={`Remove project ${proj.title}`}
+                      >
+                        Remove ✕
+                      </button>
+                    </div>
+                  </div>
+                </article>
+              );
+            })}
+
+          {!loading && filteredProjects.length === 0 && (
+            <div className="ref-gallery-empty-state">
+              <strong className="ref-quad-blueprint-title">
+                {projects.length === 0
+                  ? "No projects in your Atelier yet"
+                  : "No projects match the current filter"}
+              </strong>
+              <span className="ref-quad-blueprint-desc">
+                {projects.length === 0
+                  ? "Create your first project in the Studio to explore 4 simultaneous variations with Gemini."
+                  : "Try searching for another term or clearing the category filter."}
+              </span>
+              {projects.length === 0 ? (
+                <button
+                  type="button"
+                  className="ref-dark-pill-btn"
+                  onClick={() => router.push("/create")}
+                >
+                  <span>+ Open Studio & Create Project</span>
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  className="ref-pill-chip active"
+                  onClick={() => {
+                    setSearchQuery("");
+                    setSelectedCategory("all");
+                  }}
+                >
+                  Clear Search & Categories
+                </button>
+              )}
+            </div>
+          )}
         </div>
       </div>
-
-      {/* ==================== EMPTY FOOTER BAR ==================== */}
-      <div className="ref-bottom-scrubber-bar" />
     </div>
   );
 }

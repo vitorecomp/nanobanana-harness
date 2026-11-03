@@ -63,7 +63,7 @@ export default function ProfileEditModal({
     >
       <div className="ref-modal-card">
         <div className="ref-modal-header">
-          <span className="ref-pill-chip active">Configurações do Studio</span>
+          <span className="ref-pill-chip active">Studio Settings</span>
           <button
             type="button"
             className="ref-circle-icon-btn"
@@ -76,7 +76,7 @@ export default function ProfileEditModal({
         </div>
 
         <h2 id="config-vault-modal-title" className="sr-only">
-          Configurações do Studio
+          Studio Settings
         </h2>
 
         <div style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
@@ -94,7 +94,7 @@ export default function ProfileEditModal({
                 className="ref-input"
                 value={apiKey}
                 onChange={(e) => setApiKey(e.target.value)}
-                placeholder="Cole sua chave AIzaSy..."
+                placeholder="Paste your AIzaSy... key"
                 style={{ flex: 1 }}
               />
               <button
@@ -102,14 +102,14 @@ export default function ProfileEditModal({
                 className="ref-pill-chip"
                 onClick={() => setShowKey((prev) => !prev)}
               >
-                {showKey ? "Ocultar" : "Mostrar"}
+                {showKey ? "Hide" : "Show"}
               </button>
               <button
                 type="button"
                 className="ref-pill-chip"
                 onClick={() => setApiKey("")}
               >
-                Limpar
+                Clear
               </button>
             </div>
           </div>
@@ -121,7 +121,8 @@ export default function ProfileEditModal({
               gap: "10px",
               padding: "12px 14px",
               borderRadius: "16px",
-              backgroundColor: "#E4E4DF",
+              backgroundColor: "var(--ref-card-surface)",
+              border: "1px solid rgba(20, 33, 61, 0.22)",
               cursor: "pointer",
               fontWeight: 600,
               fontSize: "0.86rem",
@@ -131,9 +132,9 @@ export default function ProfileEditModal({
               type="checkbox"
               checked={rememberKeyInVault}
               onChange={(e) => setRememberKeyInVault(e.target.checked)}
-              style={{ width: "18px", height: "18px" }}
+              style={{ width: "18px", height: "18px", accentColor: "#fca311" }}
             />
-            <span>Salvar API Key no banco SQLite local</span>
+            <span>Save API Key in local SQLite vault</span>
           </label>
 
           <div>
@@ -141,7 +142,7 @@ export default function ProfileEditModal({
               htmlFor="modal-images-output-dir-input"
               className="ref-field-label"
             >
-              Diretório onde todas as imagens geradas serão salvas
+              Directory where all generated images will be saved
             </label>
             <input
               id="modal-images-output-dir-input"
@@ -149,17 +150,17 @@ export default function ProfileEditModal({
               className="ref-input"
               value={dirInput}
               onChange={(e) => setDirInput(e.target.value)}
-              placeholder="Ex: ~/Pictures/nanobanana"
+              placeholder="e.g. ~/Pictures/nanobanana"
             />
             <span
               style={{
                 display: "block",
                 fontSize: "0.74rem",
-                color: "#585A56",
+                color: "var(--ref-ink-secondary)",
                 marginTop: "4px",
               }}
             >
-              Todas as 4 imagens geradas em cada interação serão salvas automaticamente como arquivos PNG nesta pasta.
+              All 4 images generated in each interaction are automatically saved as PNG files in this folder.
             </span>
           </div>
 
@@ -169,7 +170,7 @@ export default function ProfileEditModal({
               className="ref-dark-pill-btn"
               onClick={handleSaveConfig}
             >
-              <span>{savedNotice ? "Salvo!" : "Salvar Configurações"}</span>
+              <span>{savedNotice ? "Saved!" : "Save Settings"}</span>
               <span className="ref-lime-badge">
                 {apiKey.trim() ? "ON" : "KEY"}
               </span>
