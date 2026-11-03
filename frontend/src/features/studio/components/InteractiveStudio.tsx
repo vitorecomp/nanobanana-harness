@@ -7,6 +7,8 @@ import {
   CanonicalDnaReference,
   CreationFlowMode,
   ExplorationMatrixAxis,
+  FlowNodePosition,
+  FlowStepParameterSnapshot,
   NanoBananaModel,
   PreservationLocks,
   SessionFrame,
@@ -18,6 +20,15 @@ import {
   parseDataUrl,
   QuadGeneratedSlot,
 } from "../services/nanobananaClient";
+import {
+  buildStepBezierPath,
+  computeBatchBranchNodePositions,
+  computeTreeAutoLayout,
+  getFrameNodeId,
+  loadProjectFlowMeta,
+  parseFrameNodeId,
+  saveProjectFlowMeta,
+} from "../services/flowGraphUtils";
 import { GoogleUserProfile, LOCAL_DEV_USER } from "@/features/auth";
 import { useStudioSession } from "@/core/context/StudioSessionContext";
 import {
@@ -459,12 +470,62 @@ export default function InteractiveStudio({
     turnNumber: number;
   } | null>(null);
 
-  // Interactions history in the left timeline; center shows ONLY the active/latest generation's 4 slots
+  // Immutable generation steps on the n8n Flow Canvas
   const [interactions, setInteractions] = useState<StudioInteractionRound[]>(
     []
   );
   const [activeInteractionIndex, setActiveInteractionIndex] =
     useState<number>(-1);
+
+  // Flow Canvas Node Positions, Parent Variant Map, Immutable Parameter Snapshots & Active Draft Step
+  const [nodePositions, setNodePositions] = useState<
+    Record<string, FlowNodePosition>
+  >({});
+  const [parentVariantByTurn, setParentVariantByTurn] = useState<
+    Record<number, number>
+  >({});
+  const [snapshotsByTurn, setSnapshotsByTurn] = useState<
+    Record<number, FlowStepParameterSnapshot>
+  >({});
+  const [draftStep, setDraftStep] = useState<{
+    parentTurnNumber: number | null;
+    parentVariantIndex: number;
+    positions: FlowNodePosition[];
+  } | null>({
+    parentTurnNumber: null,
+    parentVariantIndex: 0,
+    positions: computeBatchBranchNodePositions(null, [], 4),
+  });
+  const [selectedCanvasNodeId, setSelectedCanvasNodeId] =
+    useState<string>("draft");
+  const [isStepModalOpen, setIsStepModalOpen] = useState<boolean>(false);
+
+  // Pan & Zoom Canvas Viewport
+  const [canvasViewport, setCanvasViewport] = useState<{
+    x: number;
+    y: number;
+    zoom: number;
+  }>({ x: 24, y: 24, zoom: 0.92 });
+  const canvasViewportRef = useRef<HTMLDivElement | null>(null);
+  const dragStateRef = useRef<
+    | {
+        mode: "pan";
+        startClientX: number;
+        startClientY: number;
+        originX: number;
+        originY: number;
+      }
+    | {
+        mode: "node";
+        nodeId: string;
+        startClientX: number;
+        startClientY: number;
+        originX: number;
+        originY: number;
+      }
+    | null
+  >(null);
+  const [isDraggingCanvas, setIsDraggingCanvas] = useState<boolean>(false);
 
   const showTransientNotice = useCallback((msg: string) => {
     setStatusNotice(msg);
@@ -532,11 +593,33 @@ export default function InteractiveStudio({
         };
       });
 
+      const persistedMeta = loadProjectFlowMeta(convId);
+      const autoPositions = computeTreeAutoLayout(
+        loadedRounds.map((r) => ({
+          id: r.id,
+          turnNumber: r.turnNumber,
+          parentTurnNumber: r.parentTurnNumber,
+          parentVariantIndex: persistedMeta.parentVariantByTurn[r.turnNumber] ?? 0,
+          variantCount: Math.max(1, r.variants.length),
+        }))
+      );
+      const mergedPositions: Record<string, FlowNodePosition> = {
+        ...autoPositions,
+        ...persistedMeta.positions,
+      };
+      setNodePositions(mergedPositions);
+      setParentVariantByTurn(persistedMeta.parentVariantByTurn);
+      setSnapshotsByTurn(persistedMeta.snapshotsByTurn);
+
       setInteractions(loadedRounds);
       if (loadedRounds.length > 0) {
         const lastIdx = loadedRounds.length - 1;
         const lastRound = loadedRounds[lastIdx];
         setActiveInteractionIndex(lastIdx);
+        setSelectedCanvasNodeId(
+          getFrameNodeId(lastRound.id, lastRound.selectedVariantIndex || 0)
+        );
+        setDraftStep(null);
         setPromptInput(lastRound.chosenPrompt);
         setDeltaInput("");
         if (lastRound.aspectRatio) {
@@ -545,6 +628,12 @@ export default function InteractiveStudio({
         setFlowMode("compose");
       } else {
         setActiveInteractionIndex(-1);
+        setSelectedCanvasNodeId("draft");
+        setDraftStep({
+          parentTurnNumber: null,
+          parentVariantIndex: 0,
+          positions: computeBatchBranchNodePositions(null, [], 4),
+        });
         setPromptInput("");
         setDeltaInput("");
         setFlowMode("compose");
@@ -618,11 +707,245 @@ export default function InteractiveStudio({
     setCanonicalDnaRef(null);
     setInteractions([]);
     setActiveInteractionIndex(-1);
+    setNodePositions({});
+    setParentVariantByTurn({});
+    setSnapshotsByTurn({});
+    setDraftStep({
+      parentTurnNumber: null,
+      parentVariantIndex: 0,
+      positions: computeBatchBranchNodePositions(null, [], 4),
+    });
+    setSelectedCanvasNodeId("draft");
+    setCanvasViewport({ x: 24, y: 24, zoom: 0.92 });
     setLightboxSlot(null);
     setLiveDraftSlots([null, null, null, null]);
     setGenerationStage("idle");
-    showTransientNotice("✦ New project started with 4 ready frames");
+    showTransientNotice("✦ New project started — configure Step #1");
   }, [newProjectNonce, setActiveProjectId, showTransientNotice]);
+
+  // Global mousemove / mouseup listeners for Canvas Panning & Node Drag-and-Drop Organization
+  useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      const state = dragStateRef.current;
+      if (!state) return;
+
+      if (state.mode === "pan") {
+        const dx = e.clientX - state.startClientX;
+        const dy = e.clientY - state.startClientY;
+        setCanvasViewport((prev) => ({
+          ...prev,
+          x: state.originX + dx,
+          y: state.originY + dy,
+        }));
+      } else if (state.mode === "node") {
+        const zoom = canvasViewport.zoom || 1;
+        const dx = (e.clientX - state.startClientX) / zoom;
+        const dy = (e.clientY - state.startClientY) / zoom;
+        const nextX = Math.round(state.originX + dx);
+        const nextY = Math.round(state.originY + dy);
+
+        if (state.nodeId.startsWith("draft::")) {
+          const draftIdx = Number(state.nodeId.slice(7)) || 0;
+          setDraftStep((prev) =>
+            prev
+              ? {
+                  ...prev,
+                  positions: prev.positions.map((pos, idx) =>
+                    idx === draftIdx ? { x: nextX, y: nextY } : pos
+                  ),
+                }
+              : prev
+          );
+        } else {
+          setNodePositions((prev) => {
+            const updated = {
+              ...prev,
+              [state.nodeId]: { x: nextX, y: nextY },
+            };
+            saveProjectFlowMeta(activeProjectId, {
+              positions: updated,
+              parentVariantByTurn,
+              snapshotsByTurn,
+            });
+            return updated;
+          });
+        }
+      }
+    };
+
+    const handleMouseUp = () => {
+      if (dragStateRef.current) {
+        dragStateRef.current = null;
+        setIsDraggingCanvas(false);
+      }
+    };
+
+    window.addEventListener("mousemove", handleMouseMove);
+    window.addEventListener("mouseup", handleMouseUp);
+    return () => {
+      window.removeEventListener("mousemove", handleMouseMove);
+      window.removeEventListener("mouseup", handleMouseUp);
+    };
+  }, [
+    activeProjectId,
+    canvasViewport.zoom,
+    parentVariantByTurn,
+    snapshotsByTurn,
+  ]);
+
+  const handleStartBranchFromNode = useCallback(
+    (
+      parentRound: StudioInteractionRound | null,
+      variantIndex: number = 0,
+      preferredMode: CreationFlowMode = "compose"
+    ) => {
+      const existingCoords = Object.values(nodePositions);
+      if (!parentRound) {
+        setDraftStep({
+          parentTurnNumber: null,
+          parentVariantIndex: 0,
+          positions: computeBatchBranchNodePositions(null, existingCoords, 4),
+        });
+        setSelectedCanvasNodeId("draft");
+        setFlowMode("compose");
+        setIsStepModalOpen(true);
+        return;
+      }
+
+      const roundIdx = interactions.findIndex((r) => r.id === parentRound.id);
+      if (roundIdx >= 0) {
+        setActiveInteractionIndex(roundIdx);
+      }
+      const chosenSlot =
+        parentRound.variants[variantIndex] || parentRound.variants[0];
+      if (chosenSlot?.prompt) {
+        setPromptInput(chosenSlot.prompt);
+      }
+      if (parentRound.aspectRatio) {
+        setSelectedAspectRatio(parentRound.aspectRatio);
+      }
+      setFlowMode(preferredMode);
+
+      const parentCardId = getFrameNodeId(parentRound.id, variantIndex);
+      const parentPos = nodePositions[parentCardId] || { x: 70, y: 60 };
+      const nextBatchPositions = computeBatchBranchNodePositions(
+        parentPos,
+        existingCoords,
+        4
+      );
+
+      setDraftStep({
+        parentTurnNumber: parentRound.turnNumber,
+        parentVariantIndex: variantIndex,
+        positions: nextBatchPositions,
+      });
+      setSelectedCanvasNodeId("draft");
+      setIsStepModalOpen(true);
+
+      // Smoothly pan viewport so the newly spawned 4 cards will be visible
+      if (canvasViewportRef.current && nextBatchPositions[0]) {
+        const rect = canvasViewportRef.current.getBoundingClientRect();
+        const zoom = canvasViewport.zoom;
+        const desiredX =
+          rect.width * 0.52 - (nextBatchPositions[0].x + 150) * zoom;
+        const desiredY =
+          rect.height * 0.35 - (nextBatchPositions[0].y + 260) * zoom;
+        setCanvasViewport((prev) => ({
+          ...prev,
+          x: Math.round(desiredX),
+          y: Math.round(desiredY),
+        }));
+      }
+
+      showTransientNotice(
+        `✦ New Step #${interactions.length + 1} (4 cards) branched from Card #${
+          parentRound.turnNumber
+        }.${variantIndex + 1}`
+      );
+    },
+    [
+      canvasViewport.zoom,
+      interactions,
+      nodePositions,
+      showTransientNotice,
+    ]
+  );
+
+  const handleAutoOrganizeFlow = useCallback(() => {
+    const autoMap = computeTreeAutoLayout(
+      interactions.map((r) => ({
+        id: r.id,
+        turnNumber: r.turnNumber,
+        parentTurnNumber: r.parentTurnNumber,
+        parentVariantIndex: parentVariantByTurn[r.turnNumber] ?? 0,
+        variantCount: Math.max(1, r.variants.length),
+      }))
+    );
+    setNodePositions(autoMap);
+    saveProjectFlowMeta(activeProjectId, {
+      positions: autoMap,
+      parentVariantByTurn,
+      snapshotsByTurn,
+    });
+    if (draftStep) {
+      const parentRound = interactions.find(
+        (r) => r.turnNumber === draftStep.parentTurnNumber
+      );
+      const parentCardId = parentRound
+        ? getFrameNodeId(parentRound.id, draftStep.parentVariantIndex)
+        : null;
+      const parentPos = parentCardId ? autoMap[parentCardId] : null;
+      setDraftStep({
+        ...draftStep,
+        positions: computeBatchBranchNodePositions(
+          parentPos || null,
+          Object.values(autoMap),
+          4
+        ),
+      });
+    }
+    setCanvasViewport({ x: 28, y: 28, zoom: 0.85 });
+    showTransientNotice("✦ All image cards auto-organized into a clean tree");
+  }, [
+    activeProjectId,
+    draftStep,
+    interactions,
+    parentVariantByTurn,
+    showTransientNotice,
+    snapshotsByTurn,
+  ]);
+
+  const handleFitFlowView = useCallback(() => {
+    const allCoords = [
+      ...interactions.flatMap((r) =>
+        r.variants.map((_, vIdx) => nodePositions[getFrameNodeId(r.id, vIdx)])
+      ).filter((p): p is FlowNodePosition => Boolean(p)),
+      ...(isGenerating && draftStep ? draftStep.positions : []),
+    ];
+    if (allCoords.length === 0 || !canvasViewportRef.current) {
+      setCanvasViewport({ x: 28, y: 28, zoom: 0.9 });
+      return;
+    }
+    const minX = Math.min(...allCoords.map((p) => p.x));
+    const maxX = Math.max(...allCoords.map((p) => p.x + 310));
+    const minY = Math.min(...allCoords.map((p) => p.y));
+    const maxY = Math.max(...allCoords.map((p) => p.y + 320));
+
+    const rect = canvasViewportRef.current.getBoundingClientRect();
+    const contentW = Math.max(420, maxX - minX + 120);
+    const contentH = Math.max(440, maxY - minY + 120);
+    const nextZoom = Math.min(
+      1.05,
+      Math.max(0.38, Math.min(rect.width / contentW, rect.height / contentH))
+    );
+    const centerX = (minX + maxX) / 2;
+    const centerY = (minY + maxY) / 2;
+    setCanvasViewport({
+      zoom: Number(nextZoom.toFixed(2)),
+      x: Math.round(rect.width / 2 - centerX * nextZoom),
+      y: Math.round(rect.height / 2 - centerY * nextZoom),
+    });
+  }, [draftStep, interactions, isGenerating, nodePositions]);
 
   const handleToggleModifier = (modId: string) => {
     setSelectedModifiers((prev) =>
@@ -833,6 +1156,7 @@ export default function InteractiveStudio({
       ? "surgical-delta"
       : "compose";
 
+    setIsStepModalOpen(false);
     setIsGenerating(true);
     setGenerationStage("analyzing-scene");
     setCompletedSlotsCount(0);
@@ -869,16 +1193,29 @@ export default function InteractiveStudio({
         .filter((x): x is string => Boolean(x));
 
       const originRound =
-        activeInteractionIndex >= 0
+        draftStep?.parentTurnNumber !== undefined &&
+        draftStep?.parentTurnNumber !== null
+          ? interactions.find(
+              (r) => r.turnNumber === draftStep.parentTurnNumber
+            ) || null
+          : activeInteractionIndex >= 0
           ? interactions[activeInteractionIndex]
           : null;
       const parentTurnNumber = originRound ? originRound.turnNumber : null;
+      const parentVariantIndex = originRound
+        ? draftStep?.parentTurnNumber === originRound.turnNumber
+          ? draftStep.parentVariantIndex
+          : originRound.selectedVariantIndex
+        : 0;
+      const parentSlot =
+        originRound?.variants[parentVariantIndex] || originRound?.variants[0];
 
       // Dual-Anchor Resolution:
-      // - If both Canonical DNA and Active Turn image exist (and are distinct), pass both!
+      // - If both Canonical DNA and Parent Turn frame exist (and are distinct), pass both!
       // - Otherwise pass whichever reference exists.
       const dnaUrl = canonicalDnaRef?.imageUrl || "";
-      const turnUrl = originRound?.chosenImageUrl || "";
+      const turnUrl =
+        parentSlot?.imageUrl || originRound?.chosenImageUrl || "";
       const hasDistinctDualAnchor =
         Boolean(dnaUrl) && Boolean(turnUrl) && dnaUrl !== turnUrl;
 
@@ -914,7 +1251,8 @@ export default function InteractiveStudio({
             : undefined,
         anchorScenePrompt:
           effectiveFlowMode === "surgical-delta"
-            ? originRound?.chosenPrompt ||
+            ? parentSlot?.prompt ||
+              originRound?.chosenPrompt ||
               canonicalDnaRef?.prompt ||
               promptInput.trim()
             : undefined,
@@ -971,7 +1309,9 @@ export default function InteractiveStudio({
           : matrixAxis !== "auto-director"
           ? `${activeMatrixConfig.label}`
           : parentTurnNumber
-          ? `Interaction #${nextTurnNumber} (from #${parentTurnNumber})`
+          ? `Step #${nextTurnNumber} (from #${parentTurnNumber} • Frame ${
+              parentVariantIndex + 1
+            })`
           : `Scene Compose`;
 
       const savedTurn = await saveConversationTurn(targetConvId, {
@@ -1021,11 +1361,67 @@ export default function InteractiveStudio({
         variants: persistedVariants,
       };
 
+      const parentCardId = originRound
+        ? getFrameNodeId(originRound.id, parentVariantIndex)
+        : null;
+      const parentCardPos = parentCardId
+        ? nodePositions[parentCardId] || null
+        : null;
+      const batchPositions =
+        draftStep?.positions &&
+        draftStep.positions.length >= persistedVariants.length
+          ? draftStep.positions
+          : computeBatchBranchNodePositions(
+              parentCardPos,
+              Object.values(nodePositions),
+              persistedVariants.length
+            );
+
+      const nextPositions: Record<string, FlowNodePosition> = {
+        ...nodePositions,
+      };
+      persistedVariants.forEach((_, vIdx) => {
+        const frameId = getFrameNodeId(newRound.id, vIdx);
+        nextPositions[frameId] = batchPositions[vIdx] || {
+          x: batchPositions[0]?.x ?? 70,
+          y: (batchPositions[0]?.y ?? 60) + vIdx * 315,
+        };
+      });
+
+      const nextParentVariants = {
+        ...parentVariantByTurn,
+        ...(parentTurnNumber !== null
+          ? { [nextTurnNumber]: parentVariantIndex }
+          : {}),
+      };
+      const nextSnapshots: Record<number, FlowStepParameterSnapshot> = {
+        ...snapshotsByTurn,
+        [nextTurnNumber]: {
+          flowMode: effectiveFlowMode,
+          aspectRatio: selectedAspectRatio,
+          matrixAxis,
+          styleId: selectedStyleId,
+          modifierIds: [...selectedModifiers],
+          preservationLocks: { ...preservationLocks },
+        },
+      };
+
+      setNodePositions(nextPositions);
+      setParentVariantByTurn(nextParentVariants);
+      setSnapshotsByTurn(nextSnapshots);
+      saveProjectFlowMeta(targetConvId, {
+        positions: nextPositions,
+        parentVariantByTurn: nextParentVariants,
+        snapshotsByTurn: nextSnapshots,
+      });
+
       setInteractions((prev) => {
         const next = [...prev, newRound];
         setActiveInteractionIndex(next.length - 1);
         return next;
       });
+      setDraftStep(null);
+      setSelectedCanvasNodeId(getFrameNodeId(newRound.id, 0));
       setPromptInput(defaultChosen.prompt);
       setPreEnhancePrompt(null);
       if (effectiveFlowMode === "surgical-delta") {
@@ -1037,11 +1433,11 @@ export default function InteractiveStudio({
       ).length;
       if (!apiKey.trim()) {
         showTransientNotice(
-          "✦ 4 prompt variations created! Add your Gemini API key in ⚙ Settings to render PNGs."
+          "✦ 4 blueprint cards created! Add your Gemini API key in ⚙ Settings to render PNGs."
         );
       } else if (renderedCount > 0) {
         showTransientNotice(
-          `✦ Interaction #${nextTurnNumber} complete (${renderedCount}/4 frames rendered)`
+          `🔒 ${persistedVariants.length} image cards created for Step #${nextTurnNumber} (${renderedCount}/${persistedVariants.length} rendered)`
         );
       }
     } finally {
@@ -1051,365 +1447,863 @@ export default function InteractiveStudio({
     }
   };
 
-  // Center 2x2 grid shows ONLY the active/latest generation's 4 slots (or live draft slots while generating, or 4 empty blueprint slots on a new project)
-  const quadSlots: Array<QuadGeneratedSlot | null> = isGenerating
-    ? liveDraftSlots
-    : [
-        activeInteraction?.variants[0] || null,
-        activeInteraction?.variants[1] || null,
-        activeInteraction?.variants[2] || null,
-        activeInteraction?.variants[3] || null,
-      ];
+  const parsedSelectedNode = parseFrameNodeId(selectedCanvasNodeId);
+  const selectedLockedRound = parsedSelectedNode
+    ? interactions.find((r) => r.id === parsedSelectedNode.roundId) ||
+      activeInteraction
+    : null;
+  const selectedLockedVariantIdx = selectedLockedRound
+    ? Math.min(
+        Math.max(
+          0,
+          parsedSelectedNode?.variantIndex ??
+            selectedLockedRound.selectedVariantIndex ??
+            0
+        ),
+        Math.max(0, selectedLockedRound.variants.length - 1)
+      )
+    : 0;
+  const selectedLockedSlot =
+    selectedLockedRound?.variants[selectedLockedVariantIdx] ||
+    selectedLockedRound?.variants[0] ||
+    null;
+
+  const totalFlowCardsCount = interactions.reduce(
+    (sum, r) => sum + Math.max(1, r.variants.length),
+    0
+  );
+
+  const draftParentRound =
+    draftStep?.parentTurnNumber !== null &&
+    draftStep?.parentTurnNumber !== undefined
+      ? interactions.find((r) => r.turnNumber === draftStep.parentTurnNumber) ||
+        null
+      : null;
 
   return (
     <div className="ref-page-container">
-      <div className="ref-studio-columns-layout">
-        {/* ==================== COLUMN 1 (LEFT SIDE): VERTICAL INTERACTIONS TIMELINE ==================== */}
-        <aside
-          className="ref-studio-side-timeline"
-          aria-label="Interactions History (Timeline)"
+      <div className="ref-flow-studio-layout">
+        {/* ==================== FULL-WIDTH INTERACTIVE n8n IMMUTABLE CREATION FLOW CANVAS ==================== */}
+        <section
+          className="ref-flow-canvas-panel"
+          aria-label="Immutable Creation Flow Canvas"
         >
-          <div className="ref-side-timeline-header">
-            <span className="ref-interactions-label">Timeline</span>
-            <span className="ref-lime-badge">{interactions.length}</span>
-          </div>
-
-          {interactions.length > 0 ? (
-            <div className="ref-side-timeline-list">
-              {interactions.map((round, idx) => {
-                const isCurrent = idx === activeInteractionIndex;
-                const isOriginOfCurrent =
-                  activeInteraction?.parentTurnNumber === round.turnNumber;
-
-                return (
-                  <React.Fragment key={round.id}>
-                    {/* Vertical Arrow pointing from the origin interaction of the modification */}
-                    {idx > 0 && (
-                      <div
-                        className={`ref-interaction-arrow-connector vertical ${
-                          round.parentTurnNumber &&
-                          round.parentTurnNumber !== round.turnNumber - 1
-                            ? "branched"
-                            : ""
-                        }`}
-                        title={
-                          round.parentTurnNumber
-                            ? `Modification branched from Interaction #${round.parentTurnNumber}`
-                            : undefined
-                        }
-                      >
-                        {round.parentTurnNumber &&
-                        round.parentTurnNumber !== round.turnNumber - 1 ? (
-                          <span className="ref-interaction-branch-badge">
-                            from #{round.parentTurnNumber} ↓
-                          </span>
-                        ) : (
-                          <span className="ref-interaction-seq-arrow">↓</span>
-                        )}
-                      </div>
-                    )}
-
-                    <button
-                      type="button"
-                      className={`ref-interaction-history-item side-card ${
-                        isCurrent ? "active" : ""
-                      } ${isOriginOfCurrent ? "origin-highlight" : ""}`}
-                      onClick={() => {
-                        setActiveInteractionIndex(idx);
-                        setPromptInput(round.chosenPrompt);
-                        if (round.aspectRatio) {
-                          setSelectedAspectRatio(round.aspectRatio);
-                        }
-                      }}
-                    >
-                      {round.chosenImageUrl ? (
-                        <img
-                          src={round.chosenImageUrl}
-                          alt={`Interaction #${round.turnNumber}`}
-                          className="ref-interaction-thumb"
-                        />
-                      ) : (
-                        <div className="ref-interaction-thumb-empty" />
-                      )}
-                      <div className="ref-interaction-meta">
-                        <div
-                          style={{
-                            display: "flex",
-                            alignItems: "center",
-                            justifyContent: "space-between",
-                            gap: "6px",
-                          }}
-                        >
-                          <span className="ref-interaction-turn">
-                            Interaction #{round.turnNumber}
-                          </span>
-                          {round.parentTurnNumber && (
-                            <span className="ref-interaction-origin-tag">
-                              #{round.parentTurnNumber} ➔ #{round.turnNumber}
-                            </span>
-                          )}
-                        </div>
-                        {round.editInstruction && (
-                          <span className="ref-interaction-mode-badge">
-                            {round.editInstruction}
-                          </span>
-                        )}
-                        <span className="ref-interaction-prompt-snippet">
-                          {round.chosenPrompt}
-                        </span>
-                      </div>
-                    </button>
-                  </React.Fragment>
-                );
-              })}
-            </div>
-          ) : (
-            <div className="ref-side-timeline-empty">
-              <span className="ref-atelier-onboarding-sub">
-                No interactions yet. Pick a scene seed below or describe your
-                scene on the right:
+          {/* Floating Top Flow Toolbar */}
+          <div className="ref-flow-toolbar">
+            <div className="ref-flow-toolbar-left">
+              <span className="ref-flow-toolbar-badge">
+                ⛓ Flow • {totalFlowCardsCount}{" "}
+                {totalFlowCardsCount === 1 ? "Card" : "Cards"} (
+                {interactions.length}{" "}
+                {interactions.length === 1 ? "Step" : "Steps"})
               </span>
-              <div className="ref-side-starters-stack">
-                <span className="ref-interactions-label">Scene Starters</span>
-                {ATELIER_SCENE_STARTERS.map((starter) => (
-                  <button
-                    key={starter.label}
-                    type="button"
-                    className={`ref-pill-chip side-starter-chip ${
-                      promptInput === starter.prompt ? "active" : ""
-                    }`}
-                    onClick={() => {
-                      setPromptInput(starter.prompt);
-                      showTransientNotice(
-                        `✦ Starter "${starter.label.replace(
-                          "✦ ",
-                          ""
-                        )}" loaded into editor`
-                      );
-                    }}
-                  >
-                    {starter.label}
-                  </button>
-                ))}
+              <button
+                type="button"
+                className="ref-mura-btn-solid"
+                onClick={() => {
+                  const baseRound =
+                    selectedLockedRound ||
+                    (interactions.length > 0
+                      ? interactions[interactions.length - 1]
+                      : null);
+                  const baseVarIdx = selectedLockedRound
+                    ? selectedLockedVariantIdx
+                    : baseRound?.selectedVariantIndex ?? 0;
+                  handleStartBranchFromNode(baseRound, baseVarIdx, "compose");
+                }}
+                disabled={isGenerating}
+                title="Add a new generation step (creates 4 new image cards)"
+              >
+                + New Step{" "}
+                {selectedLockedRound
+                  ? `from #${selectedLockedRound.turnNumber}.${
+                      selectedLockedVariantIdx + 1
+                    }`
+                  : interactions.length > 0
+                  ? `from #${interactions[interactions.length - 1].turnNumber}.1`
+                  : ""}
+              </button>
+            </div>
+
+            <div className="ref-flow-toolbar-right">
+              <button
+                type="button"
+                className="ref-studio-ghost-action"
+                onClick={handleAutoOrganizeFlow}
+                title="Auto-organize nodes into a clean left-to-right tree"
+              >
+                ⊞ Auto-Organize
+              </button>
+              <button
+                type="button"
+                className="ref-studio-ghost-action"
+                onClick={handleFitFlowView}
+                title="Center and fit all nodes on screen"
+              >
+                ⤢ Fit View
+              </button>
+              <div className="ref-flow-zoom-pill">
+                <button
+                  type="button"
+                  className="ref-flow-zoom-btn"
+                  onClick={() =>
+                    setCanvasViewport((prev) => ({
+                      ...prev,
+                      zoom: Math.max(
+                        0.45,
+                        Number((prev.zoom - 0.1).toFixed(2))
+                      ),
+                    }))
+                  }
+                  aria-label="Zoom out"
+                >
+                  −
+                </button>
+                <button
+                  type="button"
+                  className="ref-flow-zoom-readout"
+                  onClick={() =>
+                    setCanvasViewport((prev) => ({ ...prev, zoom: 0.92 }))
+                  }
+                  title="Reset zoom"
+                >
+                  {Math.round(canvasViewport.zoom * 100)}%
+                </button>
+                <button
+                  type="button"
+                  className="ref-flow-zoom-btn"
+                  onClick={() =>
+                    setCanvasViewport((prev) => ({
+                      ...prev,
+                      zoom: Math.min(
+                        1.45,
+                        Number((prev.zoom + 0.1).toFixed(2))
+                      ),
+                    }))
+                  }
+                  aria-label="Zoom in"
+                >
+                  +
+                </button>
               </div>
             </div>
-          )}
-        </aside>
+          </div>
 
-        {/* ==================== COLUMN 2 (CENTER): 4 IMAGES OF THE LATEST/ACTIVE GENERATION ==================== */}
-        <section
-          className="ref-studio-left-images-60"
-          aria-label="4 images of the current generation"
-        >
-          <div className="ref-quad-images-grid">
-            {quadSlots.map((slot, idx) => {
-              const isSelected =
-                !isGenerating &&
-                slot !== null &&
-                activeInteraction?.selectedVariantIndex === idx;
-              const blueprint =
-                activeMatrixConfig.blueprints[idx] ||
-                EXPLORATION_MATRIX_OPTIONS[0].blueprints[idx];
+          {/* Infinite Pan & Zoom Dotted Viewport */}
+          <div
+            ref={canvasViewportRef}
+            className={`ref-flow-canvas-viewport ${
+              isDraggingCanvas ? "is-grabbing" : ""
+            }`}
+            onMouseDown={(e) => {
+              const target = e.target as HTMLElement;
+              if (
+                target.closest(".ref-flow-step-card") ||
+                target.closest(".ref-flow-toolbar")
+              ) {
+                return;
+              }
+              dragStateRef.current = {
+                mode: "pan",
+                startClientX: e.clientX,
+                startClientY: e.clientY,
+                originX: canvasViewport.x,
+                originY: canvasViewport.y,
+              };
+              setIsDraggingCanvas(true);
+            }}
+            onWheel={(e) => {
+              if (e.ctrlKey || e.metaKey) {
+                e.preventDefault();
+                const delta = e.deltaY < 0 ? 0.08 : -0.08;
+                setCanvasViewport((prev) => ({
+                  ...prev,
+                  zoom: Math.min(
+                    1.45,
+                    Math.max(0.45, Number((prev.zoom + delta).toFixed(2)))
+                  ),
+                }));
+              } else {
+                setCanvasViewport((prev) => ({
+                  ...prev,
+                  x: prev.x - e.deltaX,
+                  y: prev.y - e.deltaY,
+                }));
+              }
+            }}
+          >
+            <div
+              className="ref-flow-canvas-transform-layer"
+              style={{
+                transform: `translate3d(${canvasViewport.x}px, ${canvasViewport.y}px, 0) scale(${canvasViewport.zoom})`,
+              }}
+            >
+              {/* 1. SVG BEZIER WIRES LAYER (Immutable Parent->Child Lineage + Draft Wire) */}
+              <svg
+                className="ref-flow-edges-svg"
+                width="4800"
+                height="3600"
+                aria-hidden="true"
+              >
+                <defs>
+                  <marker
+                    id="flow-arrow-locked"
+                    markerWidth="9"
+                    markerHeight="9"
+                    refX="7"
+                    refY="4.5"
+                    orient="auto"
+                  >
+                    <path d="M0,0 L9,4.5 L0,9 Z" fill="#14213d" />
+                  </marker>
+                  <marker
+                    id="flow-arrow-draft"
+                    markerWidth="9"
+                    markerHeight="9"
+                    refX="7"
+                    refY="4.5"
+                    orient="auto"
+                  >
+                    <path d="M0,0 L9,4.5 L0,9 Z" fill="#fca311" />
+                  </marker>
+                </defs>
 
-              return (
-                <article
-                  key={
-                    activeInteraction && !isGenerating
-                      ? `${activeInteraction.id}-slot-${idx}`
-                      : `draft-or-empty-slot-${idx}`
-                  }
-                  className={`ref-quad-image-card ${
-                    isSelected ? "selected" : ""
-                  } ${isGenerating ? "is-drafting" : ""}`}
-                  onClick={() => {
-                    if (!slot || isGenerating) return;
-                    void handleChooseVariant(idx);
-                  }}
-                  onDoubleClick={() => {
-                    if (
-                      !slot?.imageUrl ||
-                      !activeInteraction ||
-                      isGenerating
-                    )
-                      return;
-                    setLightboxSlot({
-                      slot,
-                      index: idx,
-                      turnNumber: activeInteraction.turnNumber,
-                    });
-                  }}
-                >
-                  {/* 1. TOP ROUNDED ARTWORK FRAME + FLOATING INSPECT/DOWNLOAD OVERLAY */}
-                  <div className="ref-quad-image-frame">
-                    {slot?.imageUrl ? (
-                      <>
-                        <img
-                          src={slot.imageUrl}
-                          alt={slot.label}
-                          className="ref-quad-img ref-quad-img-reveal"
+                {interactions.flatMap((round) => {
+                  if (!round.parentTurnNumber) return [];
+                  const parentRound = interactions.find(
+                    (r) => r.turnNumber === round.parentTurnNumber
+                  );
+                  if (!parentRound) return [];
+                  const parentVarIdx =
+                    parentVariantByTurn[round.turnNumber] ??
+                    parentRound.selectedVariantIndex ??
+                    0;
+                  const parentCardId = getFrameNodeId(
+                    parentRound.id,
+                    parentVarIdx
+                  );
+                  const sourcePos = nodePositions[parentCardId] || {
+                    x: 70,
+                    y: 60 + parentVarIdx * 315,
+                  };
+
+                  return round.variants.map((_, slotIdx) => {
+                    const childCardId = getFrameNodeId(round.id, slotIdx);
+                    const targetPos = nodePositions[childCardId] || {
+                      x: sourcePos.x + 410,
+                      y: 60 + slotIdx * 315,
+                    };
+                    const wire = buildStepBezierPath(sourcePos, targetPos);
+                    const isHighlighted =
+                      selectedCanvasNodeId === childCardId ||
+                      selectedCanvasNodeId === parentCardId;
+
+                    return (
+                      <g key={`edge-${parentCardId}-${childCardId}`}>
+                        <path
+                          d={wire.path}
+                          fill="none"
+                          stroke={isHighlighted ? "#fca311" : "#14213d"}
+                          strokeWidth={isHighlighted ? "3" : "2.2"}
+                          markerEnd="url(#flow-arrow-locked)"
                         />
-                        {!isGenerating && (
-                          <div className="ref-quad-frame-overlay-actions">
-                            <button
-                              type="button"
-                              className="ref-quad-overlay-icon-btn"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                if (!activeInteraction) return;
-                                setLightboxSlot({
-                                  slot,
-                                  index: idx,
-                                  turnNumber: activeInteraction.turnNumber,
-                                });
-                              }}
-                              title="Expand image in full screen (Lightbox)"
-                              aria-label={`Expand ${slot.label} in full screen`}
-                            >
-                              ⤢
-                            </button>
-                            <button
-                              type="button"
-                              className="ref-quad-overlay-icon-btn"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                const a = document.createElement("a");
-                                a.href = slot.imageUrl;
-                                a.download = `interaction-${
-                                  activeInteraction?.turnNumber || 1
-                                }-v${idx + 1}.png`;
-                                a.click();
-                              }}
-                              title="Download PNG"
-                              aria-label={`Download ${slot.label} PNG`}
-                            >
-                              ↓
-                            </button>
-                          </div>
-                        )}
-                      </>
-                    ) : isGenerating ? (
-                      <div className="ref-quad-drafting-stage">
-                        <span className="ref-quad-drafting-pulse" />
-                        <strong className="ref-quad-blueprint-title">
-                          {generationStage === "analyzing-scene"
-                            ? idx === 0
-                              ? "Preparing Base Prompt..."
-                              : "Gemini 2.5 Flash extracting scene emphasis..."
-                            : "Nano Banana rendering frame..."}
-                        </strong>
-                        {slot?.prompt && (
-                          <span className="ref-quad-blueprint-desc">
-                            {slot.prompt}
-                          </span>
-                        )}
-                      </div>
-                    ) : (
-                      <div className="ref-quad-blueprint-empty">
+                        <circle
+                          cx={wire.startX}
+                          cy={wire.startY}
+                          r="4.5"
+                          fill="#fca311"
+                          stroke="#14213d"
+                          strokeWidth="1.8"
+                        />
+                      </g>
+                    );
+                  });
+                })}
+
+                {/* Active Generating 4-Card Wires (shown while actively generating 4 new image cards) */}
+                {isGenerating &&
+                  draftStep &&
+                  draftParentRound &&
+                  (() => {
+                    const parentCardId = getFrameNodeId(
+                      draftParentRound.id,
+                      draftStep.parentVariantIndex
+                    );
+                    const sourcePos = nodePositions[parentCardId] || {
+                      x: 70,
+                      y: 60,
+                    };
+                    return draftStep.positions.map((targetPos, draftIdx) => {
+                      const wire = buildStepBezierPath(sourcePos, targetPos);
+                      return (
+                        <g key={`edge-draft-active-${draftIdx}`}>
+                          <path
+                            d={wire.path}
+                            fill="none"
+                            stroke="#fca311"
+                            strokeWidth="2.8"
+                            strokeDasharray="7 5"
+                            markerEnd="url(#flow-arrow-draft)"
+                          />
+                          <circle
+                            cx={wire.startX}
+                            cy={wire.startY}
+                            r="5"
+                            fill="#fca311"
+                            stroke="#000000"
+                            strokeWidth="1.8"
+                          />
+                        </g>
+                      );
+                    });
+                  })()}
+              </svg>
+
+              {/* 2. COMPLETED IMMUTABLE IMAGE CARDS (1 Card per Generated Image; 4 Images = 4 Cards) */}
+              {interactions.flatMap((round, roundIdx) => {
+                const snap = snapshotsByTurn[round.turnNumber];
+                const styleTitle =
+                  bootstrapData.style_presets
+                    .find((s) => s.id === snap?.styleId)
+                    ?.title.split(" (")[0] || null;
+                const parentVarIdx =
+                  parentVariantByTurn[round.turnNumber] ?? 0;
+
+                return round.variants.map((slot, slotIdx) => {
+                  const cardId = getFrameNodeId(round.id, slotIdx);
+                  const pos = nodePositions[cardId] || {
+                    x: 70 + roundIdx * 410,
+                    y: 60 + slotIdx * 315,
+                  };
+                  const isNodeSelected = selectedCanvasNodeId === cardId;
+                  const cleanVariantTitle =
+                    slot?.label
+                      ?.replace(/^[0-9]+\s*•\s*/, "")
+                      .split(" (")[0] || `Image #${slotIdx + 1}`;
+
+                  return (
+                    <article
+                      key={cardId}
+                      className={`ref-flow-step-card is-locked ${
+                        isNodeSelected ? "selected" : ""
+                      }`}
+                      style={{
+                        left: `${pos.x}px`,
+                        top: `${pos.y}px`,
+                      }}
+                      onClick={() => {
+                        setActiveInteractionIndex(roundIdx);
+                        setSelectedCanvasNodeId(cardId);
+                      }}
+                    >
+                      {/* Left Input Socket */}
+                      {round.parentTurnNumber !== null && (
                         <span
-                          className="ref-quad-viewfinder-mark"
-                          aria-hidden="true"
-                        >
-                          ⊹
-                        </span>
-                        <strong className="ref-quad-blueprint-title">
-                          {blueprint.title}
-                        </strong>
-                        <span className="ref-quad-blueprint-desc">
-                          {blueprint.caption}
-                        </span>
-                      </div>
-                    )}
-                  </div>
+                          className="ref-flow-port input-port"
+                          title={`Branched from Card #${
+                            round.parentTurnNumber
+                          }.${parentVarIdx + 1}`}
+                        />
+                      )}
 
-                  {/* 2. STREAMLINED METADATA & 2-ACTION FOOTER */}
-                  <div className="ref-mura-card-body">
-                    <div className="ref-mura-title-row">
-                      <strong
-                        className="ref-mura-card-title"
-                        title={slot ? slot.label : blueprint.code}
-                      >
-                        {slot ? slot.label : blueprint.code}
-                      </strong>
-                      <span className="ref-mura-card-price-tag">
-                        {activeInteraction && !isGenerating
-                          ? `#${activeInteraction.turnNumber} • ${selectedAspectRatio}`
-                          : isGenerating
-                          ? slot?.imageUrl
-                            ? "Ready"
-                            : "Rendering..."
-                          : selectedAspectRatio}
-                      </span>
-                    </div>
-
-                    <span className="ref-mura-meta-prompt">
-                      {slot
-                        ? slot.prompt
-                        : `Frame #${idx + 1} — ${blueprint.title}`}
-                    </span>
-
-                    <div className="ref-mura-actions-row">
+                      {/* Right n8n '+' Output Port Button (Branches 4 new image cards from THIS card) */}
                       <button
                         type="button"
-                        className={`ref-mura-btn-solid ${
-                          isSelected ? "active" : ""
-                        }`}
-                        disabled={!slot || isGenerating}
+                        className="ref-flow-port output-port-btn"
+                        disabled={isGenerating}
                         onClick={(e) => {
                           e.stopPropagation();
-                          if (!slot || isGenerating) return;
-                          void handleChooseVariant(idx);
+                          handleStartBranchFromNode(round, slotIdx, "compose");
                         }}
+                        title={`Branch 4 new image cards from Card #${
+                          round.turnNumber
+                        }.${slotIdx + 1}`}
+                        aria-label={`Branch new step from Card #${
+                          round.turnNumber
+                        }.${slotIdx + 1}`}
                       >
-                        {isSelected ? "✓ Selected" : "Select"}
+                        +
                       </button>
 
-                      {slot?.imageUrl && !isGenerating ? (
-                        <button
-                          type="button"
-                          aria-pressed={
-                            canonicalDnaRef?.imageUrl === slot.imageUrl
+                      {/* Draggable Card Header */}
+                      <div
+                        className="ref-flow-node-header"
+                        onMouseDown={(e) => {
+                          if ((e.target as HTMLElement).closest("button")) {
+                            return;
                           }
-                          className={`ref-mura-btn-outline ${
-                            canonicalDnaRef?.imageUrl === slot.imageUrl
-                              ? "active-dna"
-                              : ""
-                          }`}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            void handlePinCanonicalDna(
-                              slot,
-                              activeInteraction?.turnNumber || 1
-                            );
-                          }}
-                          title="Pin this frame as Canonical Character DNA across all turns"
-                        >
-                          {canonicalDnaRef?.imageUrl === slot.imageUrl
-                            ? "🧬 Pinned"
-                            : "🧬 Pin DNA"}
-                        </button>
-                      ) : (
-                        <span className="ref-mura-frame-status">
-                          {isGenerating ? "Rendering..." : "Ready"}
+                          e.stopPropagation();
+                          setActiveInteractionIndex(roundIdx);
+                          setSelectedCanvasNodeId(cardId);
+                          dragStateRef.current = {
+                            mode: "node",
+                            nodeId: cardId,
+                            startClientX: e.clientX,
+                            startClientY: e.clientY,
+                            originX: pos.x,
+                            originY: pos.y,
+                          };
+                          setIsDraggingCanvas(true);
+                        }}
+                      >
+                        <div className="ref-flow-node-title-group">
+                          <span
+                            className="ref-flow-drag-grip"
+                            title="Drag to organize this card on screen"
+                          >
+                            ⠿
+                          </span>
+                          <span className="ref-flow-step-badge locked">
+                            🔒 #{round.turnNumber}.{slotIdx + 1}
+                          </span>
+                          <span className="ref-flow-step-ratio">
+                            {round.aspectRatio}
+                          </span>
+                          <span
+                            className="ref-flow-step-meta-chip"
+                            title={cleanVariantTitle}
+                          >
+                            {styleTitle || cleanVariantTitle}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Single Image Stage + Hover Actions (⤢ Expand, ↓ Download, 🧬 Pin DNA) */}
+                      <div
+                        className="ref-flow-hero-frame"
+                        onDoubleClick={(e) => {
+                          e.stopPropagation();
+                          if (!slot?.imageUrl) return;
+                          setActiveInteractionIndex(roundIdx);
+                          setLightboxSlot({
+                            slot,
+                            index: slotIdx,
+                            turnNumber: round.turnNumber,
+                          });
+                        }}
+                      >
+                        {slot?.imageUrl ? (
+                          <>
+                            <img
+                              src={slot.imageUrl}
+                              alt={slot.label}
+                              className="ref-flow-hero-img"
+                            />
+                            <span className="ref-flow-slot-num-badge">
+                              {cleanVariantTitle}
+                            </span>
+                            <div className="ref-flow-hero-hover-actions">
+                              <button
+                                type="button"
+                                className="ref-quad-overlay-icon-btn"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setActiveInteractionIndex(roundIdx);
+                                  setLightboxSlot({
+                                    slot,
+                                    index: slotIdx,
+                                    turnNumber: round.turnNumber,
+                                  });
+                                }}
+                                title="Expand image in full screen (Lightbox)"
+                                aria-label="Expand image in full screen"
+                              >
+                                ⤢
+                              </button>
+                              <button
+                                type="button"
+                                className="ref-quad-overlay-icon-btn"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  const a = document.createElement("a");
+                                  a.href = slot.imageUrl;
+                                  a.download = `step-${round.turnNumber}-card-${
+                                    slotIdx + 1
+                                  }.png`;
+                                  a.click();
+                                }}
+                                title="Download PNG"
+                                aria-label="Download PNG"
+                              >
+                                ↓
+                              </button>
+                              <button
+                                type="button"
+                                className={`ref-quad-overlay-icon-btn ${
+                                  canonicalDnaRef?.imageUrl === slot.imageUrl
+                                    ? "active-dna"
+                                    : ""
+                                }`}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  void handlePinCanonicalDna(
+                                    slot,
+                                    round.turnNumber
+                                  );
+                                }}
+                                title="Pin this card as Canonical Character DNA across the flow"
+                                aria-label="Pin Canonical DNA"
+                              >
+                                🧬
+                              </button>
+                            </div>
+                          </>
+                        ) : (
+                          <div className="ref-flow-slot-blueprint">
+                            <strong>
+                              Card #{round.turnNumber}.{slotIdx + 1}
+                            </strong>
+                            <span>{cleanVariantTitle}</span>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* 1-Line Prompt Footer (Click to open read-only Inspector Modal for this image card) */}
+                      <button
+                        type="button"
+                        className="ref-flow-node-footer-btn"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setActiveInteractionIndex(roundIdx);
+                          setSelectedCanvasNodeId(cardId);
+                          setIsStepModalOpen(true);
+                        }}
+                        title="Click to inspect this card's immutable prompt & parameters"
+                      >
+                        <span className="ref-flow-node-prompt-single">
+                          {slot?.prompt || round.chosenPrompt}
                         </span>
+                        <span className="ref-flow-footer-inspect-tag">
+                          Inspect ↗
+                        </span>
+                      </button>
+                    </article>
+                  );
+                });
+              })}
+
+              {/* 3. LIVE GENERATING 4 IMAGE CARDS OR EMPTY-PROJECT STARTER CARD */}
+              {isGenerating &&
+                draftStep &&
+                draftStep.positions.map((pos, draftIdx) => {
+                  const liveSlot = liveDraftSlots[draftIdx];
+                  const nextTurnNum = interactions.length + 1;
+                  return (
+                    <article
+                      key={`draft-card-${draftIdx}`}
+                      className="ref-flow-step-card is-draft is-generating"
+                      style={{
+                        left: `${pos.x}px`,
+                        top: `${pos.y}px`,
+                      }}
+                    >
+                      {draftStep.parentTurnNumber !== null && (
+                        <span
+                          className="ref-flow-port input-port draft"
+                          title={`Branched from Card #${
+                            draftStep.parentTurnNumber
+                          }.${draftStep.parentVariantIndex + 1}`}
+                        />
                       )}
+
+                      <div
+                        className="ref-flow-node-header"
+                        onMouseDown={(e) => {
+                          if ((e.target as HTMLElement).closest("button")) {
+                            return;
+                          }
+                          e.stopPropagation();
+                          dragStateRef.current = {
+                            mode: "node",
+                            nodeId: `draft::${draftIdx}`,
+                            startClientX: e.clientX,
+                            startClientY: e.clientY,
+                            originX: pos.x,
+                            originY: pos.y,
+                          };
+                          setIsDraggingCanvas(true);
+                        }}
+                      >
+                        <div className="ref-flow-node-title-group">
+                          <span className="ref-flow-drag-grip">⠿</span>
+                          <span className="ref-flow-step-badge draft">
+                            ⚡ #{nextTurnNum}.{draftIdx + 1}
+                          </span>
+                          <span className="ref-flow-step-ratio">
+                            {selectedAspectRatio}
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="ref-flow-hero-frame">
+                        {liveSlot?.imageUrl ? (
+                          <img
+                            src={liveSlot.imageUrl}
+                            alt={liveSlot.label}
+                            className="ref-flow-hero-img"
+                          />
+                        ) : (
+                          <div className="ref-flow-slot-blueprint">
+                            <span className="ref-quad-drafting-pulse" />
+                            <strong>
+                              {generationStage === "analyzing-scene"
+                                ? `Composing #${draftIdx + 1}...`
+                                : `Rendering Card #${nextTurnNum}.${
+                                    draftIdx + 1
+                                  }...`}
+                            </strong>
+                            <span>
+                              {liveSlot?.label || activeMatrixConfig.label}
+                            </span>
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="ref-flow-node-footer-btn">
+                        <span className="ref-flow-node-prompt-single">
+                          {liveSlot?.prompt || promptInput || "Generating..."}
+                        </span>
+                      </div>
+                    </article>
+                  );
+                })}
+
+              {!isGenerating && interactions.length === 0 && draftStep && (
+                <article
+                  className="ref-flow-step-card is-draft selected"
+                  style={{
+                    left: `${draftStep.positions[0]?.x ?? 70}px`,
+                    top: `${draftStep.positions[0]?.y ?? 60}px`,
+                  }}
+                  onClick={() => {
+                    setSelectedCanvasNodeId("draft");
+                    setIsStepModalOpen(true);
+                  }}
+                >
+                  <div className="ref-flow-node-header">
+                    <div className="ref-flow-node-title-group">
+                      <span className="ref-flow-step-badge draft">
+                        ✨ Start Step #1 (Creates 4 Image Cards)
+                      </span>
                     </div>
                   </div>
+                  <div className="ref-flow-starter-empty-body">
+                    <strong className="ref-quad-blueprint-title">
+                      Start Your Creation Flow
+                    </strong>
+                    <span className="ref-quad-blueprint-desc">
+                      Click below to configure Step #1 and generate your first 4
+                      image cards on the canvas.
+                    </span>
+                    <button
+                      type="button"
+                      className="ref-dark-pill-btn"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setSelectedCanvasNodeId("draft");
+                        setIsStepModalOpen(true);
+                      }}
+                    >
+                      <span>+ Create Step #1 (4 Cards)</span>
+                    </button>
+                  </div>
                 </article>
-              );
-            })}
+              )}
+            </div>
           </div>
         </section>
+      </div>
 
-        {/* RIGHT 40%: PROMPTS & PARAMETERS */}
-        <aside
-          className="ref-studio-right-params-40"
-          aria-label="Prompts and Parameters"
+      {/* ==================== MODAL FOR STEP CREATION & IMMUTABLE CARD INSPECTION ==================== */}
+      {isStepModalOpen && (
+        <div
+          className="ref-modal-backdrop"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Step Configuration and Inspection Modal"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setIsStepModalOpen(false);
+          }}
         >
-          {/* ZONE 1: Prompt Composer (Clean Segmented Switch + Textarea + Primary CTA) */}
-          <form
-            className="ref-params-card"
-            onSubmit={handleGenerateInteraction}
-          >
+          <div className="ref-flow-step-modal-card">
+            <div className="ref-modal-header">
+              <strong className="ref-soft-card-title">
+                {selectedCanvasNodeId !== "draft" && selectedLockedRound
+                  ? `🔒 Inspect Card #${selectedLockedRound.turnNumber}.${
+                      selectedLockedVariantIdx + 1
+                    }`
+                  : `✨ Configure New Step #${interactions.length + 1} (Creates 4 Cards)${
+                      draftParentRound
+                        ? ` • From Card #${draftParentRound.turnNumber}.${
+                            (draftStep?.parentVariantIndex ?? 0) + 1
+                          }`
+                        : ""
+                    }`}
+              </strong>
+              <button
+                type="button"
+                aria-label="Close modal"
+                className="ref-circle-icon-btn"
+                style={{ width: "32px", height: "32px" }}
+                onClick={() => setIsStepModalOpen(false)}
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="ref-flow-step-modal-body">
+          {selectedCanvasNodeId !== "draft" && selectedLockedRound ? (
+            <div className="ref-params-card ref-params-deck">
+              <div className="ref-params-card-header">
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "8px",
+                    flexWrap: "wrap",
+                  }}
+                >
+                  <span className="ref-flow-step-badge locked">
+                    🔒 Card #{selectedLockedRound.turnNumber}.
+                    {selectedLockedVariantIdx + 1} (Immutable)
+                  </span>
+                  {selectedLockedRound.parentTurnNumber && (
+                    <span className="ref-pill-chip">
+                      Branched from Card #{selectedLockedRound.parentTurnNumber}.
+                      {(parentVariantByTurn[selectedLockedRound.turnNumber] ??
+                        0) + 1}
+                    </span>
+                  )}
+                </div>
+                <span className="ref-studio-ratio-readout">
+                  {selectedLockedRound.aspectRatio}
+                </span>
+              </div>
+
+              <div className="ref-flow-inspector-body">
+                {selectedLockedSlot?.imageUrl && (
+                  <div
+                    className="ref-flow-hero-frame"
+                    style={{ maxHeight: "260px", borderRadius: "10px" }}
+                  >
+                    <img
+                      src={selectedLockedSlot.imageUrl}
+                      alt={selectedLockedSlot.label}
+                      className="ref-flow-hero-img"
+                    />
+                    <span className="ref-flow-slot-num-badge">
+                      {selectedLockedSlot.label}
+                    </span>
+                  </div>
+                )}
+
+                <div className="ref-params-field-group">
+                  <span className="ref-field-label">
+                    Recorded Prompt (Card #{selectedLockedRound.turnNumber}.
+                    {selectedLockedVariantIdx + 1} • Read-Only):
+                  </span>
+                  <div className="ref-flow-readonly-box">
+                    {selectedLockedSlot?.prompt ||
+                      selectedLockedRound.chosenPrompt}
+                  </div>
+                </div>
+
+                <div className="ref-params-field-group">
+                  <span className="ref-field-label">
+                    Locked Card Parameters:
+                  </span>
+                  <div className="ref-params-pills-wrap">
+                    {selectedLockedRound.editInstruction && (
+                      <span className="ref-pill-chip active">
+                        {selectedLockedRound.editInstruction}
+                      </span>
+                    )}
+                    <span className="ref-pill-chip">
+                      Ratio: {selectedLockedRound.aspectRatio}
+                    </span>
+                    {(() => {
+                      const snap =
+                        snapshotsByTurn[selectedLockedRound.turnNumber];
+                      if (!snap) return null;
+                      const styleObj = bootstrapData.style_presets.find(
+                        (s) => s.id === snap.styleId
+                      );
+                      const allMods =
+                        bootstrapData.modifier_categories.flatMap(
+                          (c) => c.options
+                        );
+                      return (
+                        <>
+                          {styleObj && (
+                            <span className="ref-pill-chip">
+                              🎨 {styleObj.title.split(" (")[0]}
+                            </span>
+                          )}
+                          {snap.modifierIds.map((mId) => {
+                            const found = allMods.find((o) => o.id === mId);
+                            return found ? (
+                              <span key={mId} className="ref-pill-chip">
+                                🎛️ {found.label.split(" (")[0]}
+                              </span>
+                            ) : null;
+                          })}
+                        </>
+                      );
+                    })()}
+                  </div>
+                </div>
+
+                <div className="ref-flow-inspector-cta-box">
+                  <span className="ref-field-label">
+                    Branch 4 New Image Cards from Card #
+                    {selectedLockedRound.turnNumber}.
+                    {selectedLockedVariantIdx + 1}:
+                  </span>
+                  <div
+                    style={{
+                      display: "flex",
+                      gap: "8px",
+                      flexWrap: "wrap",
+                    }}
+                  >
+                    <button
+                      type="button"
+                      className="ref-dark-pill-btn"
+                      onClick={() =>
+                        handleStartBranchFromNode(
+                          selectedLockedRound,
+                          selectedLockedVariantIdx,
+                          "compose"
+                        )
+                      }
+                    >
+                      <span>✦ Branch 4 New Cards (Compose)</span>
+                    </button>
+                    <button
+                      type="button"
+                      className="ref-mura-btn-outline"
+                      onClick={() =>
+                        handleStartBranchFromNode(
+                          selectedLockedRound,
+                          selectedLockedVariantIdx,
+                          "surgical-delta"
+                        )
+                      }
+                    >
+                      ⚡ Branch Surgical Delta
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <form
+              className="ref-flow-create-modal-form"
+              onSubmit={handleGenerateInteraction}
+            >
+              <div className="ref-flow-create-modal-columns">
+                {/* LEFT COLUMN: Parent Frame Anchor + Prompt/Surgical Delta Editor */}
+                <div className="ref-params-card">
             <input
               ref={fileUploadInputRef}
               type="file"
@@ -1805,51 +2699,10 @@ export default function InteractiveStudio({
               </div>
             )}
 
-            <div className="ref-studio-submit-row">
-              <div className="ref-studio-feedback-slot" aria-live="polite">
-                {statusNotice ? (
-                  <span className="ref-atelier-toast-pill">
-                    {statusNotice}
-                  </span>
-                ) : (
-                  <span className="ref-atelier-shortcut-hint">
-                    <kbd>Ctrl</kbd>+<kbd>↵</kbd> • {activeMatrixConfig.shortTag}
-                  </span>
-                )}
-              </div>
+                </div>
 
-              <button
-                type="submit"
-                id="generate-nanobanana-primary-btn"
-                className="ref-dark-pill-btn"
-                disabled={
-                  isGenerating ||
-                  (flowMode === "surgical-delta"
-                    ? !(activeInteraction || canonicalDnaRef?.imageUrl) ||
-                      !deltaInput.trim()
-                    : !promptInput.trim())
-                }
-              >
-                <span>
-                  {isGenerating
-                    ? generationStage === "analyzing-scene"
-                      ? `Composing ${activeMatrixConfig.label}...`
-                      : `Rendering (${completedSlotsCount}/4)...`
-                    : flowMode === "surgical-delta"
-                    ? "Apply Delta (4 Images)"
-                    : activeInteraction
-                    ? `Iterate #${activeInteraction.turnNumber} (4 Images)`
-                    : "Generate 4 Images"}
-                </span>
-                <span className="ref-lime-badge">
-                  {interactions.length + 1}
-                </span>
-              </button>
-            </div>
-          </form>
-
-          {/* ZONE 2: Clean Parameter Deck (Segmented Aspect Ratio + 3-Tab Parameter Switcher) */}
-          <div className="ref-params-card ref-params-deck">
+                {/* RIGHT COLUMN: Aspect Ratio + 3-Tab Parameter Deck (2x2 Matrix | Visual Style | Modifiers) */}
+                <div className="ref-params-card ref-params-deck">
             {/* 1. Unified 5-Segment Aspect Ratio Bar */}
             <div className="ref-params-field-group">
               <div className="ref-studio-label-row">
@@ -2108,8 +2961,70 @@ export default function InteractiveStudio({
               </div>
             </div>
           </div>
-        </aside>
-      </div>
+              </div>
+
+              {/* UNIFIED BOTTOM FOOTER BAR */}
+              <div className="ref-flow-create-modal-footer">
+                <div className="ref-studio-feedback-slot" aria-live="polite">
+                  {statusNotice ? (
+                    <span className="ref-atelier-toast-pill">
+                      {statusNotice}
+                    </span>
+                  ) : (
+                    <span className="ref-atelier-shortcut-hint">
+                      <kbd>Ctrl</kbd>+<kbd>↵</kbd> • {activeMatrixConfig.shortTag}
+                    </span>
+                  )}
+                </div>
+
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "10px",
+                  }}
+                >
+                  <button
+                    type="button"
+                    className="ref-mura-btn-outline"
+                    onClick={() => setIsStepModalOpen(false)}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    id="generate-nanobanana-primary-btn"
+                    className="ref-dark-pill-btn"
+                    disabled={
+                      isGenerating ||
+                      (flowMode === "surgical-delta"
+                        ? !(
+                            draftParentRound ||
+                            activeInteraction ||
+                            canonicalDnaRef?.imageUrl
+                          ) || !deltaInput.trim()
+                        : !promptInput.trim())
+                    }
+                  >
+                    <span>
+                      {isGenerating
+                        ? `Rendering Step #${interactions.length + 1}...`
+                        : `▶ Generate Step #${
+                            interactions.length + 1
+                          } (4 Images)`}
+                    </span>
+                    <span className="ref-lime-badge">
+                      {interactions.length + 1}
+                    </span>
+                  </button>
+                </div>
+              </div>
+            </form>
+          )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ==================== LIGHTBOX MODAL FOR FULL-SIZE IMAGE INSPECTION & BEFORE/AFTER COMPARE ==================== */}
       {lightboxSlot &&

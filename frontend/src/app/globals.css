@@ -2741,6 +2741,645 @@ textarea {
   max-width: 100%;
 }
 
+/* ============================================================================
+   13. n8n-STYLE IMMUTABLE CREATION FLOW CANVAS
+   ============================================================================ */
+
+.ref-flow-studio-layout {
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  display: grid;
+  grid-template-columns: 1fr;
+  overflow: hidden;
+}
+
+.ref-flow-canvas-panel {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  border-radius: 20px;
+  border: 1.5px solid #14213d;
+  background-color: #e5e5e5;
+  overflow: hidden;
+  box-shadow: inset 0 2px 10px rgba(20, 33, 61, 0.06);
+}
+
+.ref-flow-toolbar {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  right: 12px;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 12px;
+  border-radius: 14px;
+  background-color: rgba(255, 255, 255, 0.94);
+  border: 1.5px solid #14213d;
+  box-shadow: 0 8px 20px rgba(20, 33, 61, 0.12);
+  backdrop-filter: blur(8px);
+}
+
+.ref-flow-toolbar-left,
+.ref-flow-toolbar-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.ref-flow-toolbar-badge {
+  font-size: 0.74rem;
+  font-weight: 800;
+  color: #14213d;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background-color: #e5e5e5;
+  border: 1px solid rgba(20, 33, 61, 0.22);
+}
+
+.ref-flow-zoom-pill {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  border: 1px solid rgba(20, 33, 61, 0.25);
+  background-color: #ffffff;
+  overflow: hidden;
+}
+
+.ref-flow-zoom-btn {
+  width: 28px;
+  height: 28px;
+  border: none;
+  background: transparent;
+  color: #14213d;
+  font-size: 0.9rem;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.ref-flow-zoom-btn:hover {
+  background-color: #fca311;
+  color: #000000;
+}
+
+.ref-flow-zoom-readout {
+  height: 28px;
+  padding: 0 8px;
+  border: none;
+  border-left: 1px solid rgba(20, 33, 61, 0.15);
+  border-right: 1px solid rgba(20, 33, 61, 0.15);
+  background: transparent;
+  font-size: 0.7rem;
+  font-weight: 800;
+  color: #000000;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+}
+
+.ref-flow-canvas-viewport {
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  height: 100%;
+  position: relative;
+  overflow: hidden;
+  cursor: grab;
+  user-select: none;
+  background-color: #e5e5e5;
+  background-image: radial-gradient(
+    rgba(20, 33, 61, 0.24) 1.25px,
+    transparent 1.25px
+  );
+  background-size: 22px 22px;
+}
+
+.ref-flow-canvas-viewport.is-grabbing {
+  cursor: grabbing;
+}
+
+.ref-flow-canvas-transform-layer {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 4800px;
+  height: 3600px;
+  transform-origin: 0 0;
+  pointer-events: none;
+}
+
+.ref-flow-edges-svg {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 4800px;
+  height: 3600px;
+  overflow: visible;
+  pointer-events: none;
+  z-index: 1;
+}
+
+.ref-flow-step-card {
+  --mura-chamfer: 18px;
+  --mura-border: 2px;
+  --mura-border-color: #14213d;
+  --mura-bg-color: #ffffff;
+  position: absolute;
+  width: 284px;
+  padding: 11px 12px 12px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  pointer-events: auto;
+  isolation: isolate;
+  z-index: 5;
+  filter: drop-shadow(0 8px 18px rgba(20, 33, 61, 0.12));
+  transition: filter 0.15s ease;
+}
+
+.ref-flow-step-card::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -2;
+  background-color: var(--mura-border-color, #14213d);
+  border-top-right-radius: 13px;
+  border-bottom-left-radius: 13px;
+  clip-path: polygon(
+    var(--mura-chamfer, 18px) 0,
+    100% 0,
+    100% calc(100% - var(--mura-chamfer, 18px)),
+    calc(100% - var(--mura-chamfer, 18px)) 100%,
+    0 100%,
+    0 var(--mura-chamfer, 18px)
+  );
+}
+
+.ref-flow-step-card::after {
+  content: "";
+  position: absolute;
+  inset: var(--mura-border, 2px);
+  z-index: -1;
+  background-color: var(--mura-bg-color, #ffffff);
+  border-top-right-radius: calc(13px - var(--mura-border, 2px));
+  border-bottom-left-radius: calc(13px - var(--mura-border, 2px));
+  clip-path: polygon(
+    calc(var(--mura-chamfer, 18px) - 1px) 0,
+    100% 0,
+    100% calc(100% - var(--mura-chamfer, 18px) + 1px),
+    calc(100% - var(--mura-chamfer, 18px) + 1px) 100%,
+    0 100%,
+    0 calc(var(--mura-chamfer, 18px) - 1px)
+  );
+}
+
+.ref-flow-step-card.selected {
+  --mura-border: 2.5px;
+  --mura-border-color: #fca311;
+  z-index: 8;
+  filter: drop-shadow(0 12px 24px rgba(20, 33, 61, 0.2));
+}
+
+.ref-flow-step-card.is-draft {
+  --mura-border: 2.5px;
+  --mura-border-color: #fca311;
+  --mura-bg-color: #ffffff;
+}
+
+.ref-flow-port {
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  border-radius: 999px;
+  background-color: #fca311;
+  border: 2.5px solid #14213d;
+  z-index: 10;
+}
+
+.ref-flow-port.input-port {
+  left: -7px;
+  top: 138px;
+}
+
+.ref-flow-port.output-port-btn {
+  right: -14px;
+  top: 131px;
+  width: 28px;
+  height: 28px;
+  border-radius: 999px;
+  background-color: #fca311;
+  border: 2px solid #14213d;
+  color: #000000;
+  font-size: 1rem;
+  font-weight: 900;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  box-shadow: 0 4px 10px rgba(20, 33, 61, 0.22);
+  transition: transform 0.14s ease, background-color 0.14s ease, color 0.14s ease;
+}
+
+.ref-flow-port.output-port-btn:hover:not(:disabled) {
+  transform: scale(1.14);
+  background-color: #14213d;
+  color: #fca311;
+}
+
+.ref-flow-node-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid rgba(20, 33, 61, 0.14);
+  cursor: move;
+}
+
+.ref-flow-node-title-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  flex-wrap: wrap;
+}
+
+.ref-flow-drag-grip {
+  font-size: 0.9rem;
+  color: #14213d;
+  opacity: 0.65;
+  cursor: move;
+}
+
+.ref-flow-step-badge {
+  font-size: 0.72rem;
+  font-weight: 800;
+  padding: 3px 9px;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+
+.ref-flow-step-badge.locked {
+  background-color: #14213d;
+  color: #ffffff;
+}
+
+.ref-flow-step-badge.draft {
+  background-color: #fca311;
+  color: #000000;
+  border: 1px solid #000000;
+}
+
+.ref-flow-step-ratio {
+  font-size: 0.68rem;
+  font-weight: 800;
+  color: #14213d;
+  padding: 2px 7px;
+  border-radius: 6px;
+  background-color: #e5e5e5;
+}
+
+.ref-flow-step-meta-chip {
+  font-size: 0.66rem;
+  font-weight: 700;
+  color: #14213d;
+  padding: 2px 7px;
+  border-radius: 6px;
+  background-color: rgba(252, 163, 17, 0.2);
+}
+
+/* Single Hero Image Frame inside Compact Step Node */
+.ref-flow-hero-frame {
+  position: relative;
+  width: 100%;
+  height: 196px;
+  border-radius: 12px;
+  border: 1.5px solid rgba(20, 33, 61, 0.22);
+  background-color: #e5e5e5;
+  overflow: hidden;
+  cursor: pointer;
+}
+
+.ref-flow-hero-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.ref-flow-hero-hover-actions {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  opacity: 0;
+  transform: translateY(-2px);
+  transition: opacity 0.14s ease, transform 0.14s ease;
+}
+
+.ref-flow-hero-frame:hover .ref-flow-hero-hover-actions {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.ref-quad-overlay-icon-btn.active-dna {
+  background-color: #fca311;
+  color: #000000;
+  border-color: #000000;
+}
+
+/* 1-4 Frame Switcher Strip below Hero Image */
+.ref-flow-switcher-strip {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.ref-flow-switcher-thumb {
+  position: relative;
+  height: 46px;
+  padding: 0;
+  border-radius: 8px;
+  border: 1.5px solid rgba(20, 33, 61, 0.22);
+  background-color: #e5e5e5;
+  overflow: hidden;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: border-color 0.14s ease, transform 0.14s ease;
+}
+
+.ref-flow-switcher-thumb:hover {
+  border-color: #14213d;
+}
+
+.ref-flow-switcher-thumb.active {
+  border: 2px solid #fca311;
+  box-shadow: 0 0 0 1px #14213d;
+}
+
+.ref-flow-switcher-thumb-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.ref-flow-switcher-thumb-num {
+  font-size: 0.68rem;
+  font-weight: 800;
+  color: #14213d;
+}
+
+.ref-flow-switcher-pill {
+  position: absolute;
+  bottom: 2px;
+  right: 3px;
+  padding: 0 4px;
+  border-radius: 4px;
+  background-color: rgba(20, 33, 61, 0.84);
+  color: #ffffff;
+  font-size: 0.58rem;
+  font-weight: 800;
+  line-height: 1.3;
+}
+
+.ref-flow-switcher-thumb.active .ref-flow-switcher-pill {
+  background-color: #fca311;
+  color: #000000;
+}
+
+.ref-flow-slot-num-badge {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background-color: rgba(20, 33, 61, 0.85);
+  color: #ffffff;
+  font-size: 0.66rem;
+  font-weight: 800;
+}
+
+.ref-flow-slot-mini-btn {
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  border: 1px solid #14213d;
+  background-color: rgba(255, 255, 255, 0.92);
+  color: #000000;
+  font-size: 0.72rem;
+  font-weight: 800;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.ref-flow-slot-blueprint {
+  width: 100%;
+  height: 100%;
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  gap: 6px;
+  font-size: 0.72rem;
+  color: #14213d;
+}
+
+/* 1-Line Prompt Footer Button (Click to Open Read-Only Inspector Modal) */
+.ref-flow-node-footer-btn {
+  width: 100%;
+  padding: 6px 8px;
+  border-radius: 8px;
+  border: 1px solid rgba(20, 33, 61, 0.16);
+  background-color: #e5e5e5;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  cursor: pointer;
+  text-align: left;
+  transition: background-color 0.14s ease, border-color 0.14s ease;
+}
+
+.ref-flow-node-footer-btn:hover {
+  background-color: rgba(252, 163, 17, 0.16);
+  border-color: #14213d;
+}
+
+.ref-flow-node-prompt-single {
+  flex: 1;
+  min-width: 0;
+  font-size: 0.71rem;
+  font-weight: 600;
+  color: #000000;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ref-flow-footer-inspect-tag {
+  font-size: 0.64rem;
+  font-weight: 800;
+  color: #14213d;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.ref-flow-starter-empty-body {
+  padding: 20px 12px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 10px;
+}
+
+/* Inspector & Unified 2-Column Create Step Modal */
+.ref-flow-inspector-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  overflow-y: auto;
+  padding-right: 2px;
+}
+
+.ref-flow-inspector-thumbs-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.ref-flow-inspector-thumb-card {
+  border-radius: 12px;
+  border: 1.5px solid rgba(20, 33, 61, 0.22);
+  background-color: #e5e5e5;
+  overflow: hidden;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+}
+
+.ref-flow-inspector-thumb-card.active {
+  border: 2px solid #fca311;
+  box-shadow: 0 0 0 1px #14213d;
+}
+
+.ref-flow-inspector-thumb-img {
+  width: 100%;
+  height: 110px;
+  object-fit: cover;
+  display: block;
+}
+
+.ref-flow-inspector-thumb-empty {
+  width: 100%;
+  height: 110px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: #14213d;
+}
+
+.ref-flow-inspector-thumb-bar {
+  padding: 5px 8px;
+  background-color: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 0.7rem;
+  font-weight: 800;
+  color: #14213d;
+}
+
+.ref-flow-readonly-box {
+  padding: 10px 12px;
+  border-radius: 12px;
+  background-color: #e5e5e5;
+  border: 1px solid rgba(20, 33, 61, 0.2);
+  font-size: 0.76rem;
+  line-height: 1.45;
+  color: #000000;
+  max-height: 120px;
+  overflow-y: auto;
+}
+
+.ref-flow-inspector-cta-box {
+  margin-top: auto;
+  padding: 12px;
+  border-radius: 14px;
+  background-color: rgba(252, 163, 17, 0.14);
+  border: 1.5px solid #14213d;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ref-flow-step-modal-card {
+  width: min(1020px, 95vw);
+  max-height: 90vh;
+  background-color: #e5e5e5;
+  border: 2px solid #14213d;
+  border-radius: 22px;
+  padding: 16px 18px 18px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  overflow: hidden;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.36);
+}
+
+.ref-flow-step-modal-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  padding: 2px;
+}
+
+.ref-flow-create-modal-form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-height: 0;
+}
+
+.ref-flow-create-modal-columns {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
+  gap: 14px;
+  align-items: stretch;
+}
+
+.ref-flow-create-modal-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 14px;
+  border-radius: 16px;
+  background-color: #ffffff;
+  border: 1.5px solid #14213d;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .ref-quad-drafting-pulse {
     animation: none;

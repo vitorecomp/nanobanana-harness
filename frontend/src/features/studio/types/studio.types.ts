@@ -139,3 +139,18 @@ export interface SessionFrame {
   savedToPostgres?: boolean;
   isPublished?: boolean;
 }
+
+export interface FlowNodePosition {
+  x: number;
+  y: number;
+}
+
+export interface FlowStepParameterSnapshot {
+  flowMode: CreationFlowMode;
+  aspectRatio: string;
+  matrixAxis: ExplorationMatrixAxis;
+  styleId: string;
+  modifierIds: string[];
+  preservationLocks: PreservationLocks;
+}
+
