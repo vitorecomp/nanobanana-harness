@@ -61,7 +61,7 @@ interface StudioSessionContextValue {
   activeProjectTitle: string;
   setActiveProjectTitle: (title: string) => void;
   newProjectNonce: number;
-  triggerNewProject: () => void;
+  triggerNewProject: (customTitle?: string) => void;
   updateModifierCategories: (categories: ModifierCategory[]) => Promise<void>;
   resetModifierCategories: () => Promise<void>;
   isSettingsModalOpen: boolean;
@@ -99,9 +99,10 @@ export function StudioSessionProvider({ children }: { children: ReactNode }) {
 
   const openSettingsModal = () => setSettingsModalOpen(true);
 
-  const triggerNewProject = () => {
+  const triggerNewProject = (customTitle?: string) => {
+    const resolvedTitle = customTitle?.trim() || "New Project";
     setActiveProjectId(null);
-    setActiveProjectTitle("New Project");
+    setActiveProjectTitle(resolvedTitle);
     setPendingRemix(null);
     setNewProjectNonce((n) => n + 1);
   };

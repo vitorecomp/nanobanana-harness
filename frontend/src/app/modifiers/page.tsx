@@ -53,7 +53,6 @@ export default function ModifiersManagerPage() {
 
   const categories = bootstrapData.modifier_categories;
 
-  const [selectedFilterCatId, setSelectedFilterCatId] = useState<string>("all");
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [notice, setNotice] = useState<string | null>(null);
   const [confirmDeleteCatId, setConfirmDeleteCatId] = useState<string | null>(
@@ -61,6 +60,9 @@ export default function ModifiersManagerPage() {
   );
   const [confirmRestoreDefaults, setConfirmRestoreDefaults] =
     useState<boolean>(false);
+  const [rightSidebarTab, setRightSidebarTab] = useState<
+    "ai" | "edit" | "new-cat"
+  >("ai");
 
   // AI Creation State
   const [aiMode, setAiMode] = useState<"new-category" | "into-existing">(
@@ -95,7 +97,6 @@ export default function ModifiersManagerPage() {
   const filteredCategories = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
     return categories
-      .filter((c) => selectedFilterCatId === "all" || c.id === selectedFilterCatId)
       .map((c) => {
         if (!q) return c;
         const catMatches = c.title.toLowerCase().includes(q);
@@ -110,7 +111,27 @@ export default function ModifiersManagerPage() {
         };
       })
       .filter((c) => !q || c.title.toLowerCase().includes(q) || c.options.length > 0);
-  }, [categories, selectedFilterCatId, searchQuery]);
+  }, [categories, searchQuery]);
+
+  const masonryColumns = useMemo(() => {
+    const cols: [ModifierCategory[], ModifierCategory[]] = [[], []];
+    const heights: [number, number] = [0, 0];
+    for (const cat of filteredCategories) {
+      const targetCol = heights[0] <= heights[1] ? 0 : 1;
+      cols[targetCol].push(cat);
+      const rows = Math.max(1, Math.ceil(cat.options.length / 2));
+      heights[targetCol] += 110 + rows * 48;
+    }
+    return cols;
+  }, [filteredCategories]);
+
+  const activeManualCategory = useMemo(
+    () =>
+      categories.find((c) => c.id === manualTargetCatId) ||
+      categories[0] ||
+      null,
+    [categories, manualTargetCatId]
+  );
 
   // 1. Create a New Category Manually
   const handleCreateCategory = async (e: React.FormEvent) => {
@@ -128,6 +149,7 @@ export default function ModifiersManagerPage() {
     setNewCategoryTitle("");
     setManualTargetCatId(id);
     setAiTargetCatId(id);
+    setRightSidebarTab("edit");
     showTransientNotice(`✓ Category "${title}" created!`);
   };
 
@@ -143,9 +165,6 @@ export default function ModifiersManagerPage() {
     setConfirmDeleteCatId(null);
     const nextList = categories.filter((c) => c.id !== cat.id);
     await updateModifierCategories(nextList);
-    if (selectedFilterCatId === cat.id) {
-      setSelectedFilterCatId("all");
-    }
     showTransientNotice(`✓ Category "${cat.title}" removed.`);
   };
 
@@ -154,7 +173,8 @@ export default function ModifiersManagerPage() {
     e.preventDefault();
     const label = newModLabel.trim();
     const token = newModToken.trim() || label;
-    if (!label || !manualTargetCatId) return;
+    const targetId = activeManualCategory?.id || manualTargetCatId;
+    if (!label || !targetId) return;
 
     const newOpt: ModifierOption = {
       id: `${slugifyId(label, "mod")}-${Date.now().toString(36).slice(-4)}`,
@@ -163,15 +183,13 @@ export default function ModifiersManagerPage() {
     };
 
     const nextList = categories.map((c) =>
-      c.id === manualTargetCatId
-        ? { ...c, options: [...c.options, newOpt] }
-        : c
+      c.id === targetId ? { ...c, options: [...c.options, newOpt] } : c
     );
     await updateModifierCategories(nextList);
     setNewModLabel("");
     setNewModToken("");
     const targetTitle =
-      categories.find((c) => c.id === manualTargetCatId)?.title || "Category";
+      categories.find((c) => c.id === targetId)?.title || "Category";
     showTransientNotice(
       `✓ Modifier "${label}" added to "${targetTitle}"!`
     );
@@ -281,7 +299,6 @@ export default function ModifiersManagerPage() {
                   }
                   setConfirmRestoreDefaults(false);
                   await resetModifierCategories();
-                  setSelectedFilterCatId("all");
                   showTransientNotice(
                     "✓ Default categories and modifiers restored!"
                   );
@@ -293,391 +310,548 @@ export default function ModifiersManagerPage() {
                   : "↺ Restore Defaults"}
               </button>
             </div>
-
-            {/* Category Filter Chips */}
-            <div
-              className="ref-modifiers-cat-tabs"
-              role="group"
-              aria-label="Filter by category"
-            >
-              <button
-                type="button"
-                className={`ref-pill-chip ${
-                  selectedFilterCatId === "all" ? "active" : ""
-                }`}
-                onClick={() => setSelectedFilterCatId("all")}
-              >
-                All ({categories.length})
-              </button>
-              {categories.map((cat) => (
-                <button
-                  key={cat.id}
-                  type="button"
-                  className={`ref-pill-chip ${
-                    selectedFilterCatId === cat.id ? "active" : ""
-                  }`}
-                  onClick={() => setSelectedFilterCatId(cat.id)}
-                >
-                  {cat.title} ({cat.options.length})
-                </button>
-              ))}
-            </div>
           </div>
 
-          {/* Grid of Chamfered Category Cards */}
+          {/* Grid of Chamfered Category Cards (2-Column Shortest-First Masonry) */}
           <div className="ref-modifiers-cards-grid">
-            {filteredCategories.map((cat) => {
-              const isSweepReady = cat.options.length >= 4;
-              return (
-                <article key={cat.id} className="ref-project-card modifier-cat-card">
-                  {/* 1. Card Header */}
-                  <div className="ref-mura-title-row">
-                    <h2 className="ref-mura-card-title">{cat.title}</h2>
-                    <span className="ref-mura-card-price-tag">
-                      ({cat.options.length}{" "}
-                      {cat.options.length === 1 ? "modifier" : "modifiers"})
-                    </span>
-                  </div>
-
-                  <div className="ref-mura-kv-row">
-                    <span className="ref-mura-kv-label">2×2 Matrix Sweep:</span>
-                    <span className="ref-mura-kv-value">
-                      {isSweepReady
-                        ? "⚡ 4-Way Sweep Ready"
-                        : `${cat.options.length}/4 options for full sweep`}
-                    </span>
-                  </div>
-
-                  {/* 2. Scrollable List of Modifiers inside this Category */}
-                  <div className="ref-modifier-items-list">
-                    {cat.options.length > 0 ? (
-                      cat.options.map((mod) => (
-                        <div key={mod.id} className="ref-modifier-option-row">
-                          <div className="ref-modifier-option-text">
-                            <strong className="ref-modifier-option-label">
-                              {mod.label}
-                            </strong>
-                            <span
-                              className="ref-modifier-option-token"
-                              title={mod.token}
-                            >
-                              {mod.token}
-                            </span>
-                          </div>
-                          <button
-                            type="button"
-                            className="ref-modifier-remove-btn"
-                            onClick={() => void handleDeleteModifier(cat.id, mod)}
-                            title={`Remove modifier "${mod.label}"`}
-                            aria-label={`Remove modifier ${mod.label}`}
-                          >
-                            ✕
-                          </button>
-                        </div>
-                      ))
-                    ) : (
-                      <div className="ref-modifier-empty-box">
-                        No modifiers in this category yet. Add manually or
-                        generate with AI on the right.
+            {masonryColumns.map((colCategories, colIdx) => (
+              <div key={colIdx} className="ref-modifiers-masonry-col">
+                {colCategories.map((cat) => {
+                  const isSweepReady = cat.options.length >= 4;
+                  return (
+                    <article
+                      key={cat.id}
+                      className="ref-project-card modifier-cat-card"
+                    >
+                      {/* 1. Card Header */}
+                      <div className="ref-mura-title-row">
+                        <h2 className="ref-mura-card-title">{cat.title}</h2>
+                        <span className="ref-mura-card-price-tag">
+                          ({cat.options.length}{" "}
+                          {cat.options.length === 1 ? "modifier" : "modifiers"})
+                        </span>
                       </div>
-                    )}
-                  </div>
 
-                  {/* 3. Bottom Action Pills */}
-                  <div className="ref-mura-actions-row">
-                    <button
-                      type="button"
-                      className="ref-mura-btn-solid"
-                      onClick={() => {
-                        setAiMode("into-existing");
-                        setAiTargetCatId(cat.id);
-                        setAiPrompt(
-                          `Generate 4 creative new modifiers for the "${cat.title}" category`
-                        );
-                      }}
-                    >
-                      ✦ Generate w/ AI
-                    </button>
+                      <div className="ref-mura-kv-row">
+                        <span className="ref-mura-kv-label">
+                          2×2 Matrix Sweep:
+                        </span>
+                        <span className="ref-mura-kv-value">
+                          {isSweepReady
+                            ? "⚡ 4-Way Sweep Ready"
+                            : `${cat.options.length}/4 options for full sweep`}
+                        </span>
+                      </div>
 
-                    <button
-                      type="button"
-                      className="ref-mura-btn-outline"
-                      onClick={() => {
-                        setManualTargetCatId(cat.id);
-                        const el = document.getElementById(
-                          "manual-modifier-label-input"
-                        );
-                        el?.focus();
-                      }}
-                    >
-                      + Add
-                    </button>
+                      {/* 2. 2-Column Grid of Modifiers inside this Category */}
+                      <div className="ref-modifier-items-list">
+                        {cat.options.length > 0 ? (
+                          cat.options.map((mod) => (
+                            <div
+                              key={mod.id}
+                              className="ref-modifier-option-row"
+                            >
+                              <div className="ref-modifier-option-text">
+                                <strong className="ref-modifier-option-label">
+                                  {mod.label}
+                                </strong>
+                                <span
+                                  className="ref-modifier-option-token"
+                                  title={mod.token}
+                                >
+                                  {mod.token}
+                                </span>
+                              </div>
+                            </div>
+                          ))
+                        ) : (
+                          <div className="ref-modifier-empty-box">
+                            No modifiers in this category yet. Add manually or
+                            generate with AI on the right.
+                          </div>
+                        )}
+                      </div>
 
-                    <button
-                      type="button"
-                      className={`ref-mura-btn-outline ${
-                        confirmDeleteCatId === cat.id
-                          ? "danger-confirm"
-                          : "danger"
-                      }`}
-                      onClick={() => void handleDeleteCategory(cat)}
-                      title={`Delete category ${cat.title}`}
-                    >
-                      {confirmDeleteCatId === cat.id
-                        ? "Confirm Delete?"
-                        : "Delete ✕"}
-                    </button>
-                  </div>
-                </article>
-              );
-            })}
+                      {/* 3. Bottom Action Pills (Right-aligned: Edit, Delete) */}
+                      <div
+                        className="ref-mura-actions-row"
+                        style={{ justifyContent: "flex-end", gap: "8px" }}
+                      >
+                        <button
+                          type="button"
+                          className="ref-mura-btn-solid"
+                          onClick={() => {
+                            setManualTargetCatId(cat.id);
+                            setAiTargetCatId(cat.id);
+                            setRightSidebarTab("edit");
+                            window.setTimeout(() => {
+                              const el = document.getElementById(
+                                "manual-modifier-label-input"
+                              );
+                              el?.focus();
+                            }, 30);
+                          }}
+                        >
+                          Edit
+                        </button>
+
+                        <button
+                          type="button"
+                          className={`ref-mura-btn-outline ${
+                            confirmDeleteCatId === cat.id
+                              ? "danger-confirm"
+                              : "danger"
+                          }`}
+                          onClick={() => void handleDeleteCategory(cat)}
+                          title={`Delete category ${cat.title}`}
+                        >
+                          {confirmDeleteCatId === cat.id
+                            ? "Confirm Delete?"
+                            : "Delete ✕"}
+                        </button>
+                      </div>
+                    </article>
+                  );
+                })}
+              </div>
+            ))}
           </div>
         </section>
 
-        {/* ==================== RIGHT 38%: AI GENERATOR & MANUAL CATEGORY/MODIFIER CREATOR ==================== */}
+        {/* ==================== RIGHT 38%: TABBED AI & MANUAL WORKSPACE ==================== */}
         <aside
           className="ref-studio-right-params-40"
           aria-label="Create Categories and Modifiers with AI or Manually"
         >
-          {/* PART 1: AI GENERATOR FOR CATEGORIES & MODIFIERS */}
-          <form className="ref-params-card" onSubmit={handleGenerateWithAi}>
-            <div className="ref-params-card-header">
-              <strong className="ref-soft-card-title">
-                ✦ Create with AI (Gemini)
-              </strong>
-              <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-                {!apiKey.trim() && (
-                  <button
-                    type="button"
-                    className="ref-studio-mod-manage-link"
-                    onClick={openSettingsModal}
-                    title="Configure Gemini API Key for live Gemini 2.5 Flash synthesis"
-                  >
-                    🔑 Set API Key
-                  </button>
-                )}
-                <span className="ref-pill-chip active">
-                  {aiMode === "new-category"
-                    ? "New Category + Modifiers"
-                    : "Add to Category"}
-                </span>
-              </div>
-            </div>
-
-            <div className="ref-params-pills-wrap">
-              <button
-                type="button"
-                className={`ref-pill-chip ${
-                  aiMode === "new-category" ? "active" : ""
-                }`}
-                onClick={() => setAiMode("new-category")}
-              >
-                ✦ Create New Category(ies)
-              </button>
-              <button
-                type="button"
-                className={`ref-pill-chip ${
-                  aiMode === "into-existing" ? "active" : ""
-                }`}
-                onClick={() => setAiMode("into-existing")}
-              >
-                ✦ Generate for Existing Category
-              </button>
-            </div>
-
-            {aiMode === "into-existing" && (
-              <div className="ref-params-field-group">
-                <span className="ref-field-label">
-                  Select Target Category:
-                </span>
-                <div className="ref-params-pills-wrap">
-                  {categories.map((cat) => (
-                    <button
-                      key={cat.id}
-                      type="button"
-                      className={`ref-pill-chip ${
-                        aiTargetCatId === cat.id ? "active" : ""
-                      }`}
-                      onClick={() => setAiTargetCatId(cat.id)}
-                    >
-                      {cat.title}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            <div className="ref-params-field-group">
-              <span className="ref-field-label">Quick AI Ideas:</span>
-              <div className="ref-params-pills-wrap">
-                {AI_MODIFIER_SUGGESTIONS.map((s) => (
-                  <button
-                    key={s.label}
-                    type="button"
-                    className="ref-pill-chip"
-                    onClick={() => setAiPrompt(s.prompt)}
-                  >
-                    {s.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <div className="ref-params-field-group" style={{ flex: 1 }}>
-              <label className="ref-field-label" htmlFor="ai-modifier-prompt">
-                Describe the category or modifiers you want to create:
-              </label>
-              <textarea
-                id="ai-modifier-prompt"
-                className="ref-params-textarea"
-                value={aiPrompt}
-                onChange={(e) => setAiPrompt(e.target.value)}
-                placeholder="e.g. Create a Fantasy Medieval Armor category with 4 detailed options, or Anamorphic Cinema Lenses..."
-              />
-            </div>
-
-            <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "space-between",
-                gap: "8px",
-              }}
-            >
-              <div className="ref-studio-feedback-slot" aria-live="polite">
-                {notice ? (
-                  <span className="ref-atelier-toast-pill">{notice}</span>
-                ) : (
-                  <span className="ref-atelier-shortcut-hint">
-                    Synced with Studio & SQLite
-                  </span>
-                )}
-              </div>
-
-              <button
-                type="submit"
-                className="ref-dark-pill-btn"
-                disabled={isGeneratingAi || !aiPrompt.trim()}
-              >
-                <span>
-                  {isGeneratingAi
-                    ? "Gemini creating..."
-                    : aiMode === "new-category"
-                    ? "✦ Create Category w/ AI"
-                    : "✦ Generate Modifiers w/ AI"}
-                </span>
-                <span className="ref-lime-badge">AI</span>
-              </button>
-            </div>
-          </form>
-
-          {/* PART 2: MANUAL CATEGORY & MODIFIER CREATION */}
-          <div className="ref-params-card">
-            <div className="ref-params-card-header">
-              <strong className="ref-soft-card-title">
-                Quick Manual Creation
-              </strong>
-              <span className="ref-pill-chip">Camera • Clothing • Angle • Light</span>
-            </div>
-
-            {/* Form A: New Category */}
-            <form
-              onSubmit={handleCreateCategory}
-              style={{ display: "flex", flexDirection: "column", gap: "6px" }}
-            >
-              <label
-                className="ref-field-label"
-                htmlFor="manual-category-title-input"
-              >
-                1. New Category (e.g. Camera, Clothing, Angle, Lighting, Pose)
-              </label>
-              <div style={{ display: "flex", gap: "8px" }}>
-                <input
-                  id="manual-category-title-input"
-                  type="text"
-                  className="ref-input"
-                  style={{ height: "36px" }}
-                  value={newCategoryTitle}
-                  onChange={(e) => setNewCategoryTitle(e.target.value)}
-                  placeholder="New category name..."
-                />
-                <button
-                  type="submit"
-                  className="ref-dark-pill-btn"
-                  style={{ height: "36px", flexShrink: 0 }}
-                  disabled={!newCategoryTitle.trim()}
-                >
-                  + Category
-                </button>
-              </div>
-            </form>
-
-            {/* Form B: New Modifier inside Selected Category */}
-            <form
-              onSubmit={handleCreateModifier}
-              style={{
-                display: "flex",
-                flexDirection: "column",
-                gap: "6px",
-                marginTop: "4px",
-              }}
-            >
-              <span className="ref-field-label">
-                2. New Modifier — Select Category:
-              </span>
-              <div className="ref-params-pills-wrap">
-                {categories.map((cat) => (
-                  <button
-                    key={cat.id}
-                    type="button"
-                    className={`ref-pill-chip ${
-                      manualTargetCatId === cat.id ? "active" : ""
-                    }`}
-                    onClick={() => setManualTargetCatId(cat.id)}
-                  >
-                    {cat.title}
-                  </button>
-                ))}
-              </div>
-
+          <div className="ref-params-card ref-params-deck">
+            <div className="ref-studio-param-deck-container">
+              {/* 3-Tab Switcher (AI Generator | Edit Category | New Category) */}
               <div
-                style={{
-                  display: "grid",
-                  gridTemplateColumns: "1fr 1.3fr",
-                  gap: "8px",
-                  marginTop: "2px",
-                }}
+                className="ref-studio-param-tabs"
+                role="tablist"
+                aria-label="Modifier Creation & Editing Tabs"
               >
-                <input
-                  id="manual-modifier-label-input"
-                  type="text"
-                  className="ref-input"
-                  style={{ height: "36px" }}
-                  value={newModLabel}
-                  onChange={(e) => setNewModLabel(e.target.value)}
-                  placeholder="Name (e.g. Leather Jacket)"
-                />
-                <input
-                  type="text"
-                  className="ref-input"
-                  style={{ height: "36px" }}
-                  value={newModToken}
-                  onChange={(e) => setNewModToken(e.target.value)}
-                  placeholder="Prompt token (e.g. vintage black leather jacket...)"
-                />
-              </div>
-
-              <div style={{ display: "flex", justifyContent: "flex-end" }}>
                 <button
-                  type="submit"
-                  className="ref-dark-pill-btn"
-                  style={{ height: "36px" }}
-                  disabled={!newModLabel.trim()}
+                  type="button"
+                  role="tab"
+                  aria-selected={rightSidebarTab === "ai"}
+                  className={`ref-studio-param-tab ${
+                    rightSidebarTab === "ai" ? "active" : ""
+                  }`}
+                  onClick={() => setRightSidebarTab("ai")}
                 >
-                  <span>+ Add Modifier</span>
+                  <span className="ref-studio-param-tab-title">
+                    ✦ AI Generator
+                  </span>
+                  <span className="ref-studio-param-tab-value">
+                    {aiMode === "new-category"
+                      ? "New Category"
+                      : categories.find((c) => c.id === aiTargetCatId)?.title ||
+                        "Into Category"}
+                  </span>
+                </button>
+
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={rightSidebarTab === "edit"}
+                  className={`ref-studio-param-tab ${
+                    rightSidebarTab === "edit" ? "active" : ""
+                  }`}
+                  onClick={() => setRightSidebarTab("edit")}
+                >
+                  <span className="ref-studio-param-tab-title">
+                    Edit Category
+                  </span>
+                  <span className="ref-studio-param-tab-value">
+                    {activeManualCategory
+                      ? `${activeManualCategory.title} (${activeManualCategory.options.length})`
+                      : "Select"}
+                  </span>
+                </button>
+
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={rightSidebarTab === "new-cat"}
+                  className={`ref-studio-param-tab ${
+                    rightSidebarTab === "new-cat" ? "active" : ""
+                  }`}
+                  onClick={() => setRightSidebarTab("new-cat")}
+                >
+                  <span className="ref-studio-param-tab-title">
+                    New Category
+                  </span>
+                  <span className="ref-studio-param-tab-value">
+                    {categories.length} Categories
+                  </span>
                 </button>
               </div>
-            </form>
+
+              {/* Active Tab Panel */}
+              <div className="ref-studio-param-tab-panel" role="tabpanel">
+                {/* TAB 1: AI GENERATOR */}
+                {rightSidebarTab === "ai" && (
+                  <form
+                    className="ref-studio-tab-section"
+                    style={{ height: "100%" }}
+                    onSubmit={handleGenerateWithAi}
+                  >
+                    <div className="ref-params-card-header">
+                      <strong className="ref-soft-card-title">
+                        ✦ Create with AI (Gemini)
+                      </strong>
+                      <div
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: "6px",
+                        }}
+                      >
+                        {!apiKey.trim() && (
+                          <button
+                            type="button"
+                            className="ref-studio-mod-manage-link"
+                            onClick={openSettingsModal}
+                            title="Configure Gemini API Key for live Gemini 2.5 Flash synthesis"
+                          >
+                            🔑 Set API Key
+                          </button>
+                        )}
+                        <span className="ref-pill-chip active">
+                          {aiMode === "new-category"
+                            ? "New Category + Modifiers"
+                            : "Add to Category"}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="ref-params-pills-wrap">
+                      <button
+                        type="button"
+                        className={`ref-pill-chip ${
+                          aiMode === "new-category" ? "active" : ""
+                        }`}
+                        onClick={() => setAiMode("new-category")}
+                      >
+                        ✦ Create New Category(ies)
+                      </button>
+                      <button
+                        type="button"
+                        className={`ref-pill-chip ${
+                          aiMode === "into-existing" ? "active" : ""
+                        }`}
+                        onClick={() => setAiMode("into-existing")}
+                      >
+                        ✦ Generate for Existing Category
+                      </button>
+                    </div>
+
+                    {aiMode === "into-existing" && (
+                      <div className="ref-params-field-group">
+                        <span className="ref-field-label">
+                          Select Target Category:
+                        </span>
+                        <div className="ref-params-pills-wrap">
+                          {categories.map((cat) => (
+                            <button
+                              key={cat.id}
+                              type="button"
+                              className={`ref-pill-chip ${
+                                aiTargetCatId === cat.id ? "active" : ""
+                              }`}
+                              onClick={() => setAiTargetCatId(cat.id)}
+                            >
+                              {cat.title}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    <div className="ref-params-field-group">
+                      <span className="ref-field-label">Quick AI Ideas:</span>
+                      <div className="ref-params-pills-wrap">
+                        {AI_MODIFIER_SUGGESTIONS.map((s) => (
+                          <button
+                            key={s.label}
+                            type="button"
+                            className="ref-pill-chip"
+                            onClick={() => setAiPrompt(s.prompt)}
+                          >
+                            {s.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="ref-params-field-group" style={{ flex: 1 }}>
+                      <label
+                        className="ref-field-label"
+                        htmlFor="ai-modifier-prompt"
+                      >
+                        Describe the category or modifiers you want to create:
+                      </label>
+                      <textarea
+                        id="ai-modifier-prompt"
+                        className="ref-params-textarea"
+                        value={aiPrompt}
+                        onChange={(e) => setAiPrompt(e.target.value)}
+                        placeholder="e.g. Create a Fantasy Medieval Armor category with 4 detailed options, or Anamorphic Cinema Lenses..."
+                      />
+                    </div>
+
+                    <div
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "space-between",
+                        gap: "8px",
+                        marginTop: "auto",
+                      }}
+                    >
+                      <div
+                        className="ref-studio-feedback-slot"
+                        aria-live="polite"
+                      >
+                        {notice ? (
+                          <span className="ref-atelier-toast-pill">
+                            {notice}
+                          </span>
+                        ) : (
+                          <span className="ref-atelier-shortcut-hint">
+                            Synced with Studio & SQLite
+                          </span>
+                        )}
+                      </div>
+
+                      <button
+                        type="submit"
+                        className="ref-dark-pill-btn"
+                        disabled={isGeneratingAi || !aiPrompt.trim()}
+                      >
+                        <span>
+                          {isGeneratingAi
+                            ? "Gemini creating..."
+                            : aiMode === "new-category"
+                            ? "✦ Create Category w/ AI"
+                            : "✦ Generate Modifiers w/ AI"}
+                        </span>
+                        <span className="ref-lime-badge">AI</span>
+                      </button>
+                    </div>
+                  </form>
+                )}
+
+                {/* TAB 2: EDIT CATEGORY (ADD & REMOVE MODIFIERS) */}
+                {rightSidebarTab === "edit" && (
+                  <div className="ref-studio-tab-section">
+                    <div className="ref-params-card-header">
+                      <strong className="ref-soft-card-title">
+                        Edit Category:{" "}
+                        {activeManualCategory?.title || "None Selected"}
+                      </strong>
+                      <span className="ref-pill-chip active">
+                        {activeManualCategory?.options.length ?? 0} Modifiers
+                      </span>
+                    </div>
+
+                    <form
+                      onSubmit={handleCreateModifier}
+                      style={{
+                        display: "flex",
+                        flexDirection: "column",
+                        gap: "8px",
+                      }}
+                    >
+                      <span className="ref-field-label">
+                        Add Modifier to{" "}
+                        {activeManualCategory?.title || "Category"}:
+                      </span>
+                      <div
+                        style={{
+                          display: "grid",
+                          gridTemplateColumns: "1fr 1.3fr",
+                          gap: "8px",
+                        }}
+                      >
+                        <input
+                          id="manual-modifier-label-input"
+                          type="text"
+                          className="ref-input"
+                          style={{ height: "36px" }}
+                          value={newModLabel}
+                          onChange={(e) => setNewModLabel(e.target.value)}
+                          placeholder="Name (e.g. Leather Jacket)"
+                        />
+                        <input
+                          type="text"
+                          className="ref-input"
+                          style={{ height: "36px" }}
+                          value={newModToken}
+                          onChange={(e) => setNewModToken(e.target.value)}
+                          placeholder="Prompt token (e.g. vintage black leather jacket...)"
+                        />
+                      </div>
+
+                      <div
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "space-between",
+                          gap: "8px",
+                        }}
+                      >
+                        <div
+                          className="ref-studio-feedback-slot"
+                          aria-live="polite"
+                        >
+                          {notice ? (
+                            <span className="ref-atelier-toast-pill">
+                              {notice}
+                            </span>
+                          ) : (
+                            <span className="ref-atelier-shortcut-hint">
+                              4+ options enable 2×2 Matrix Sweep
+                            </span>
+                          )}
+                        </div>
+                        <button
+                          type="submit"
+                          className="ref-dark-pill-btn"
+                          style={{ height: "36px", flexShrink: 0 }}
+                          disabled={!newModLabel.trim() || !activeManualCategory}
+                        >
+                          <span>+ Add Modifier</span>
+                        </button>
+                      </div>
+                    </form>
+
+                    {activeManualCategory && (
+                      <div
+                        className="ref-params-field-group"
+                        style={{ marginTop: "4px" }}
+                      >
+                        <span className="ref-field-label">
+                          Current Modifiers in {activeManualCategory.title} (
+                          {activeManualCategory.options.length}):
+                        </span>
+                        <div className="ref-modifier-items-list">
+                          {activeManualCategory.options.length > 0 ? (
+                            activeManualCategory.options.map((mod) => (
+                              <div
+                                key={mod.id}
+                                className="ref-modifier-option-row"
+                              >
+                                <div className="ref-modifier-option-text">
+                                  <strong className="ref-modifier-option-label">
+                                    {mod.label}
+                                  </strong>
+                                  <span
+                                    className="ref-modifier-option-token"
+                                    title={mod.token}
+                                  >
+                                    {mod.token}
+                                  </span>
+                                </div>
+                                <button
+                                  type="button"
+                                  className="ref-modifier-remove-btn"
+                                  onClick={() =>
+                                    void handleDeleteModifier(
+                                      activeManualCategory.id,
+                                      mod
+                                    )
+                                  }
+                                  title={`Remove ${mod.label}`}
+                                  aria-label={`Remove ${mod.label}`}
+                                >
+                                  ✕
+                                </button>
+                              </div>
+                            ))
+                          ) : (
+                            <div className="ref-modifier-empty-box">
+                              No modifiers in this category yet. Use the form
+                              above to add one.
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* TAB 3: NEW CATEGORY */}
+                {rightSidebarTab === "new-cat" && (
+                  <form
+                    onSubmit={handleCreateCategory}
+                    className="ref-studio-tab-section"
+                  >
+                    <div className="ref-params-card-header">
+                      <strong className="ref-soft-card-title">
+                        Create New Category
+                      </strong>
+                      <span className="ref-pill-chip">
+                        Camera • Clothing • Angle • Light
+                      </span>
+                    </div>
+
+                    <div className="ref-params-field-group">
+                      <label
+                        className="ref-field-label"
+                        htmlFor="manual-category-title-input"
+                      >
+                        Category Name (e.g. Camera, Clothing, Angle, Lighting,
+                        Pose):
+                      </label>
+                      <input
+                        id="manual-category-title-input"
+                        type="text"
+                        className="ref-input"
+                        style={{ height: "38px" }}
+                        value={newCategoryTitle}
+                        onChange={(e) => setNewCategoryTitle(e.target.value)}
+                        placeholder="Enter new category name..."
+                      />
+                    </div>
+
+                    <div
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "space-between",
+                        gap: "8px",
+                      }}
+                    >
+                      <div
+                        className="ref-studio-feedback-slot"
+                        aria-live="polite"
+                      >
+                        {notice ? (
+                          <span className="ref-atelier-toast-pill">
+                            {notice}
+                          </span>
+                        ) : (
+                          <span className="ref-atelier-shortcut-hint">
+                            Creates category & opens Edit tab
+                          </span>
+                        )}
+                      </div>
+
+                      <button
+                        type="submit"
+                        className="ref-dark-pill-btn"
+                        style={{ height: "38px", flexShrink: 0 }}
+                        disabled={!newCategoryTitle.trim()}
+                      >
+                        <span>+ Create Category</span>
+                      </button>
+                    </div>
+                  </form>
+                )}
+              </div>
+            </div>
           </div>
         </aside>
       </div>

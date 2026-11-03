@@ -344,6 +344,7 @@ textarea {
   flex-direction: column;
   gap: 6px;
   padding-top: 8px;
+  padding-bottom: 6px;
 }
 
 .ref-sidebar-section-label {
@@ -392,37 +393,8 @@ textarea {
   font-weight: 800;
 }
 
-.ref-sidebar-project-box {
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
-  padding: 2px 2px;
-}
-
-.ref-sidebar-project-input {
-  width: 100%;
-  height: 36px;
-  padding: 0 11px;
-  border-radius: 10px;
-  border: 1.5px solid rgba(20, 33, 61, 0.28);
-  background-color: #e5e5e5;
-  color: #000000;
-  font-size: 0.78rem;
-  font-weight: 700;
-  outline: none;
-  transition: border-color 0.15s ease, background-color 0.15s ease;
-}
-
-.ref-sidebar-project-input::placeholder {
-  color: rgba(20, 33, 61, 0.52);
-}
-
-.ref-sidebar-project-input:focus {
-  border-color: #fca311;
-  background-color: #ffffff;
-}
-
 .ref-sidebar-nav-item.new-project-btn {
+  margin-top: auto;
   background-color: #14213d;
   border-color: #14213d;
   color: #ffffff;
@@ -2068,28 +2040,42 @@ textarea {
   min-height: 0;
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  grid-auto-rows: minmax(270px, auto);
+  align-items: start;
+  align-content: start;
   gap: 12px;
   overflow-y: auto;
-  padding-right: 4px;
-  padding-bottom: 6px;
+  padding: 8px 6px 14px 4px;
+}
+
+.ref-modifiers-masonry-col {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+
+@media (max-width: 900px) {
+  .ref-modifiers-cards-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 .ref-project-card.modifier-cat-card {
   cursor: default;
   height: auto;
-  min-height: 270px;
+  min-height: 0;
+  max-height: none;
+  overflow: visible;
 }
 
 .ref-modifier-items-list {
-  flex: 1;
-  min-height: 120px;
-  max-height: 195px;
-  overflow-y: auto;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  padding-right: 2px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-content: start;
+  gap: 8px;
+  min-height: 0;
+  max-height: none;
+  overflow: visible;
 }
 
 .ref-modifier-option-row {
@@ -2159,7 +2145,7 @@ textarea {
 }
 
 .ref-modifier-empty-box {
-  flex: 1;
+  grid-column: 1 / -1;
   display: flex;
   align-items: center;
   justify-content: center;

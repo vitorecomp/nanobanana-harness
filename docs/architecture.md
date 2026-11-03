@@ -1,108 +1,103 @@
-# System Architecture — Nano Banana Studio 🍌✦
+# System Architecture — Nano Banana Atelier Studio 🍌✦
 
-This document details the distributed architecture of **Nano Banana Studio**, illustrating how the **Nginx Reverse Proxy Gateway (`nginx:1.27-alpine`)**, **Next.js Frontend**, **Python Flask + SQLAlchemy Backend**, **PostgreSQL 16 Database**, **RustFS S3-Compatible Object Storage Bucket (`rustfs/rustfs:latest`)**, **Social OAuth Providers (Google & Facebook)**, and **Google Gemini Nano Banana API** interact with strict security and low latency.
+This document details the software architecture of **Nano Banana Atelier Studio**, illustrating the interactions between the **Next.js 15 / React 19 Frontend WebView**, the **Tauri v2 Native Rust Core**, the **Local SQLite Database (`nanobanana.sqlite3`)**, the **Native OS Filesystem (`~/Pictures/nanobanana/`)**, and **Google Cloud Gemini APIs (`gemini-2.5-flash` and `gemini-2.5-flash-image`)**.
 
 ---
 
-## 1. Component Topology & Separation of Planes
+## 1. System Topology & Separation of Tiers
 
-The system architecture is built on three core principles:
+Nano Banana Studio is built on three architectural tiers:
 
-1. **Unified Nginx Reverse Proxy Gateway (`docker-compose.dev.yml`, `docker-compose.yml`, and `infra/deployment.yaml`)**:
-   - An **Nginx (`infra/nginx/nginx.conf`)** reverse proxy receives incoming traffic on the **Port-Padded** gateway port (`:18080` in Dev `+10000`; `:28080` in Prod `+20000`) and routes requests transparently to `frontend:3000` (`/`), `backend:8000` (`/api/`), `rustfs:9000` (`/s3/`), and `rustfs:9001` (`/rustfs-console/`).
-2. **Control, Co-Pilot & Persistence Plane (`Frontend <-> Nginx <-> Modular Flask Backend <-> PostgreSQL + RustFS Bucket`)**:
-   - Implemented in an enterprise modular package (`backend/app/{core,db,models,services,api/v1}` + `backend/wsgi.py`). Manages user identity (frictionless auto-provisioned `usr_local_dev` in Dev mode when `REQUIRE_AUTH=false`, and enforced **Google OAuth 2.0** or **Facebook Login** in Production mode when `REQUIRE_AUTH=true`), heuristic prompt engineering, multi-turn conversation history (`conversations`, `conversation_turns`), and S3 image storage in **RustFS** (`nanobanana-images`) for later consultation. **No Gemini API key ever transits through this plane.**
-3. **Zero-Storage Generative Execution Plane (`Browser RAM -> Google Gemini API`)**:
-   - Connects the user's browser **directly** to `https://generativelanguage.googleapis.com` using the API key held exclusively in volatile React memory (`useState`), bypassing Nginx and the Python Flask backend completely.
+1. **Presentation & Creative UI Tier (`frontend/`)**:
+   - Engineered in **Next.js 15** with **React 19** and TypeScript.
+   - Operates inside an OS-native desktop WebView (or local browser during standalone development).
+   - Manages prompt composition, the `2×2` Quad Generation Matrix, side-by-side Lightbox comparisons, the interactive branching timeline, and modifier categories.
+   - Enforces the **Zero-Storage Volatile RAM Policy**: the Gemini API key lives in `useState` and never leaves volatile client memory without explicit user consent.
+2. **Native Orchestration Tier (`src-tauri/`)**:
+   - Engineered in **Rust** using **Tauri v2**.
+   - Handles IPC commands dispatched by the frontend bridge (`frontend/src/core/tauri/tauriBridge.ts`).
+   - Manages relational SQLite persistence via `rusqlite` ([`src-tauri/src/db.rs`](file:///usr/local/google/home/vieiravitor/workspace/opensource/nanobanana-inspiration/src-tauri/src/db.rs)).
+   - Manages filesystem operations, project directory synchronization, and image writing ([`src-tauri/src/storage.rs`](file:///usr/local/google/home/vieiravitor/workspace/opensource/nanobanana-inspiration/src-tauri/src/storage.rs)).
+   - Executes native prompt diagnosis and refinement heuristics ([`src-tauri/src/copilot.rs`](file:///usr/local/google/home/vieiravitor/workspace/opensource/nanobanana-inspiration/src-tauri/src/copilot.rs)).
+3. **Generative Execution Plane (Direct Client HTTPS)**:
+   - Connects the user's browser/WebView **directly** to `https://generativelanguage.googleapis.com` via standard HTTPS fetch calls ([`nanobananaClient.ts`](file:///usr/local/google/home/vieiravitor/workspace/opensource/nanobanana-inspiration/frontend/src/features/studio/services/nanobananaClient.ts)).
+   - Uses `cache: "no-store"` to ensure generated image buffers and API tokens are never cached in browser disk caches.
+
+---
+
+## 2. Component Architecture Diagram
 
 ```mermaid
 flowchart TB
-    subgraph Client["Client Layer — User Browser"]
+    subgraph ClientHost["Host Operating System (Linux / macOS / Windows)"]
         direction TB
-        Landing["Editorial Showcase Area\n(Hero, 4-Stage Walkthrough, 3-Turn Simulator)"]
-        AuthModal["Social Sign-In Modal (Google & Facebook)\n(Optional in Dev, Required in Prod)"]
-        Studio["Interactive Studio\n(Co-Pilot Controls, Live Canvas, Timeline)"]
-        HistoryPanel["PostgreSQL History & RustFS Gallery\n(Later Consultation of Prompts & Images)"]
-        VolatileRAM["Volatile React State (useState)\n🔑 Gemini API Key (RAM Only)"]
-    end
 
-    subgraph ExternalProviders["External Providers (Direct HTTPS)"]
-        direction TB
-        SocialOAuth["Google Identity Services &\nFacebook OAuth"]
-        NanoBananaAPI["Google Gemini API\ngemini-2.5-flash-image\n(:generateContent)"]
-    end
-
-    subgraph PodmanNetwork["Container / K8s Infrastructure (Port Pad +10000 Dev / +20000 Prod)"]
-        direction TB
-        NginxGW["Nginx Reverse Proxy Gateway (nginx/nginx.conf)\nDev :18080 | Prod :28080\nRoutes: / | /api/ | /s3/ | /rustfs-console/ | /nginx-health"]
-
-        subgraph FrontendContainer["Next.js Frontend (Dev :13000 / Prod :23000 -> :3000)"]
-            NextApp["Next.js App Router + /api/* Rewrites"]
+        subgraph WebViewContainer["Tauri v2 Native Window (100vw × 100vh Zero-Scroll)"]
+            direction TB
+            UI["Neo-Brutalist Studio Shell\n• AppShell & Collapsible Sidebar\n• Studio Quad Canvas (2×2 Matrix)\n• Branching Timeline (de #X ➔)\n• Dual-Mode Prompt Editor"]
+            RAM["Volatile React RAM State\n🔑 Google Gemini API Key (useState)"]
+            Bridge["Universal IPC Bridge (tauriBridge.ts)\n• Native Tauri IPC: invoke('db_*', ...)\n• Dev Fallback: fetch('/api/db?action=...')"]
         end
 
-        subgraph BackendContainer["Modular Python Flask + SQLAlchemy Backend (Dev :18000 / Prod :28000 -> :8000)"]
-            Guard["Zero-Storage Security Hook\n(app/core/middleware.py)"]
-            AuthRouter["Auth Blueprint & Service\n(app/api/v1/auth_routes.py & app/services/auth_service.py)"]
-            PromptEngine["Prompt Co-Pilot Blueprint & Service\n(app/api/v1/copilot_routes.py & app/services/copilot_service.py)"]
-            HistoryRouter["Conversations & Gallery Blueprints\n(app/api/v1/conversation_routes.py & gallery_routes.py)"]
-            StorageService["RustFS / S3 Object Storage Service\n(app/services/storage_service.py)"]
+        subgraph RustCore["Tauri v2 Core Engine (Rust)"]
+            direction TB
+            IPC["IPC Dispatcher (src/lib.rs)"]
+            DB["rusqlite Database Manager (src/db.rs)\nPRAGMA journal_mode = WAL"]
+            Storage["OS Filesystem Manager (src/storage.rs)"]
+            Copilot["Prompt Diagnosis & Heuristics (src/copilot.rs)"]
         end
 
-        PostgresDB[("PostgreSQL 16 (Dev :15432 / Prod :25432 -> :5432)\nSQLAlchemy ORM Tables: users,\nconversations, conversation_turns")]
-        RustfsBucket[("RustFS Object Storage (Dev :19000 / Prod :29000 -> :9000)\nrustfs/rustfs:latest (S3 Compatible)\nBucket: nanobanana-images")]
+        subgraph LocalDisk["Workstation Disk Storage"]
+            SQLiteFile[("SQLite 3 Database\n~/.local/share/com.nanobanana.studio/nanobanana.sqlite3\nTables: users, conversations, turns, app_vault")]
+            ProjectFolders[("Project Pictures Root\n~/Pictures/nanobanana/<project-name>/\n• turn-<id>.png\n• turn-<id>-var-<idx>.png")]
+        end
     end
 
-    Landing -->|"Dev: Direct Entry (usr_local_dev)\nProd: Sign In with Google/Facebook"| Studio
-    Landing -.->|"Optional in Dev / Required in Prod"| AuthModal
-    AuthModal <-->|"OAuth 2.0"| SocialOAuth
-    AuthModal -->|"POST /api/auth/google or /facebook"| NginxGW
-    Studio -->|"GET / & Static Assets"| NginxGW
-    Studio -->|"POST /api/interactive/analyze & /refine"| NginxGW
-    Studio -->|"POST /api/conversations/<id>/turns"| NginxGW
-    HistoryPanel -->|"GET /api/conversations & /gallery & /api/bucket/*"| NginxGW
+    subgraph GoogleCloud["Google AI Cloud Services (Direct Client HTTPS)"]
+        GeminiFlash["gemini-2.5-flash\n• Concept Scene Analysis\n• 3 Dynamic Directional Emphases"]
+        GeminiImage["gemini-2.5-flash-image\n• 4× Parallel Quad Image Generation\n• Multimodal Surgical Delta Refinement"]
+    end
 
-    NginxGW -->|"Location /"| NextApp
-    NginxGW -->|"Location /api/"| Guard
-    NginxGW -->|"Location /s3/"| RustfsBucket
+    UI -->|"1. User enters idea"| RAM
+    RAM ===>|"2. Direct HTTPS call (AIza... in RAM)"| GeminiFlash
+    GeminiFlash ===>|"3. Returns 3 prompt emphases"| UI
+    RAM ===>|"4. Parallel render (4× HTTPS calls)"| GeminiImage
+    GeminiImage ===>|"5. Returns 4 image buffers"| UI
 
-    Guard --> AuthRouter
-    Guard --> PromptEngine
-    Guard --> HistoryRouter
-
-    AuthRouter -->|"SQLAlchemy Upsert User"| PostgresDB
-    HistoryRouter -->|"SQLAlchemy Read/Write Conversations & Turns"| PostgresDB
-    HistoryRouter --> StorageService
-    StorageService -->|"PutObject / GetObject S3"| RustfsBucket
-
-    VolatileRAM -->|"Ephemeral RAM Read"| Studio
-    Studio ===>|"DIRECT HTTPS CALL (x-goog-api-key)\nNever passes through Nginx or Flask Backend"| NanoBananaAPI
-    NanoBananaAPI ===>|"Returns Base64 Image (inlineData)"| Studio
+    UI -->|"6. Save turn & variants"| Bridge
+    Bridge --> IPC
+    IPC --> DB
+    IPC --> Storage
+    IPC --> Copilot
+    DB --> SQLiteFile
+    Storage --> ProjectFolders
 ```
 
 ---
 
-## 2. Port Pad Convention (`+10000` Dev vs. `+20000` Prod)
+## 3. Universal Bridge & Development Abstraction
 
-| Service | Internal Port | **Dev Environment (`docker-compose.dev.yml`)**<br>Port Pad **`+10000` (`1xxxx`)** | **Prod Environment (`docker-compose.yml`)**<br>Port Pad **`+20000` (`2xxxx`)** |
-| :--- | :---: | :---: | :---: |
-| **`nginx`** *(Unified Gateway)* | `80` | `http://localhost:18080` | `http://localhost:28080` |
-| **`frontend`** *(Next.js)* | `3000` | `http://localhost:13000` | `http://localhost:23000` |
-| **`backend`** *(Flask `wsgi:app`)* | `8000` | `http://localhost:18000` | `http://localhost:28000` |
-| **`postgres`** *(PostgreSQL 16)* | `5432` | `localhost:15432` | `localhost:25432` |
-| **`rustfs`** *(S3 API)* | `9000` | `http://localhost:19000` | `http://localhost:29000` |
-| **`rustfs`** *(Web Console)* | `9001` | `http://localhost:19001` | `http://localhost:29001` |
+To ensure fluid development velocity without requiring full Rust compilation during every CSS or React component change, the platform implements a **Universal Bridge** ([`frontend/src/core/tauri/tauriBridge.ts`](file:///usr/local/google/home/vieiravitor/workspace/opensource/nanobanana-inspiration/frontend/src/core/tauri/tauriBridge.ts)):
+
+```mermaid
+flowchart LR
+    Caller["Frontend Service / Component"] --> Bridge["tauriBridge.ts"]
+
+    Bridge --> Check{"window.__TAURI_INTERNALS__\npresent?"}
+    
+    Check -->|YES (Desktop App)| Native["Tauri Core IPC\n@tauri-apps/api/core.invoke()"]
+    Check -->|NO (Web Dev)| DevRoute["Node.js 22 SQLite Route\nfetch('/api/db?action=...')"]
+
+    Native --> Rusqlite["rusqlite (Rust)"]
+    DevRoute --> NodeSqlite["node:sqlite (Next.js Node)"]
+```
+
+Both paths enforce identical relational schemas, foreign key cascades, and directory creation semantics.
 
 ---
 
-## 3. Authentication Modes: Local Dev Instance vs. Production OAuth (Google & Facebook)
+## 4. State & Data Flow Invariants
 
-### 3.1 Local / Development Mode (`docker-compose.dev.yml`, `REQUIRE_AUTH=false`)
-In `docker-compose.dev.yml`, `REQUIRE_AUTH` and `NEXT_PUBLIC_REQUIRE_AUTH` default to `false` so developers running a local instance can jump straight into the Interactive Studio without any login barrier:
-- Clicking **"INICIAR CRIAÇÃO ★"** or **"Abrir Studio"** enters the Studio immediately as `usr_local_dev` (`Local Dev Instance`, `dev@localhost`).
-- The Flask + SQLAlchemy backend automatically ensures the `usr_local_dev` record exists in PostgreSQL (`users`), so conversation saving and RustFS bucket gallery consultation work out-of-the-box.
-- Developers can still click the navbar sign-in button at any time to test **Google** or **Facebook** authentication.
-
-### 3.2 Production Mode (`docker-compose.yml` & Kubernetes `infra/deployment.yaml`, `REQUIRE_AUTH=true`)
-In `docker-compose.yml` and Kubernetes (`infra/deployment.yaml` / `infra/k8s/`), `REQUIRE_AUTH` and `NEXT_PUBLIC_REQUIRE_AUTH` are set to `true`:
-- Entering the Studio requires authenticating via **Google (`POST /api/auth/google`)** or **Facebook (`POST /api/auth/facebook`)**.
-- The Flask backend verifies the token and upserts the `User` in PostgreSQL via SQLAlchemy.
+1. **Zero Base64 in Database**: SQLite stores exclusively metadata, prompt texts, and file paths (`image_path`). Raw image binary data is written directly to disk (`~/Pictures/nanobanana/`), keeping database size minimal and queries instantaneous.
+2. **Non-Destructive Lineage**: Every turn stores `parent_turn_number`. Returning to an earlier turn does not mutate prior records; it seeds the editor for a new child branch.
+3. **Filesystem Synchronization**: Renaming a project in the application UI invokes `db_rename_project`, which updates both SQLite and renames the physical directory on disk (`~/Pictures/nanobanana/<new-name>/`), updating all stored image paths atomically.

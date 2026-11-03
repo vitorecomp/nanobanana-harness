@@ -1,17 +1,26 @@
-# Official Documentation — Nano Banana Studio 🍌✦
+# Official Documentation — Nano Banana Atelier Studio 🍌✦
 
-Welcome to the comprehensive technical and architectural documentation for **Nano Banana Studio**, an interactive web platform for AI-assisted art direction and multi-turn conversational image creation powered by **Google Nano Banana (`gemini-2.5-flash-image`)**.
+Welcome to the comprehensive technical and architectural documentation suite for **Nano Banana Atelier Studio**, an installable Desktop and Web studio for AI-assisted visual art direction and multi-turn conversational image creation powered by **Google Nano Banana (`gemini-2.5-flash-image`)**, **Tauri v2**, **Next.js 15 / React 19**, and **Local SQLite**.
 
-The platform combines:
-- **Next.js Frontend (Editorial Neo-Brutalist UI)** with an **Editorial Showcase Area** (4-stage interactive walkthrough + 3-turn evolution simulator) and an **Interactive Studio**.
-- **Nginx Reverse Proxy Gateway (`infra/nginx/nginx.conf`)** fronting all services (`/`, `/api/`, `/s3/`, `/rustfs-console/`, `/nginx-health`) with a **Port Pad Convention (`+10000` in Dev `docker-compose.dev.yml` and `+20000` in Production `docker-compose.yml`)**.
-- **Python Interactive Prompt Co-Pilot (Modular Flask + SQLAlchemy + Alembic)** for completeness diagnostics (`0–100%`), guided questions, prompt variations, and multi-turn refinement.
-- **Flexible Authentication (Frictionless Local Dev + Google & Facebook OAuth)**:
-  - **Local Development (`docker-compose.dev.yml`, `REQUIRE_AUTH=false`)**: No login required — automatically uses the local developer profile (`usr_local_dev`) so developers can immediately use the Studio, PostgreSQL history, and RustFS bucket on a local instance (with optional Google/Facebook sign-in available in the navbar).
-  - **Production (`docker-compose.yml` & Kubernetes `infra/deployment.yaml`, `REQUIRE_AUTH=true`)**: Enforces **Google OAuth 2.0 (`POST /api/auth/google`)** or **Facebook Login (`POST /api/auth/facebook`)**, persisting users, conversations, and full prompt evolution history in **PostgreSQL 16 (`postgres`)** via **SQLAlchemy** and versioned **Alembic** migrations.
-- **RustFS Object Storage Bucket (`rustfs/rustfs:latest`, S3-compatible)** storing all generated and iterated images inside the `nanobanana-images` bucket for **later consultation** (`GET /api/users/<id>/gallery`) and 1-click branching.
-- **Strict Zero-Storage Gemini API Key Policy**: Calls to Google Nano Banana go directly from the user's browser using an API key held **exclusively in volatile React RAM (`useState`)**, never touching Nginx, the Python Flask backend, PostgreSQL, or RustFS.
-- **Kubernetes Application Manifests (`infra/deployment.yaml` & `infra/k8s/`)**: Production Kubernetes manifests deploying only the application tier (`frontend`, `backend`, `nginx` gateway, `ingress`, `hpa`) connecting to externally provisioned PostgreSQL and RustFS/S3 Bucket infrastructure.
+---
+
+## 🍌 Architectural Highlights
+
+The platform is designed around four core technical pillars:
+
+1. **Lightweight Native Desktop Application (`src-tauri/`)**:
+   - Engineered with **Tauri v2** (Rust core) and **WebKitGTK / WebKit / WebView2**, outputting lightweight (~12 MB) cross-platform native packages (`.deb`, `.AppImage`, `.dmg`, `.msi`).
+   - Zero Docker, Podman, PostgreSQL, or S3 container dependencies.
+2. **Local-First SQLite Persistence (`nanobanana.sqlite3`)**:
+   - Managed natively by `rusqlite` in `src-tauri/src/db.rs` with automatic Node.js 22 SQLite fallback in `frontend/src/app/api/db/route.ts` for browser development.
+   - Operates in WAL mode with schema for `users`, `conversations`, `conversation_turns`, and `app_vault`.
+3. **Native OS Filesystem Image Storage (`~/Pictures/nanobanana/`)**:
+   - High-resolution `.png` frames are organized directly on disk by project name (`~/Pictures/nanobanana/<project-name>/`), remaining accessible from the file manager even if a project is removed from the app UI.
+4. **4-Quad Parallel Generation & Non-Destructive Lineage**:
+   - Every round prompts `gemini-2.5-flash` to formulate 3 distinct scene emphases, dispatching all 4 variations concurrently to `gemini-2.5-flash-image`.
+   - Branching timeline with origin tracking (`de #X ➔`), `⚡ Surgical Delta` mode, and `🧬 Pin DNA` character facial locks.
+5. **Zero-Storage Volatile RAM API Key Policy**:
+   - The creator's Google Gemini API Key (`AIza...`) resides strictly in volatile React component RAM (`useState`), with an optional opt-in toggle to persist locally in the desktop's SQLite `app_vault` table.
 
 ---
 
@@ -19,51 +28,60 @@ The platform combines:
 
 | Document | Description |
 | :--- | :--- |
-| **[1. Overview & Index (`README.md`)](./README.md)** | Executive overview, architectural pillars, end-to-end user journey, and quickstart commands. |
-| **[2. System Architecture (`architecture.md`)](./architecture.md)** | Full component topology (Nginx Gateway, Next.js, Flask + SQLAlchemy, PostgreSQL 16, RustFS S3 Bucket, Local Dev / Google / Facebook Auth, and direct Browser → Google Nano Banana flow) with Mermaid diagrams. |
-| **[3. Data Models (`data-models.md`)](./data-models.md)** | Entity-Relationship diagram (`erDiagram`), PostgreSQL SQLAlchemy data dictionary (`users`, `conversations`, `conversation_turns`), RustFS S3 object key hierarchy, and TypeScript interfaces. |
-| **[4. Processing Pipelines (`processing-pipelines.md`)](./processing-pipelines.md)** | Step-by-step sequence and flowchart diagrams for all 5 core processing pipelines (Prompt Diagnostics, Multi-Turn Refinement, Direct Browser Generation in RAM, Postgres+RustFS Persistence, and Nginx Gateway Routing). |
-| **[5. Database & RustFS Bucket API Contracts (`database-and-bucket.md`)](./database-and-bucket.md)** | Detailed Request/Response JSON contracts for `/api/auth/google`, `/api/auth/facebook`, `/api/conversations`, `/api/conversations/<id>/turns`, `/api/users/<id>/gallery`, and `/api/bucket/<key>`. |
-| **[6. Zero-Storage Security & Social Auth (`security-and-auth.md`)](./security-and-auth.md)** | Volatile RAM API key isolation (`useState`), Flask `zero_storage_api_key_guard` middleware, Local Dev mode (`REQUIRE_AUTH=false`), and Google/Facebook OAuth configuration. |
-| **[7. Podman Compose & Docker Compose Operations (`podman-compose.md`)](./podman-compose.md)** | Complete guide for `docker-compose.dev.yml` (Port Pad `+10000`) and `docker-compose.yml` (Port Pad `+20000`), port table, persistent volumes, and troubleshooting. |
+| **[1. Documentation Index (`README.md`)](./README.md)** | Executive architecture summary, core pillars, and documentation directory. |
+| **[2. System Architecture (`architecture.md`)](./architecture.md)** | Component topology (Tauri v2 Rust Core, Next.js WebView, Universal IPC Bridge, SQLite, Filesystem, and Direct Browser Gemini API). |
+| **[3. Data Models (`data-models.md`)](./data-models.md)** | SQLite entity-relationship schema (`users`, `conversations`, `conversation_turns`, `app_vault`) and TypeScript interfaces. |
+| **[4. Processing Pipelines (`processing-pipelines.md`)](./processing-pipelines.md)** | Step-by-step sequence and flowcharts for Quad Generation (1+3), Surgical Delta, Branching Lineage, Filesystem Sync, and Modifiers AI. |
+| **[5. Desktop Operations & Packaging (`desktop-operations.md`)](./desktop-operations.md)** | Native desktop compilation, packaging (`.deb`, `.AppImage`, `.dmg`, `.msi`), system headers, and GitHub Actions CI/CD release workflow. |
+| **[6. SQLite & Filesystem Storage (`sqlite-and-storage.md`)](./sqlite-and-storage.md)** | Embedded database lifecycle, WAL configuration, IPC command tables, and `~/Pictures/nanobanana` directory conventions. |
+| **[7. Security & API Key Policy (`security-and-auth.md`)](./security-and-auth.md)** | Volatile RAM API key isolation, Zero-Storage invariants, and optional Local App Vault persistence. |
 
-### Root & Infrastructure Guides
-- **[`../README.md`](../README.md)**: Main repository README and quickstart.
-- **[`../AGENT.md`](../AGENT.md)**: Engineering and architecture guide for AI agents and developers.
-- **[`../PRODUCT.md`](../PRODUCT.md)**: Product vision, user personas, and security boundaries (*Impeccable Init*).
-- **[`../DESIGN.md`](../DESIGN.md)**: Editorial Neo-Brutalist design system specification and *Impeccable Craft Floor*.
-- **[`../infra/deployment.md`](../infra/deployment.md)**: Kubernetes deployment guide for `infra/deployment.yaml` and `infra/k8s/` (assuming external PostgreSQL & external RustFS/S3 Bucket).
+### Root & Architectural Specifications
+- **[`../README.md`](../README.md)**: Main repository quickstart and overview.
+- **[`../AGENT.md`](../AGENT.md)**: Engineering guidelines, architecture rules, and conventions for AI coding agents.
+- **[`../PRODUCT.md`](../PRODUCT.md)**: Product vision, user personas, and brand commitments (*Impeccable Init*).
+- **[`../DESIGN.md`](../DESIGN.md)**: Neo-Brutalist design system specifications and *Impeccable Craft Floor*.
 
 ---
 
 ## 🗺️ End-to-End Architecture Flow
 
 ```mermaid
-flowchart LR
-    subgraph Browser["User Browser"]
-        UI["Editorial UI + Interactive Studio"]
-        RAM["Volatile RAM State\n(useState: Gemini API Key)"]
+flowchart TB
+    subgraph DesktopApp["Nano Banana Atelier Studio (Desktop & Web)"]
+        direction TB
+        subgraph UI["Next.js 15 / React 19 WebView (100vw × 100vh Zero-Scroll)"]
+            Studio["Studio Canvas (4-Quad Matrix, Lineage Timeline, Editor)"]
+            RAMKey["Volatile React RAM (useState)\n🔑 Gemini API Key (Zero-Storage)"]
+            Bridge["Universal IPC Bridge (tauriBridge.ts)"]
+        end
+
+        subgraph Core["Tauri v2 Native Rust Core (src-tauri)"]
+            Commands["Tauri IPC Handlers (src/lib.rs)"]
+            DBEngine["rusqlite Engine (src/db.rs)"]
+            StorageEngine["OS Storage Engine (src/storage.rs)"]
+        end
+
+        subgraph LocalDisk["Local Workstation Disk"]
+            SQLite[("SQLite 3 Database (WAL Mode)\n~/.local/share/.../nanobanana.sqlite3")]
+            Pictures[("User Pictures Directory\n~/Pictures/nanobanana/<project-name>/")]
+        end
     end
 
-    subgraph ExternalAuthAndAI["External Providers (Direct HTTPS)"]
-        OAuth["Google / Facebook OAuth\n(Optional in Dev, Enforced in Prod)"]
-        NB["Google Nano Banana API\n(gemini-2.5-flash-image)"]
+    subgraph GoogleAI["Google Gemini Cloud API (Direct Client HTTPS)"]
+        Flash["gemini-2.5-flash\n(Scene Analysis & 3 Directional Emphases)"]
+        FlashImage["gemini-2.5-flash-image\n(4× Parallel Image Generation & Delta Editing)"]
     end
 
-    subgraph ComposeInfra["Podman Compose / K8s Cluster (Dev :18080 / Prod :28080)"]
-        NGX["Nginx Gateway\n(/, /api/, /s3/)"]
-        FE["Next.js Frontend\n(:3000)"]
-        API["Python Co-Pilot Backend\n(Flask + SQLAlchemy :8000)"]
-        PG[("PostgreSQL 16 (:5432)\nusers, conversations, turns")]
-        BKT[("RustFS Bucket (:9000/:9001)\nnanobanana-images")]
-    end
-
-    UI -->|"1. Optional/Prod OAuth Sign-In"| OAuth
-    UI -->|"2. Web & API Traffic (/ & /api/*)"| NGX
-    NGX -->|"/"| FE
-    NGX -->|"/api/*"| API
-    API -->|"3. Upsert User (usr_local_dev / OAuth) & Prompts"| PG
-    API -->|"4. Store & Stream PNG Images"| BKT
-    RAM ===>|"5. Direct HTTPS Call (x-goog-api-key in RAM)\nBypasses Nginx & Backend completely"| NB
-    NB ===>|"6. Returns Generated Image (inlineData Base64)"| UI
+    Studio -->|1. Submit Idea| RAMKey
+    RAMKey ===>|"2. Direct HTTPS (RAM Key)"| Flash
+    Flash ===>|"3. Returns 3 Dynamic Emphases"| Studio
+    RAMKey ===>|"4. Parallel Generation (4× Calls)"| FlashImage
+    FlashImage ===>|"5. Returns 4 PNG Buffers"| Studio
+    Studio -->|"6. Save Turn & Variants"| Bridge
+    Bridge --> Commands
+    Commands --> DBEngine
+    Commands --> StorageEngine
+    DBEngine --> SQLite
+    StorageEngine --> Pictures
 ```

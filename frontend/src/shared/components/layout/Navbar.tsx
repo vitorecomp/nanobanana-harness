@@ -1,11 +1,10 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { LOCAL_DEV_USER, ProfileEditModal } from "@/features/auth";
 import { useStudioSession } from "@/core/context/StudioSessionContext";
-import { updateConversationTitle } from "@/features/history";
 
 export default function Navbar() {
   const pathname = usePathname();
@@ -15,14 +14,15 @@ export default function Navbar() {
     setUser,
     hasKeyInRam,
     rememberKeyInVault,
-    activeProjectId,
-    activeProjectTitle,
-    setActiveProjectTitle,
     triggerNewProject,
     isSettingsModalOpen,
     setSettingsModalOpen,
   } = useStudioSession();
   const [collapsed, setCollapsed] = useState<boolean>(false);
+  const [isNewProjectModalOpen, setNewProjectModalOpen] =
+    useState<boolean>(false);
+  const [newProjectNameInput, setNewProjectNameInput] = useState<string>("");
+  const newProjectInputRef = useRef<HTMLInputElement | null>(null);
 
   const activeUser = user || LOCAL_DEV_USER;
   const isProjects =
@@ -30,15 +30,34 @@ export default function Navbar() {
   const isModifiers = pathname?.startsWith("/modifiers");
   const isCreate = !isProjects && !isModifiers;
 
-  const handleSidebarTitleChange = (nextTitle: string) => {
-    setActiveProjectTitle(nextTitle);
-    if (activeProjectId) {
-      void updateConversationTitle(activeProjectId, nextTitle);
-    }
+  useEffect(() => {
+    if (!isNewProjectModalOpen) return;
+    const focusTimer = window.setTimeout(() => {
+      newProjectInputRef.current?.focus();
+      newProjectInputRef.current?.select();
+    }, 30);
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setNewProjectModalOpen(false);
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      window.clearTimeout(focusTimer);
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [isNewProjectModalOpen]);
+
+  const handleOpenNewProjectModal = () => {
+    setNewProjectNameInput("");
+    setNewProjectModalOpen(true);
   };
 
-  const handleSidebarNewProject = () => {
-    triggerNewProject();
+  const handleConfirmCreateNewProject = (e: React.FormEvent) => {
+    e.preventDefault();
+    const chosenTitle = newProjectNameInput.trim() || "New Project";
+    triggerNewProject(chosenTitle);
+    setNewProjectModalOpen(false);
     if (!isCreate) {
       router.push("/create");
     }
@@ -200,33 +219,11 @@ export default function Navbar() {
             {!collapsed && <span>Modifiers</span>}
           </Link>
 
-          <div className="ref-sidebar-divider" style={{ margin: "8px 0" }} />
-
-          {!collapsed && (
-            <div className="ref-sidebar-project-box">
-              <label
-                className="ref-sidebar-section-label"
-                htmlFor="sidebar-project-title-input"
-                style={{ padding: 0 }}
-              >
-                Current Project
-              </label>
-              <input
-                id="sidebar-project-title-input"
-                type="text"
-                value={activeProjectTitle}
-                onChange={(e) => handleSidebarTitleChange(e.target.value)}
-                className="ref-sidebar-project-input"
-                placeholder="Project name..."
-              />
-            </div>
-          )}
-
           <button
             type="button"
             className="ref-sidebar-nav-item new-project-btn"
-            onClick={handleSidebarNewProject}
-            title="Start a new empty project"
+            onClick={handleOpenNewProjectModal}
+            title="Start a new project"
           >
             <span style={{ fontSize: "1.05rem", fontWeight: 800, lineHeight: 1 }}>
               +
@@ -305,6 +302,83 @@ export default function Navbar() {
         onClose={() => setSettingsModalOpen(false)}
         onSave={(updatedUser) => setUser(updatedUser)}
       />
+
+      {isNewProjectModalOpen && (
+        <div
+          className="ref-modal-backdrop"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="new-project-modal-title"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              setNewProjectModalOpen(false);
+            }
+          }}
+        >
+          <form
+            className="ref-modal-card"
+            style={{ maxWidth: "400px", padding: "20px 22px", gap: "14px" }}
+            onSubmit={handleConfirmCreateNewProject}
+          >
+            <div className="ref-modal-header">
+              <strong
+                id="new-project-modal-title"
+                className="ref-soft-card-title"
+              >
+                ✦ Create New Project
+              </strong>
+              <button
+                type="button"
+                aria-label="Close modal"
+                className="ref-circle-icon-btn"
+                style={{ width: "32px", height: "32px" }}
+                onClick={() => setNewProjectModalOpen(false)}
+              >
+                ✕
+              </button>
+            </div>
+
+            <div>
+              <label
+                className="ref-field-label"
+                htmlFor="new-project-name-input"
+              >
+                Project Name
+              </label>
+              <input
+                ref={newProjectInputRef}
+                id="new-project-name-input"
+                type="text"
+                value={newProjectNameInput}
+                onChange={(e) => setNewProjectNameInput(e.target.value)}
+                className="ref-input"
+                placeholder="E.g.: Cyber Samurai Storyboard..."
+              />
+            </div>
+
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "flex-end",
+                alignItems: "center",
+                gap: "8px",
+                paddingTop: "2px",
+              }}
+            >
+              <button
+                type="button"
+                className="ref-mura-btn-outline"
+                onClick={() => setNewProjectModalOpen(false)}
+              >
+                Cancel
+              </button>
+              <button type="submit" className="ref-dark-pill-btn">
+                <span>Create Project</span>
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
     </>
   );
 }

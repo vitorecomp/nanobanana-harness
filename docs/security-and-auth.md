@@ -1,65 +1,87 @@
-# Zero-Storage Security & Authentication Modes (Local Dev, Google & Facebook) — Nano Banana Studio 🍌✦
+# Security Architecture & API Key Governance — Nano Banana Atelier Studio 🍌✦
 
-This document specifies the security architecture and authentication subsystems of **Nano Banana Studio**:
-1. **Zero-Storage Policy for the Google Gemini API Key (`AIza...`)**: Multi-layered technical guarantee ensuring that the user-supplied API key used to invoke **Google Nano Banana (`gemini-2.5-flash-image`)** resides strictly in volatile browser RAM (`React.useState`) and is never written to disk or transmitted to the backend.
-2. **Environment-Aware Authentication (`REQUIRE_AUTH=false` in Local Dev vs. `REQUIRE_AUTH=true` in Production)**:
-   - **Local / Dev Instance Mode (`compose.dev.yaml` / `compose.yaml`, `REQUIRE_AUTH=false`)**: Login is **not required**. Developers running a local instance enter the Interactive Studio immediately under the auto-provisioned `usr_local_dev` (`Local Dev Instance`) profile in PostgreSQL, with optional Google and Facebook sign-in available in the navbar.
-   - **Production Mode (`compose.prod.yaml` & Kubernetes, `REQUIRE_AUTH=true`)**: Enforces **Google OAuth 2.0 (`POST /api/auth/google`)** or **Facebook Login (`POST /api/auth/facebook`)** via the **Flask + SQLAlchemy** backend.
+This document defines the security architecture, credential governance model, and data sovereignty guarantees enforced across **Nano Banana Atelier Studio**.
 
 ---
 
-## 1. Architectural Separation: User Identity vs. Generative API Key
+## 1. Foundational Security Invariant: Zero-Storage Policy
+
+The paramount security requirement of Nano Banana Studio is complete user ownership and sovereignty over their **Google AI Studio API Key (`AIza...`)**:
 
 ```mermaid
-flowchart TB
-    subgraph Identity["1. User Identity Plane (Local Dev Auto-User or Google / Facebook OAuth)"]
-        AuthMode{"REQUIRE_AUTH\nMode?"}
-        LocalDev["Dev Mode (REQUIRE_AUTH=false)\nAuto-provisioned usr_local_dev\n(No Login Required)"]
-        SocialToken["Prod Mode (REQUIRE_AUTH=true)\nPOST /api/auth/google or\nPOST /api/auth/facebook"]
-        PGUser[("PostgreSQL (users table via SQLAlchemy)\nStores: id, provider, email, name, picture")]
-        AuthMode -- "false (Dev)" --> LocalDev --> PGUser
-        AuthMode -- "true (Prod)" --> SocialToken --> PGUser
+flowchart TD
+    subgraph BrowserSpace["User Browser / Tauri Native WebView"]
+        Input["User types Google Gemini API Key"]
+        RAMState["Volatile React State (useState)\nHeld ONLY in component RAM"]
+        ClearAction["'Clear from RAM' Action / Window Close\nWipes Key Immediately"]
     end
 
-    subgraph GenerationKey["2. Generative Credential Plane (Gemini API Key — Zero-Storage)"]
-        InputKey["Studio Password Input\n(Key AIza...)"]
-        ReactRAM["Volatile React State (useState)\nNEVER written to localStorage/cookies"]
-        DirectGemini["Direct Browser -> Google Call\ngenerativelanguage.googleapis.com"]
-        GuardBlock["Flask @app.before_request\nzero_storage_api_key_guard\n(Rejects with HTTP 400 if sent to Backend)"]
-        InputKey --> ReactRAM --> DirectGemini
-        ReactRAM -.->|"Forbidden / Blocked (HTTP 400)"| GuardBlock
+    subgraph DirectCall["Direct Client-to-Google HTTPS"]
+        GoogleAPI["Google AI Studio API\n(generativelanguage.googleapis.com)"]
     end
+
+    subgraph ForbiddenStores["Forbidden Credential Locations (ZERO-STORAGE)"]
+        NoCookies["❌ Cookies"]
+        NoLocalStorage["❌ LocalStorage / SessionStorage"]
+        NoRemoteServer["❌ Remote Backend Servers / Proxies"]
+        NoLogging["❌ Application Log Files"]
+    end
+
+    Input --> RAMState
+    RAMState -->|Direct HTTPS Request| GoogleAPI
+    RAMState -.->|Explicit User Consent ONLY| Vault[("Local SQLite app_vault\n(Desktop Workstation Disk)")]
+    ClearAction -.->|Wipes| RAMState
+
+    RAMState x.-.x NoCookies
+    RAMState x.-.x NoLocalStorage
+    RAMState x.-.x NoRemoteServer
+    RAMState x.-.x NoLogging
 ```
 
 ---
 
-## 2. Zero-Storage API Key Defense-in-Depth
+## 2. Credential Isolation Modes
 
-### 2.1 Layer 1 — Volatile RAM Isolation in the Frontend (`frontend/src/`)
-1. **Ephemeral React State (`useState`)**: The Gemini API key is stored only in React component memory (`apiKey` state in `InteractiveStudio.tsx` / `page.tsx`).
-2. **Zero Web Storage Usage**: **Zero** calls to `window.localStorage`, `window.sessionStorage`, `indexedDB`, or `document.cookie` for the API key.
-3. **Direct Browser Fetch with `cache: "no-store"` (`frontend/src/lib/nanobanana.ts`)**: Calls `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent` directly from the browser with header `x-goog-api-key: trimmedKey`.
-4. **Instant RAM Purge ("Limpar da Memória")**: Clicking the clear button zeroes the React state immediately (`setApiKey("")`).
+### Mode 1: Volatile RAM Isolation (Default)
+- **Component RAM**: When entered in the Studio header, the API key is passed into `StudioSessionContext` and held exclusively in React `useState`.
+- **Zero Browser Storage**: The key is never written to `localStorage`, `sessionStorage`, `IndexedDB`, or cookies.
+- **Immediate Erasure**:
+  - Closing the desktop window or refreshing the browser tab purges the key instantly.
+  - Clicking **"Clear from RAM"** in the UI resets component state to empty string immediately.
 
-### 2.2 Layer 2 — Active Flask Guard in the Backend (`zero_storage_api_key_guard`)
-In `backend/main.py`, the Flask `@app.before_request` hook (`zero_storage_api_key_guard`) inspects **100% of incoming requests** before any route handler runs and rejects any header, query param, or JSON body field containing `x-goog-api-key`, `api_key`, or `AIza...` patterns with **HTTP `400 Bad Request` (`API_KEY_REJECTED_ZERO_STORAGE`)** without logging or echoing the secret.
+### Mode 2: Local Desktop App Vault (Opt-In Convenience)
+- Desktop creators who prefer not to re-enter their API key upon every application launch can check **"Remember in Local App Vault"** in the **⚙ Config** modal.
+- This stores the key in the local SQLite table:
+  ```sql
+  INSERT OR REPLACE INTO app_vault (key, value, updated_at)
+  VALUES ('gemini_api_key', 'AIza...', datetime('now'));
+  ```
+- **Local Isolation**: The database file (`nanobanana.sqlite3`) resides exclusively in the user's local operating system profile directory (`~/.local/share/com.nanobanana.studio/nanobanana.sqlite3`). It is never uploaded to any remote server or third-party service.
+- **1-Click Revocation**: Clicking **"Purge Saved Key"** executes `DELETE FROM app_vault WHERE key = 'gemini_api_key'`.
 
 ---
 
-## 3. Authentication Configuration (`.env.example`)
+## 3. Direct Client-to-Google Execution
 
-```dotenv
-# Dev vs Prod Auth Requirement
-# false = No login required (auto-uses usr_local_dev for local instance convenience)
-# true  = Enforces Google or Facebook login before entering Studio
-REQUIRE_AUTH=false
-NEXT_PUBLIC_REQUIRE_AUTH=false
+Image generation and prompt analysis calls do not route through any intermediary proxy or proxy server:
 
-# Google OAuth 2.0
-GOOGLE_CLIENT_ID=your-google-client-id.apps.googleusercontent.com
-NEXT_PUBLIC_GOOGLE_CLIENT_ID=your-google-client-id.apps.googleusercontent.com
+1. **Direct Endpoint**: Requests are sent directly from the client WebView to:
+   ```text
+   https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image:generateContent
+   ```
+2. **Header Injection**: The API key is passed as an HTTP header:
+   ```typescript
+   headers: {
+     "Content-Type": "application/json",
+     "x-goog-api-key": apiKey,
+   }
+   ```
+3. **No-Store Caching**: All client requests set `cache: "no-store"` to prevent browsers and WebViews from caching base64 payloads or request bodies in local disk caches.
 
-# Facebook OAuth
-FACEBOOK_APP_ID=your-facebook-app-id
-NEXT_PUBLIC_FACEBOOK_APP_ID=your-facebook-app-id
-```
+---
+
+## 4. Local Data Privacy & Telemetry Refusal
+
+- **Zero Analytics**: The application includes no third-party telemetry, tracking pixels, or usage reporting scripts.
+- **Local Image Ownership**: All generated image files (`.png`) are stored directly on the user's disk (`~/Pictures/nanobanana/<project-name>/`).
+- **Offline Inspection**: The entire prompt history, variant JSON, and parameters can be inspected offline via standard SQLite tools (`sqlite3 ~/.local/share/com.nanobanana.studio/nanobanana.sqlite3`).

@@ -1,0 +1,146 @@
+name: Release on Tag
+
+on:
+  push:
+    tags:
+      - "*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  verify:
+    name: Typecheck Frontend
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: "npm"
+          cache-dependency-path: |
+            package-lock.json
+            frontend/package-lock.json
+
+      - name: Install dependencies
+        run: |
+          npm ci
+          npm --prefix frontend ci
+
+      - name: Verify TypeScript compilation
+        run: npm --prefix frontend exec -- tsc --noEmit
+
+  release:
+    name: Build & Release (${{ matrix.os }})
+    needs: verify
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-22.04
+            args: ""
+          - os: macos-latest
+            args: ""
+          - os: windows-latest
+            args: ""
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Linux system dependencies (WebKit2GTK 4.1)
+        if: matrix.os == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            build-essential \
+            curl \
+            wget \
+            file \
+            libxdo-dev \
+            libssl-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev \
+            patchelf
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: "npm"
+          cache-dependency-path: |
+            package-lock.json
+            frontend/package-lock.json
+
+      - name: Setup Rust stable toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Rust build cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: "./src-tauri -> target"
+
+      - name: Sync version from Git tag
+        shell: bash
+        run: |
+          RAW_TAG="${GITHUB_REF_NAME}"
+          CLEAN_VERSION="${RAW_TAG#v}"
+          if [[ "$CLEAN_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
+            echo "Syncing release version to ${CLEAN_VERSION}"
+            node -e '
+              const fs = require("fs");
+              const ver = process.argv[1];
+              for (const file of ["package.json", "frontend/package.json", "src-tauri/tauri.conf.json"]) {
+                const data = JSON.parse(fs.readFileSync(file, "utf8"));
+                data.version = ver;
+                fs.writeFileSync(file, JSON.stringify(data, null, 2) + "\n");
+              }
+              const cargoPath = "src-tauri/Cargo.toml";
+              const cargo = fs.readFileSync(cargoPath, "utf8").replace(
+                /^version\s*=\s*"[^"]*"/m,
+                `version = "${ver}"`
+              );
+              fs.writeFileSync(cargoPath, cargo);
+            ' "$CLEAN_VERSION"
+          else
+            echo "Tag '${RAW_TAG}' is not strict semver; keeping manifest version."
+          fi
+
+      - name: Install NPM dependencies
+        run: |
+          npm ci
+          npm --prefix frontend ci
+
+      - name: Build & Publish Tauri Desktop Release
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tagName: ${{ github.ref_name }}
+          releaseName: "Nano Banana Studio ${{ github.ref_name }}"
+          releaseBody: |
+            ## Nano Banana Interactive Studio — `${{ github.ref_name }}`
+
+            ### Desktop Installers
+            - **Linux (Debian / Ubuntu)**: `.deb` installer package
+            - **macOS (Apple Silicon / Intel)**: `.dmg` disk image & `.app.tar.gz`
+            - **Windows (x64)**: `.msi` and `.exe` (NSIS) installers
+            - **Static Web Bundle**: `nanobanana-studio-web-${{ github.ref_name }}.tar.gz`
+          releaseDraft: false
+          prerelease: ${{ contains(github.ref_name, '-') }}
+          args: ${{ matrix.args }}
+
+      - name: Package & Upload Static Web Bundle (Linux runner)
+        if: matrix.os == 'ubuntu-22.04'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          tar -czf "nanobanana-studio-web-${GITHUB_REF_NAME}.tar.gz" -C frontend/out .
+          gh release upload "${GITHUB_REF_NAME}" "nanobanana-studio-web-${GITHUB_REF_NAME}.tar.gz" --clobber

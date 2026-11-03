@@ -559,12 +559,15 @@ export default function InteractiveStudio({
       void loadProjectById(externalPresetRequest.conversationId);
       return;
     }
+    if (newProjectNonce > 0) {
+      return;
+    }
     listUserConversations(activeUser.id).then((list) => {
       if (list.length > 0) {
         void loadProjectById(list[0].id);
       }
     });
-  }, [externalPresetRequest, activeUser.id, loadProjectById]);
+  }, [externalPresetRequest, activeUser.id, loadProjectById, newProjectNonce]);
 
   const activeInteraction =
     activeInteractionIndex >= 0 ? interactions[activeInteractionIndex] : null;
@@ -606,7 +609,6 @@ export default function InteractiveStudio({
   useEffect(() => {
     if (newProjectNonce === 0) return;
     setActiveProjectId(null);
-    setProjectTitle("New Project");
     setPromptInput("");
     setDeltaInput("");
     setPreEnhancePrompt(null);
@@ -620,7 +622,7 @@ export default function InteractiveStudio({
     setLiveDraftSlots([null, null, null, null]);
     setGenerationStage("idle");
     showTransientNotice("✦ New project started with 4 ready frames");
-  }, [newProjectNonce, setActiveProjectId, setProjectTitle, showTransientNotice]);
+  }, [newProjectNonce, setActiveProjectId, showTransientNotice]);
 
   const handleToggleModifier = (modId: string) => {
     setSelectedModifiers((prev) =>
