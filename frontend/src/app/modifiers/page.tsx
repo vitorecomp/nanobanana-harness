@@ -48,6 +48,7 @@ export default function ModifiersManagerPage() {
     bootstrapData,
     updateModifierCategories,
     resetModifierCategories,
+    openSettingsModal,
   } = useStudioSession();
 
   const categories = bootstrapData.modifier_categories;
@@ -55,6 +56,11 @@ export default function ModifiersManagerPage() {
   const [selectedFilterCatId, setSelectedFilterCatId] = useState<string>("all");
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [notice, setNotice] = useState<string | null>(null);
+  const [confirmDeleteCatId, setConfirmDeleteCatId] = useState<string | null>(
+    null
+  );
+  const [confirmRestoreDefaults, setConfirmRestoreDefaults] =
+    useState<boolean>(false);
 
   // AI Creation State
   const [aiMode, setAiMode] = useState<"new-category" | "into-existing">(
@@ -125,8 +131,16 @@ export default function ModifiersManagerPage() {
     showTransientNotice(`✓ Category "${title}" created!`);
   };
 
-  // 2. Delete a Category
+  // 2. Delete a Category (with 2-step confirmation)
   const handleDeleteCategory = async (cat: ModifierCategory) => {
+    if (confirmDeleteCatId !== cat.id) {
+      setConfirmDeleteCatId(cat.id);
+      window.setTimeout(() => {
+        setConfirmDeleteCatId((prev) => (prev === cat.id ? null : prev));
+      }, 4000);
+      return;
+    }
+    setConfirmDeleteCatId(null);
     const nextList = categories.filter((c) => c.id !== cat.id);
     await updateModifierCategories(nextList);
     if (selectedFilterCatId === cat.id) {
@@ -253,8 +267,19 @@ export default function ModifiersManagerPage() {
 
               <button
                 type="button"
-                className="ref-pill-chip"
+                className={`ref-pill-chip ${
+                  confirmRestoreDefaults ? "active" : ""
+                }`}
                 onClick={async () => {
+                  if (!confirmRestoreDefaults) {
+                    setConfirmRestoreDefaults(true);
+                    window.setTimeout(
+                      () => setConfirmRestoreDefaults(false),
+                      4000
+                    );
+                    return;
+                  }
+                  setConfirmRestoreDefaults(false);
                   await resetModifierCategories();
                   setSelectedFilterCatId("all");
                   showTransientNotice(
@@ -263,7 +288,9 @@ export default function ModifiersManagerPage() {
                 }}
                 title="Restore default categories (Camera, Clothing, Angle, Lighting, Atmosphere)"
               >
-                ↺ Restore Defaults
+                {confirmRestoreDefaults
+                  ? "Confirm Restore Defaults?"
+                  : "↺ Restore Defaults"}
               </button>
             </div>
 
@@ -300,7 +327,7 @@ export default function ModifiersManagerPage() {
           {/* Grid of Chamfered Category Cards */}
           <div className="ref-modifiers-cards-grid">
             {filteredCategories.map((cat) => {
-              const filledDots = Math.min(6, Math.max(1, cat.options.length));
+              const isSweepReady = cat.options.length >= 4;
               return (
                 <article key={cat.id} className="ref-project-card modifier-cat-card">
                   {/* 1. Card Header */}
@@ -313,16 +340,11 @@ export default function ModifiersManagerPage() {
                   </div>
 
                   <div className="ref-mura-kv-row">
-                    <span className="ref-mura-kv-label">Category ID:</span>
-                    <span className="ref-mura-dots">
-                      {[0, 1, 2, 3, 4, 5].map((dIdx) => (
-                        <i
-                          key={dIdx}
-                          className={`ref-mura-dot ${
-                            dIdx < filledDots ? "filled" : ""
-                          } ${dIdx === filledDots - 1 ? "current" : ""}`}
-                        />
-                      ))}
+                    <span className="ref-mura-kv-label">2×2 Matrix Sweep:</span>
+                    <span className="ref-mura-kv-value">
+                      {isSweepReady
+                        ? "⚡ 4-Way Sweep Ready"
+                        : `${cat.options.length}/4 options for full sweep`}
                     </span>
                   </div>
 
@@ -393,11 +415,17 @@ export default function ModifiersManagerPage() {
 
                     <button
                       type="button"
-                      className="ref-mura-btn-outline danger"
+                      className={`ref-mura-btn-outline ${
+                        confirmDeleteCatId === cat.id
+                          ? "danger-confirm"
+                          : "danger"
+                      }`}
                       onClick={() => void handleDeleteCategory(cat)}
                       title={`Delete category ${cat.title}`}
                     >
-                      Delete ✕
+                      {confirmDeleteCatId === cat.id
+                        ? "Confirm Delete?"
+                        : "Delete ✕"}
                     </button>
                   </div>
                 </article>
@@ -417,11 +445,23 @@ export default function ModifiersManagerPage() {
               <strong className="ref-soft-card-title">
                 ✦ Create with AI (Gemini)
               </strong>
-              <span className="ref-pill-chip active">
-                {aiMode === "new-category"
-                  ? "New Category + Modifiers"
-                  : "Add to Category"}
-              </span>
+              <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                {!apiKey.trim() && (
+                  <button
+                    type="button"
+                    className="ref-studio-mod-manage-link"
+                    onClick={openSettingsModal}
+                    title="Configure Gemini API Key for live Gemini 2.5 Flash synthesis"
+                  >
+                    🔑 Set API Key
+                  </button>
+                )}
+                <span className="ref-pill-chip active">
+                  {aiMode === "new-category"
+                    ? "New Category + Modifiers"
+                    : "Add to Category"}
+                </span>
+              </div>
             </div>
 
             <div className="ref-params-pills-wrap">

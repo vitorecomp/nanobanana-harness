@@ -40,7 +40,15 @@ export interface SavedConversationSummary {
   updated_at?: string;
 }
 
+export interface SavedCanonicalDna {
+  label: string;
+  imageUrl: string;
+  prompt: string;
+  sourceTurn?: number;
+}
+
 export interface SavedConversationDetail extends SavedConversationSummary {
+  canonical_dna?: SavedCanonicalDna | null;
   turns: SavedTurnRecord[];
 }
 

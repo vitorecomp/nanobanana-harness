@@ -64,6 +64,9 @@ interface StudioSessionContextValue {
   triggerNewProject: () => void;
   updateModifierCategories: (categories: ModifierCategory[]) => Promise<void>;
   resetModifierCategories: () => Promise<void>;
+  isSettingsModalOpen: boolean;
+  setSettingsModalOpen: (open: boolean) => void;
+  openSettingsModal: () => void;
 }
 
 const StudioSessionContext = createContext<
@@ -92,6 +95,9 @@ export function StudioSessionProvider({ children }: { children: ReactNode }) {
   const [activeProjectTitle, setActiveProjectTitle] =
     useState<string>("New Project");
   const [newProjectNonce, setNewProjectNonce] = useState<number>(0);
+  const [isSettingsModalOpen, setSettingsModalOpen] = useState<boolean>(false);
+
+  const openSettingsModal = () => setSettingsModalOpen(true);
 
   const triggerNewProject = () => {
     setActiveProjectId(null);
@@ -247,6 +253,9 @@ export function StudioSessionProvider({ children }: { children: ReactNode }) {
         triggerNewProject,
         updateModifierCategories,
         resetModifierCategories,
+        isSettingsModalOpen,
+        setSettingsModalOpen,
+        openSettingsModal,
       }}
     >
       {children}

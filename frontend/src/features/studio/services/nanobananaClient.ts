@@ -8,11 +8,14 @@
  */
 
 import {
+  CreationFlowMode,
+  ExplorationMatrixAxis,
   GenerateNanoBananaRequest,
   GenerateNanoBananaResult,
   InlineImagePart,
   ModifierCategory,
   ModifierOption,
+  PreservationLocks,
 } from "../types/studio.types";
 
 interface GeminiCandidatePart {
@@ -83,6 +86,7 @@ export async function generateWithNanoBanana({
   model,
   prompt,
   referenceImage,
+  secondaryReferenceImage,
 }: GenerateNanoBananaRequest): Promise<GenerateNanoBananaResult> {
   const trimmedKey = apiKey.trim();
   if (!trimmedKey) {
@@ -105,6 +109,15 @@ export async function generateWithNanoBanana({
       inlineData: {
         mimeType: referenceImage.mimeType || "image/png",
         data: referenceImage.data,
+      },
+    });
+  }
+
+  if (secondaryReferenceImage && secondaryReferenceImage.data) {
+    parts.push({
+      inlineData: {
+        mimeType: secondaryReferenceImage.mimeType || "image/png",
+        data: secondaryReferenceImage.data,
       },
     });
   }
@@ -202,9 +215,287 @@ export interface QuadGeneratedSlot {
 }
 
 /**
- * Takes the user's base prompt and asks Gemini to create 3 additional versions
- * with different emphases on each part of the prompt (Lighting/Atmosphere,
- * Composition/Camera, and Details/Subject), returning 4 prompts total.
+ * Expands a short user prompt into a rich, cinematic visual narrative optimized
+ * for Gemini 2.5 Flash Image ("Nano Banana"), emphasizing spatial relationships,
+ * material textures, optical focal length, and lighting direction.
+ */
+export async function enhanceNarrativeWithGemini(params: {
+  apiKey: string;
+  rawIdea: string;
+  styleLabel?: string;
+  modifierLabels?: string[];
+  aspectRatio?: string;
+}): Promise<string> {
+  const cleanIdea = params.rawIdea.trim();
+  if (!cleanIdea) return "";
+
+  const styleHint = params.styleLabel ? ` in a ${params.styleLabel} aesthetic` : "";
+  const modHint =
+    params.modifierLabels && params.modifierLabels.length > 0
+      ? `, featuring ${params.modifierLabels.join(", ")}`
+      : "";
+
+  const fallbackNarrative = `${cleanIdea}${styleHint} — composed with intentional foreground-to-background depth, tactile surface materiality, expressive subject posture, and directional cinematic illumination${modHint}.`;
+
+  const trimmedKey = params.apiKey.trim();
+  if (!trimmedKey) {
+    return fallbackNarrative;
+  }
+
+  try {
+    const endpoint =
+      "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent";
+    const systemPrompt = [
+      "You are an expert Art Director and Prompt Architect for Google Gemini 2.5 Flash Image ('Nano Banana').",
+      "Gemini 2.5 Flash Image produces vastly superior artwork when given a cohesive, natural-language paragraph describing:",
+      "1. Subject identity, expression, posture, and wardrobe materials.",
+      "2. Spatial environment, foreground/background layering, and atmosphere.",
+      "3. Camera framing, lens focal length, and lighting direction/color temperature.",
+      params.styleLabel ? `Target visual style: ${params.styleLabel}.` : "",
+      params.modifierLabels?.length
+        ? `Incorporate these optical/lighting modifiers naturally: ${params.modifierLabels.join(", ")}.`
+        : "",
+      params.aspectRatio ? `Target aspect ratio: ${params.aspectRatio}.` : "",
+      "Rewrite and expand the user's idea into ONE rich, vivid paragraph in English (45 to 75 words). Do NOT use bullet points, markdown, or comma-tag soup. Return ONLY the enhanced prompt text.",
+      `User idea: "${cleanIdea}"`,
+    ]
+      .filter(Boolean)
+      .join("\n");
+
+    const response = await fetch(endpoint, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-goog-api-key": trimmedKey,
+      },
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: systemPrompt }] }],
+      }),
+      cache: "no-store",
+    });
+
+    if (!response.ok) return fallbackNarrative;
+    const data = (await response.json()) as GeminiGenerateContentResponse;
+    const text =
+      data.candidates?.[0]?.content?.parts
+        ?.map((p) => p.text || "")
+        .join(" ")
+        .trim() || "";
+    return text ? text.replace(/^["']|["']$/g, "").trim() : fallbackNarrative;
+  } catch {
+    return fallbackNarrative;
+  }
+}
+
+function buildPreservationPrefix(
+  locks?: PreservationLocks,
+  hasReferenceImage?: boolean,
+  hasDualAnchor?: boolean
+): string {
+  if (!locks) return "";
+  const kept: string[] = [];
+  if (locks.keepCharacter) {
+    kept.push(
+      hasDualAnchor
+        ? "exact character identity, facial features, hair, and proportions from Reference Image 1 (Canonical Character DNA)"
+        : "exact character identity, facial features, hair, and proportions"
+    );
+  }
+  if (locks.keepPose) {
+    kept.push(
+      hasDualAnchor
+        ? "camera angle, subject pose, and spatial framing from Reference Image 2 (Active Scene Frame)"
+        : "camera angle, subject pose, and spatial framing"
+    );
+  }
+  if (locks.keepBackground) {
+    kept.push(
+      hasDualAnchor
+        ? "background environment, architecture, and setting geometry from Reference Image 2 (Active Scene Frame)"
+        : "background environment, architecture, and setting geometry"
+    );
+  }
+  if (kept.length === 0) return "";
+  const refLead = hasDualAnchor
+    ? "Using Reference Image 1 (Canonical Character DNA) and Reference Image 2 (Active Scene Frame), strictly preserve the "
+    : hasReferenceImage
+    ? "Using the provided reference image, strictly preserve the "
+    : "Strictly preserve the ";
+  return `${refLead}${kept.join("; ")}. `;
+}
+
+export interface CategorySweepItem {
+  label: string;
+  token: string;
+}
+
+function buildMatrixFallbackVariations(params: {
+  effectiveCorePrompt: string;
+  matrixAxis: ExplorationMatrixAxis;
+  styleSuffix: string;
+  modSuffix: string;
+  ratioSuffix: string;
+  isSurgicalDelta: boolean;
+  categorySweepTitle?: string;
+  categorySweepOptions?: CategorySweepItem[];
+}): QuadPromptVariation[] {
+  const {
+    effectiveCorePrompt,
+    matrixAxis,
+    styleSuffix,
+    modSuffix,
+    ratioSuffix,
+    isSurgicalDelta,
+    categorySweepTitle,
+    categorySweepOptions,
+  } = params;
+  const tail = `${styleSuffix}${modSuffix}${ratioSuffix}`;
+
+  if (
+    matrixAxis.startsWith("cat:") &&
+    categorySweepOptions &&
+    categorySweepOptions.length > 0
+  ) {
+    const catShort = (categorySweepTitle || "Modifier").split(" (")[0];
+    return [0, 1, 2, 3].map((idx) => {
+      const opt =
+        categorySweepOptions[idx % categorySweepOptions.length] ||
+        categorySweepOptions[0];
+      const shortLabel = opt.label.split(" (")[0];
+      return {
+        label: `${idx + 1} • ${catShort}: ${shortLabel}`,
+        prompt: `${effectiveCorePrompt} — featuring ${opt.token || opt.label}${tail}`,
+      };
+    });
+  }
+
+  switch (matrixAxis) {
+    case "camera-angles":
+      return [
+        {
+          label: "1 • Camera: 24mm Establishing Wide",
+          prompt: `${effectiveCorePrompt} — captured as a 24mm wide establishing shot showcasing full environmental scale and spatial context${tail}`,
+        },
+        {
+          label: "2 • Camera: 50mm Medium Editorial",
+          prompt: `${effectiveCorePrompt} — captured as a 50mm eye-level medium editorial portrait balancing subject presence and surroundings${tail}`,
+        },
+        {
+          label: "3 • Camera: 85mm Intimate Close-Up",
+          prompt: `${effectiveCorePrompt} — captured with an 85mm f/1.4 portrait lens, shallow depth of field, razor-sharp focus on eyes and micro-expressions${tail}`,
+        },
+        {
+          label: "4 • Camera: 35mm Low-Angle Hero",
+          prompt: `${effectiveCorePrompt} — captured from a dramatic 35mm low-angle hero perspective looking upward with dynamic foreshortening${tail}`,
+        },
+      ];
+
+    case "lighting-setups":
+      return [
+        {
+          label: "1 • Light: Golden Hour Rim",
+          prompt: `${effectiveCorePrompt} — bathed in warm late-afternoon golden-hour sunlight with luminous rim highlights and long atmospheric shadows${tail}`,
+        },
+        {
+          label: "2 • Light: Chiaroscuro Noir",
+          prompt: `${effectiveCorePrompt} — lit with high-contrast chiaroscuro key lighting, deep sculpted shadows, and moody cinematic drama${tail}`,
+        },
+        {
+          label: "3 • Light: Diffused Overcast Mist",
+          prompt: `${effectiveCorePrompt} — illuminated by soft overcast skylight filtering through atmospheric mist with delicate tonal gradations${tail}`,
+        },
+        {
+          label: "4 • Light: Dual-Tone Neon & Amber",
+          prompt: `${effectiveCorePrompt} — lit with cybernetic dual-tone cyan key light and warm amber practical reflections on surfaces${tail}`,
+        },
+      ];
+
+    case "wardrobe-variants":
+      return [
+        {
+          label: "1 • Wardrobe: Tailored Technical",
+          prompt: `${effectiveCorePrompt} — dressed in bespoke structured technical outerwear with matte ballistic fabric, brass fasteners, and layered collar${tail}`,
+        },
+        {
+          label: "2 • Wardrobe: Ceremonial Artisanal",
+          prompt: `${effectiveCorePrompt} — wearing draped artisanal garments with embroidered raw silk, weathered leather strapping, and heirloom textures${tail}`,
+        },
+        {
+          label: "3 • Wardrobe: Minimalist Avant-Garde",
+          prompt: `${effectiveCorePrompt} — styled in sculptural minimalist avant-garde monochrome tailoring with clean architectural silhouettes${tail}`,
+        },
+        {
+          label: "4 • Wardrobe: Weathered Field Gear",
+          prompt: `${effectiveCorePrompt} — outfitted in lived-in expedition field attire with waxed canvas, patina metal clasps, and rain-worn travel cloak${tail}`,
+        },
+      ];
+
+    case "storyboard-4":
+      return [
+        {
+          label: "1 • Beat I: Arrival & Establishing",
+          prompt: `${effectiveCorePrompt} — Storyboard Frame 1 (Opening Beat): The subject arrives and surveys the environment in an establishing wide composition${tail}`,
+        },
+        {
+          label: "2 • Beat II: Tension & Discovery",
+          prompt: `${effectiveCorePrompt} — Storyboard Frame 2 (Rising Action): Medium tracking shot as the subject notices a key detail and prepares to act${tail}`,
+        },
+        {
+          label: "3 • Beat III: Decisive Climax",
+          prompt: `${effectiveCorePrompt} — Storyboard Frame 3 (Climax Beat): Dynamic close-range action angle capturing the peak emotional and kinetic moment${tail}`,
+        },
+        {
+          label: "4 • Beat IV: Aftermath & Horizon",
+          prompt: `${effectiveCorePrompt} — Storyboard Frame 4 (Resolution Beat): Contemplative pull-back shot in the aftermath with lingering atmospheric mood${tail}`,
+        },
+      ];
+
+    case "auto-director":
+    default:
+      if (isSurgicalDelta) {
+        return [
+          {
+            label: "1 • Surgical Edit: Direct Precision",
+            prompt: `${effectiveCorePrompt}${tail}`,
+          },
+          {
+            label: "2 • Surgical Edit: Subtle Nuance",
+            prompt: `${effectiveCorePrompt} — executed with subtle, seamless photographic integration and natural lighting continuity${tail}`,
+          },
+          {
+            label: "3 • Surgical Edit: Bold Art Direction",
+            prompt: `${effectiveCorePrompt} — executed with bold editorial contrast, heightened atmospheric mood, and rich material definition${tail}`,
+          },
+          {
+            label: "4 • Surgical Edit: Fine Detail & Texture",
+            prompt: `${effectiveCorePrompt} — executed with ultra-crisp micro-textures, refined surface reflections, and optical clarity${tail}`,
+          },
+        ];
+      }
+      return [
+        {
+          label: "1 • Base Prompt",
+          prompt: `${effectiveCorePrompt}${tail}`,
+        },
+        {
+          label: "2 • Emphasis: Light & Atmosphere",
+          prompt: `${effectiveCorePrompt} — with dramatic focus on volumetric lighting, shadow contrast, immersive atmosphere, and cinematic color grading${tail}`,
+        },
+        {
+          label: "3 • Emphasis: Composition & Lens",
+          prompt: `${effectiveCorePrompt} — with emphasis on dynamic editorial framing, lens perspective, depth of field, and spatial scene geometry${tail}`,
+        },
+        {
+          label: "4 • Emphasis: Texture & Details",
+          prompt: `${effectiveCorePrompt} — with maximum emphasis on surface micro-textures, material sharpness, subject expression, and fine detail richness${tail}`,
+        },
+      ];
+  }
+}
+
+/**
+ * Generates 4 prompt variations tailored to the selected CreationFlowMode
+ * ("compose" vs. "surgical-delta"), ExplorationMatrixAxis, and PreservationLocks.
  */
 export async function generateFourPromptVariations(params: {
   apiKey: string;
@@ -212,8 +503,20 @@ export async function generateFourPromptVariations(params: {
   styleLabel?: string;
   modifierLabels?: string[];
   aspectRatio?: string;
+  flowMode?: CreationFlowMode;
+  matrixAxis?: ExplorationMatrixAxis;
+  preservationLocks?: PreservationLocks;
+  anchorScenePrompt?: string;
+  hasReferenceImage?: boolean;
+  hasDualAnchor?: boolean;
+  categorySweepTitle?: string;
+  categorySweepOptions?: CategorySweepItem[];
 }): Promise<QuadPromptVariation[]> {
   const cleanBase = params.basePrompt.trim();
+  const flowMode: CreationFlowMode = params.flowMode || "compose";
+  const matrixAxis: ExplorationMatrixAxis = params.matrixAxis || "auto-director";
+  const isSurgicalDelta = flowMode === "surgical-delta";
+
   const styleSuffix = params.styleLabel ? ` [${params.styleLabel}]` : "";
   const ratioSuffix = params.aspectRatio
     ? ` (Aspect Ratio ${params.aspectRatio})`
@@ -223,24 +526,30 @@ export async function generateFourPromptVariations(params: {
       ? `, ${params.modifierLabels.join(", ")}`
       : "";
 
-  const fallbackVariations: QuadPromptVariation[] = [
-    {
-      label: "1 • Base Prompt",
-      prompt: `${cleanBase}${styleSuffix}${modSuffix}${ratioSuffix}`,
-    },
-    {
-      label: "2 • Emphasis: Light & Atmosphere",
-      prompt: `${cleanBase} — with dramatic focus on volumetric lighting, shadow contrast, immersive atmosphere, and cinematic color grading${styleSuffix}${modSuffix}${ratioSuffix}`,
-    },
-    {
-      label: "3 • Emphasis: Composition & Lens",
-      prompt: `${cleanBase} — with emphasis on dynamic editorial framing, lens perspective, depth of field, and spatial scene geometry${styleSuffix}${modSuffix}${ratioSuffix}`,
-    },
-    {
-      label: "4 • Emphasis: Texture & Details",
-      prompt: `${cleanBase} — with maximum emphasis on surface micro-textures, material sharpness, subject expression, and fine detail richness${styleSuffix}${modSuffix}${ratioSuffix}`,
-    },
-  ];
+  const lockPrefix = buildPreservationPrefix(
+    params.preservationLocks,
+    params.hasReferenceImage,
+    params.hasDualAnchor
+  );
+
+  const effectiveCorePrompt = isSurgicalDelta
+    ? `${lockPrefix}Apply ONLY this targeted modification: ${cleanBase}${
+        params.anchorScenePrompt
+          ? ` (Anchor scene context: ${params.anchorScenePrompt})`
+          : ""
+      }`
+    : `${lockPrefix}${cleanBase}`;
+
+  const fallbackVariations = buildMatrixFallbackVariations({
+    effectiveCorePrompt,
+    matrixAxis,
+    styleSuffix,
+    modSuffix,
+    ratioSuffix,
+    isSurgicalDelta,
+    categorySweepTitle: params.categorySweepTitle,
+    categorySweepOptions: params.categorySweepOptions,
+  });
 
   const trimmedKey = params.apiKey.trim();
   if (!trimmedKey) {
@@ -250,19 +559,54 @@ export async function generateFourPromptVariations(params: {
   try {
     const endpoint =
       "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent";
+
+    const axisInstructionMap: Record<string, string> = {
+      "auto-director": isSurgicalDelta
+        ? "Create 4 surgical edit prompts that apply the requested delta while respecting all preservation locks: (1) Direct Precision, (2) Subtle Integration, (3) Bold Art Direction, (4) Micro-Detail & Material Focus."
+        : "Keep Variation 1 faithful to the user's base scene, and create 3 distinct directorial emphases: (2) Lighting & Atmosphere, (3) Camera Optics & Framing, (4) Material Texture & Subject Detail.",
+      "camera-angles":
+        "Create 4 variations of the exact same scene and character across 4 distinct cinema camera setups: (1) 24mm Establishing Wide Shot, (2) 50mm Medium Eye-Level Editorial, (3) 85mm Intimate Close-Up Portrait, (4) 35mm Dramatic Low-Angle Hero Shot.",
+      "lighting-setups":
+        "Create 4 variations of the exact same scene and composition across 4 distinct lighting designs: (1) Golden Hour Rim Sunlight, (2) High-Contrast Chiaroscuro Noir, (3) Soft Diffused Overcast Mist, (4) Dual-Tone Cybernetic Neon & Warm Practicals.",
+      "wardrobe-variants":
+        "Preserve the exact same character face, pose, camera angle, and background, but explore 4 distinct wardrobe/costume designs: (1) Structured Technical Outerwear, (2) Artisanal Ceremonial Draped Silk & Leather, (3) Minimalist Avant-Garde Tailoring, (4) Weathered Expedition Field Gear.",
+      "storyboard-4":
+        "Create a cohesive 4-frame sequential storyboard starring the exact same character in the same world: (1) Beat I: Arrival / Establishing, (2) Beat II: Discovery / Rising Tension, (3) Beat III: Decisive Action Climax, (4) Beat IV: Contemplative Aftermath.",
+    };
+
+    const customCategoryInstruction =
+      matrixAxis.startsWith("cat:") &&
+      params.categorySweepOptions &&
+      params.categorySweepOptions.length > 0
+        ? `Create 4 variations of the exact same scene and character, testing these 4 specific "${
+            params.categorySweepTitle || "Modifier"
+          }" options across the 4 frames: ${[0, 1, 2, 3]
+            .map((i) => {
+              const opt =
+                params.categorySweepOptions![
+                  i % params.categorySweepOptions!.length
+                ];
+              return `(${i + 1}) ${opt.label}: "${opt.token}"`;
+            })
+            .join(", ")}.`
+        : axisInstructionMap[matrixAxis] || axisInstructionMap["auto-director"];
+
     const systemPrompt = [
-      "You are an expert in visual prompt engineering for image generation.",
-      "Analyze the user's base prompt and identify 3 distinct parts or elements of the described scene.",
-      "Create 3 complete new versions of the prompt (in English), each giving special emphasis to one of those parts of the scene.",
+      "You are an expert Visual Director and Prompt Engineer for Google Gemini 2.5 Flash Image ('Nano Banana').",
+      customCategoryInstruction,
+      lockPrefix ? `Mandatory preservation rule for all 4 prompts: "${lockPrefix.trim()}"` : "",
+      isSurgicalDelta && params.anchorScenePrompt
+        ? `Original anchor scene context: "${params.anchorScenePrompt}"`
+        : "",
       params.styleLabel ? `Selected visual style: ${params.styleLabel}.` : "",
-      params.aspectRatio
-        ? `Image aspect ratio: ${params.aspectRatio}.`
-        : "",
+      params.aspectRatio ? `Image aspect ratio: ${params.aspectRatio}.` : "",
       params.modifierLabels?.length
-        ? `Active modifiers: ${params.modifierLabels.join(", ")}.`
+        ? `Active optical/scene modifiers: ${params.modifierLabels.join(", ")}.`
         : "",
-      'Return ONLY valid JSON in the format: {"variations": [{"title": "short emphasis title 1 (max 3 words)", "prompt": "..."}, {"title": "short emphasis title 2 (max 3 words)", "prompt": "..."}, {"title": "short emphasis title 3 (max 3 words)", "prompt": "..."}]}',
-      `User base prompt: "${cleanBase}"`,
+      'Return ONLY valid JSON in the format: {"variations": [{"label": "1 • Short Title", "prompt": "Complete descriptive English prompt..."}, {"label": "2 • Short Title", "prompt": "..."}, {"label": "3 • Short Title", "prompt": "..."}, {"label": "4 • Short Title", "prompt": "..."}]}',
+      isSurgicalDelta
+        ? `User surgical edit delta instruction: "${cleanBase}"`
+        : `User scene prompt: "${cleanBase}"`,
     ]
       .filter(Boolean)
       .join("\n");
@@ -296,50 +640,27 @@ export async function generateFourPromptVariations(params: {
     if (!rawText) return fallbackVariations;
 
     const parsed = JSON.parse(rawText) as {
-      variations?: Array<{ title?: string; prompt?: string }>;
-      v1?: string;
-      v2?: string;
-      v3?: string;
+      variations?: Array<{ label?: string; title?: string; prompt?: string }>;
     };
 
     const vList = Array.isArray(parsed.variations) ? parsed.variations : [];
+    if (vList.length < 4) {
+      return fallbackVariations;
+    }
 
-    return [
-      {
-        label: "1 • Base Prompt",
-        prompt: `${cleanBase}${styleSuffix}${modSuffix}${ratioSuffix}`,
-      },
-      {
-        label: vList[0]?.title
-          ? `2 • Emphasis: ${vList[0].title}`
-          : fallbackVariations[1].label,
-        prompt: (
-          vList[0]?.prompt ||
-          parsed.v1 ||
-          fallbackVariations[1].prompt
-        ).trim(),
-      },
-      {
-        label: vList[1]?.title
-          ? `3 • Emphasis: ${vList[1].title}`
-          : fallbackVariations[2].label,
-        prompt: (
-          vList[1]?.prompt ||
-          parsed.v2 ||
-          fallbackVariations[2].prompt
-        ).trim(),
-      },
-      {
-        label: vList[2]?.title
-          ? `4 • Emphasis: ${vList[2].title}`
-          : fallbackVariations[3].label,
-        prompt: (
-          vList[2]?.prompt ||
-          parsed.v3 ||
-          fallbackVariations[3].prompt
-        ).trim(),
-      },
-    ];
+    return [0, 1, 2, 3].map((idx) => {
+      const item = vList[idx];
+      const rawLabel = (item?.label || item?.title || "").trim();
+      const numberedLabel = rawLabel
+        ? /^\d/.test(rawLabel)
+          ? rawLabel
+          : `${idx + 1} • ${rawLabel}`
+        : fallbackVariations[idx].label;
+      return {
+        label: numberedLabel,
+        prompt: (item?.prompt || fallbackVariations[idx].prompt).trim(),
+      };
+    });
   } catch {
     return fallbackVariations;
   }
@@ -353,15 +674,34 @@ export async function generateQuadWithNanoBanana(params: {
   modifierLabels?: string[];
   aspectRatio?: string;
   referenceImage?: InlineImagePart | null;
+  secondaryReferenceImage?: InlineImagePart | null;
+  flowMode?: CreationFlowMode;
+  matrixAxis?: ExplorationMatrixAxis;
+  preservationLocks?: PreservationLocks;
+  anchorScenePrompt?: string;
+  categorySweepTitle?: string;
+  categorySweepOptions?: CategorySweepItem[];
   onVariationsReady?: (variations: QuadPromptVariation[]) => void;
   onSlotCompleted?: (index: number, slot: QuadGeneratedSlot) => void;
 }): Promise<QuadGeneratedSlot[]> {
+  const hasDualAnchor =
+    Boolean(params.referenceImage?.data) &&
+    Boolean(params.secondaryReferenceImage?.data);
+
   const variations = await generateFourPromptVariations({
     apiKey: params.apiKey,
     basePrompt: params.basePrompt,
     styleLabel: params.styleLabel,
     modifierLabels: params.modifierLabels,
     aspectRatio: params.aspectRatio,
+    flowMode: params.flowMode,
+    matrixAxis: params.matrixAxis,
+    preservationLocks: params.preservationLocks,
+    anchorScenePrompt: params.anchorScenePrompt,
+    hasReferenceImage: Boolean(params.referenceImage?.data),
+    hasDualAnchor,
+    categorySweepTitle: params.categorySweepTitle,
+    categorySweepOptions: params.categorySweepOptions,
   });
 
   if (params.onVariationsReady) {
@@ -387,6 +727,7 @@ export async function generateQuadWithNanoBanana(params: {
         model: params.model,
         prompt: v.prompt,
         referenceImage: params.referenceImage,
+        secondaryReferenceImage: params.secondaryReferenceImage,
       });
       const completedSlot: QuadGeneratedSlot = {
         label: v.label,

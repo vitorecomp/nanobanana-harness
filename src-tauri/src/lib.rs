@@ -545,6 +545,121 @@ fn tauri_vault_clear_api_key(state: State<'_, AppDatabase>) -> Result<bool, Stri
 }
 
 #[tauri::command]
+fn tauri_delete_conversation(
+    state: State<'_, AppDatabase>,
+    conversation_id: String,
+) -> Result<bool, String> {
+    let conn = state.conn.lock().map_err(|e| e.to_string())?;
+    conn.execute(
+        "DELETE FROM conversation_turns WHERE conversation_id = ?1",
+        params![conversation_id],
+    )
+    .map_err(|e| e.to_string())?;
+    conn.execute(
+        "DELETE FROM conversations WHERE id = ?1",
+        params![conversation_id],
+    )
+    .map_err(|e| e.to_string())?;
+    Ok(true)
+}
+
+#[tauri::command]
+fn tauri_update_conversation_title(
+    state: State<'_, AppDatabase>,
+    conversation_id: String,
+    title: String,
+) -> Result<bool, String> {
+    let conn = state.conn.lock().map_err(|e| e.to_string())?;
+    let now = Utc::now().to_rfc3339();
+    conn.execute(
+        "UPDATE conversations SET title = ?1, updated_at = ?2 WHERE id = ?3",
+        params![title.trim(), now, conversation_id],
+    )
+    .map_err(|e| e.to_string())?;
+    Ok(true)
+}
+
+#[tauri::command]
+fn tauri_update_turn_selection(
+    state: State<'_, AppDatabase>,
+    turn_id: String,
+    master_prompt: String,
+) -> Result<bool, String> {
+    let conn = state.conn.lock().map_err(|e| e.to_string())?;
+    conn.execute(
+        "UPDATE conversation_turns SET master_prompt = ?1 WHERE id = ?2",
+        params![master_prompt, turn_id],
+    )
+    .map_err(|e| e.to_string())?;
+    Ok(true)
+}
+
+#[tauri::command]
+fn tauri_vault_get_images_dir(state: State<'_, AppDatabase>) -> Result<String, String> {
+    let conn = state.conn.lock().map_err(|e| e.to_string())?;
+    let val: Option<String> = conn
+        .query_row(
+            "SELECT value FROM app_vault WHERE key = 'images_output_dir'",
+            [],
+            |r| r.get(0),
+        )
+        .ok();
+    Ok(val.unwrap_or_else(|| state.images_dir.to_string_lossy().to_string()))
+}
+
+#[tauri::command]
+fn tauri_vault_set_images_dir(
+    state: State<'_, AppDatabase>,
+    images_output_dir: String,
+) -> Result<String, String> {
+    let conn = state.conn.lock().map_err(|e| e.to_string())?;
+    let now = Utc::now().to_rfc3339();
+    let trimmed = images_output_dir.trim().to_string();
+    conn.execute(
+        "INSERT INTO app_vault (key, value, updated_at) VALUES ('images_output_dir', ?1, ?2)
+         ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at",
+        params![trimmed, now],
+    )
+    .map_err(|e| e.to_string())?;
+    Ok(trimmed)
+}
+
+#[tauri::command]
+fn tauri_vault_get_modifiers(
+    state: State<'_, AppDatabase>,
+) -> Result<Option<serde_json::Value>, String> {
+    let conn = state.conn.lock().map_err(|e| e.to_string())?;
+    let raw: Option<String> = conn
+        .query_row(
+            "SELECT value FROM app_vault WHERE key = 'modifier_categories_json'",
+            [],
+            |r| r.get(0),
+        )
+        .ok();
+    match raw {
+        Some(s) => Ok(serde_json::from_str(&s).ok()),
+        None => Ok(None),
+    }
+}
+
+#[tauri::command]
+fn tauri_vault_set_modifiers(
+    state: State<'_, AppDatabase>,
+    categories: serde_json::Value,
+) -> Result<bool, String> {
+    let conn = state.conn.lock().map_err(|e| e.to_string())?;
+    let now = Utc::now().to_rfc3339();
+    let raw = serde_json::to_string(&categories).map_err(|e| e.to_string())?;
+    conn.execute(
+        "INSERT INTO app_vault (key, value, updated_at) VALUES ('modifier_categories_json', ?1, ?2)
+         ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at",
+        params![raw, now],
+    )
+    .map_err(|e| e.to_string())?;
+    Ok(true)
+}
+
+#[tauri::command]
 fn tauri_window_minimize(window: tauri::Window) -> Result<(), String> {
     window.minimize().map_err(|e| e.to_string())
 }
@@ -605,6 +720,13 @@ pub fn run() {
             tauri_vault_get_api_key,
             tauri_vault_set_api_key,
             tauri_vault_clear_api_key,
+            tauri_delete_conversation,
+            tauri_update_conversation_title,
+            tauri_update_turn_selection,
+            tauri_vault_get_images_dir,
+            tauri_vault_set_images_dir,
+            tauri_vault_get_modifiers,
+            tauri_vault_set_modifiers,
             tauri_window_minimize,
             tauri_window_toggle_maximize,
             tauri_window_close,

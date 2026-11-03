@@ -32,11 +32,14 @@ Diferente de geradores text-to-image convencionais que produzem uma única saíd
 
 ## Operating Context
 
-- **Aplicação Desktop Full-Viewport (`100vw × 100vh`, Zero-Scroll)**:
-  - Opera em janela fixa sem rolagem de página, dividida em barra superior de `15%` (linha do tempo de interações no Studio; último projeto trabalhado, busca e filtros por categoria na Galeria), área central de `85%` (no Studio: grade `2×2` de geração ativa em `60%` à esquerda + painel de prompt e parâmetros em `40%` à direita; na Galeria: grade de cards de projetos) e barra inferior com nome editável do projeto à esquerda e botão `+ Novo Projeto` à direita.
-- **Inspeção e Seleção no Fluxo de Trabalho**:
-  - Clique simples em um dos 4 cards seleciona a variação (`✓ Escolhida`) e carrega seu prompt no editor lateral; o botão `⤢` (ou duplo-clique) abre a imagem em tela cheia (Lightbox).
-  - O toggle `Referência Visual: ON / OFF` define se a imagem escolhida é enviada como `inlineData` para guiar a próxima rodada.
+- **Full-Viewport Desktop Application (`100vw × 100vh`, Zero-Scroll Outer Shell)**:
+  - Operates inside a fixed Oxford Navy (`#14213d`) window frame with custom Tauri titlebar controls, a collapsible chamfered sidebar (`Studio`, `Gallery`, `Modifiers`, `Settings`), and a rounded Platinum (`#e5e5e5`) main canvas.
+  - **Studio (`/` and `/create`)**: 3-column horizontal architecture (`224px` vertical branching timeline on the left | `2×2` quad generation grid in the center | dual-mode `Compose Scene` & `Surgical Delta` prompt editor + `2×2 Matrix & Parameters` on the right).
+  - **Gallery (`/gallery`)**: Top 15% strip (`Latest Project`, search bar, and style filter pills) + bottom 85% responsive grid of chamfered project cards.
+  - **Modifiers (`/modifiers`)**: Left 62% category filter bar and chamfered category cards + right 38% Gemini AI generator and manual category/modifier creator.
+- **Inspection & Selection in the Workflow**:
+  - Clicking one of the 4 cards selects the variation (`✓ Selected`) and loads its prompt into the editor; clicking `⚡ Delta` locks the frame and opens `⚡ Surgical Delta` mode; clicking `⤢` (or double-clicking) opens the full-screen Lightbox with side-by-side `⇄ Compare`.
+  - Canonical Character DNA (`🧬 Pin DNA`) and Preservation Locks (`🔒 Character`, `🔒 Pose`, `🔒 Background`) allow dual-anchor visual consistency across turns.
 
 ## Capabilities and Constraints
 
@@ -55,11 +58,11 @@ Diferente de geradores text-to-image convencionais que produzem uma única saíd
 
 ## Brand Commitments
 
-- **Identidade**: **Nano Banana Studio** (`NANOBANANA // STUDIO`).
-- **Idioma da Interface**: Português (`pt-BR`).
+- **Identidade**: **Nano Banana Studio** (`NANO BANANA // ATELIER STUDIO`).
+- **Idioma da Interface**: Inglês (`en-US`).
 - **Restrições Visuais Vinculantes Definidas pelo Usuário**:
-  - Paleta de 5 cores obrigatória: `["#003049", "#d62828", "#f77f00", "#fcbf49", "#eae2b7"]`.
-  - Divisores estruturais entre seções da tela no lugar de containers em card; o uso de cards é restrito exclusivamente aos projetos na Galeria, às 4 imagens geradas no grid `2×2` e a cada item de interação da timeline.
+  - Paleta de 5 cores base: `["#000000", "#14213d", "#fca311", "#e5e5e5", "#ffffff"]` (com `#d62828` reservado para confirmação de ações destrutivas em dois passos).
+  - Divisores estruturais (`1.5px solid rgba(20, 33, 61, 0.22)`) entre seções do workspace no lugar de containers aninhados; cards chanfrados (`clip-path` 45°) restritos à barra lateral, aos projetos na Galeria, às categorias de Modifiers, às 4 imagens geradas no grid `2×2` e aos itens da timeline.
 
 ## Evidence on Hand
 

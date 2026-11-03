@@ -179,6 +179,13 @@ function getDb(): DatabaseSync {
   } catch {
     // Column already exists
   }
+  try {
+    db.exec(
+      `ALTER TABLE conversations ADD COLUMN canonical_dna_json TEXT;`
+    );
+  } catch {
+    // Column already exists
+  }
 
   // Organize existing images into per-project subfolders (~/Pictures/nanobanana/<project_title>/)
   try {
@@ -317,7 +324,7 @@ export async function POST(req: NextRequest) {
     if (action === "get_conversation_detail") {
       const conversationId = String(payload.conversationId || "");
       const convStmt = db.prepare(`
-        SELECT id, user_id, title, style_id, created_at, updated_at
+        SELECT id, user_id, title, style_id, canonical_dna_json, created_at, updated_at
         FROM conversations
         WHERE id = ?
       `);
@@ -327,6 +334,7 @@ export async function POST(req: NextRequest) {
             user_id: string;
             title: string;
             style_id: string;
+            canonical_dna_json?: string | null;
             created_at: string;
             updated_at: string;
           }
@@ -335,6 +343,31 @@ export async function POST(req: NextRequest) {
       if (!conv) {
         return NextResponse.json({ ok: true, data: null });
       }
+
+      const parsedCanonicalDna = (() => {
+        if (!conv.canonical_dna_json) return null;
+        try {
+          const raw = JSON.parse(conv.canonical_dna_json) as {
+            label?: string;
+            imageUrl?: string;
+            imagePath?: string | null;
+            prompt?: string;
+            sourceTurn?: number;
+          };
+          const resolvedImageUrl = raw.imagePath
+            ? toFilesystemImageUrl(raw.imagePath)
+            : raw.imageUrl || "";
+          if (!resolvedImageUrl) return null;
+          return {
+            label: String(raw.label || "Pinned DNA"),
+            imageUrl: resolvedImageUrl,
+            prompt: String(raw.prompt || ""),
+            sourceTurn: raw.sourceTurn !== undefined ? Number(raw.sourceTurn) : undefined,
+          };
+        } catch {
+          return null;
+        }
+      })();
 
       const turnsStmt = db.prepare(`
         SELECT id, conversation_id, user_id, turn_number, parent_turn_number, role, raw_idea, master_prompt,
@@ -418,10 +451,90 @@ export async function POST(req: NextRequest) {
         ok: true,
         data: {
           ...conv,
+          canonical_dna: parsedCanonicalDna,
           turn_count: turns.length,
           latest_prompt: lastTurn?.master_prompt || null,
           preview_image_url: lastTurn?.image_url || null,
           turns,
+        },
+      });
+    }
+
+    if (action === "update_conversation_dna") {
+      const conversationId = String(payload.conversationId || "");
+      if (!conversationId) {
+        return NextResponse.json({ ok: false, error: "Missing conversationId" });
+      }
+      const rawDna = payload.canonicalDna as
+        | {
+            label?: string;
+            imageUrl?: string;
+            prompt?: string;
+            sourceTurn?: number;
+          }
+        | null
+        | undefined;
+
+      if (!rawDna || !rawDna.imageUrl) {
+        db.prepare(
+          `UPDATE conversations SET canonical_dna_json = NULL, updated_at = ? WHERE id = ?`
+        ).run(now, conversationId);
+        return NextResponse.json({ ok: true, data: null });
+      }
+
+      const convRow = db
+        .prepare(`SELECT title FROM conversations WHERE id = ?`)
+        .get(conversationId) as { title: string } | undefined;
+      const effectiveTitle = convRow?.title || "New Project";
+
+      let savedPath: string | null = null;
+      let resolvedUrl = String(rawDna.imageUrl);
+
+      if (resolvedUrl.startsWith("data:image/")) {
+        const baseOutputDir = getConfiguredImagesDir(db);
+        const projectOutputDir = path.join(
+          baseOutputDir,
+          sanitizeProjectFolderName(effectiveTitle, conversationId)
+        );
+        fs.mkdirSync(projectOutputDir, { recursive: true });
+        savedPath = saveBase64PngToDir(
+          projectOutputDir,
+          `dna_ref_${Date.now()}.png`,
+          resolvedUrl
+        );
+        if (savedPath) {
+          resolvedUrl = toFilesystemImageUrl(savedPath);
+        }
+      } else if (resolvedUrl.startsWith("/api/image?path=")) {
+        try {
+          savedPath = decodeURIComponent(
+            resolvedUrl.replace("/api/image?path=", "")
+          );
+        } catch {
+          savedPath = null;
+        }
+      }
+
+      const persistedObj = {
+        label: String(rawDna.label || "Pinned DNA"),
+        imageUrl: resolvedUrl,
+        imagePath: savedPath,
+        prompt: String(rawDna.prompt || ""),
+        sourceTurn:
+          rawDna.sourceTurn !== undefined ? Number(rawDna.sourceTurn) : undefined,
+      };
+
+      db.prepare(
+        `UPDATE conversations SET canonical_dna_json = ?, updated_at = ? WHERE id = ?`
+      ).run(JSON.stringify(persistedObj), now, conversationId);
+
+      return NextResponse.json({
+        ok: true,
+        data: {
+          label: persistedObj.label,
+          imageUrl: persistedObj.imageUrl,
+          prompt: persistedObj.prompt,
+          sourceTurn: persistedObj.sourceTurn,
         },
       });
     }

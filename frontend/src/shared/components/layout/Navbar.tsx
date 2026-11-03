@@ -19,8 +19,9 @@ export default function Navbar() {
     activeProjectTitle,
     setActiveProjectTitle,
     triggerNewProject,
+    isSettingsModalOpen,
+    setSettingsModalOpen,
   } = useStudioSession();
-  const [modalOpen, setModalOpen] = useState<boolean>(false);
   const [collapsed, setCollapsed] = useState<boolean>(false);
 
   const activeUser = user || LOCAL_DEV_USER;
@@ -265,7 +266,7 @@ export default function Navbar() {
             type="button"
             id="nav-btn-vault"
             className="ref-sidebar-nav-item config-btn"
-            onClick={() => setModalOpen(true)}
+            onClick={() => setSettingsModalOpen(true)}
             title="Settings • Gemini API Key & Images Folder"
             aria-label="Settings"
           >
@@ -290,7 +291,7 @@ export default function Navbar() {
               <span
                 className="ref-sidebar-status-dot"
                 style={{
-                  backgroundColor: hasKeyInRam ? "#fca311" : "#14213d",
+                  backgroundColor: hasKeyInRam ? "#fca311" : "#d62828",
                 }}
               />
             )}
@@ -299,9 +300,9 @@ export default function Navbar() {
       </aside>
 
       <ProfileEditModal
-        isOpen={modalOpen}
+        isOpen={isSettingsModalOpen}
         user={activeUser}
-        onClose={() => setModalOpen(false)}
+        onClose={() => setSettingsModalOpen(false)}
         onSave={(updatedUser) => setUser(updatedUser)}
       />
     </>

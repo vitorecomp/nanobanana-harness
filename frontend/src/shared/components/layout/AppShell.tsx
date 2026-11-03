@@ -3,6 +3,7 @@
 import React, { ReactNode, Suspense, useState } from "react";
 import Navbar from "./Navbar";
 import { useStudioSession } from "@/core/context/StudioSessionContext";
+import { updateConversationTitle } from "@/features/history";
 import {
   closeAppWindow,
   minimizeAppWindow,
@@ -10,8 +11,16 @@ import {
 } from "@/core/tauri/tauriBridge";
 
 export default function AppShell({ children }: { children: ReactNode }) {
-  const { activeProjectTitle } = useStudioSession();
+  const { activeProjectId, activeProjectTitle, setActiveProjectTitle } =
+    useStudioSession();
   const [isMaximized, setIsMaximized] = useState<boolean>(false);
+
+  const handleTitlebarProjectChange = (nextTitle: string) => {
+    setActiveProjectTitle(nextTitle);
+    if (activeProjectId) {
+      void updateConversationTitle(activeProjectId, nextTitle);
+    }
+  };
 
   return (
     <div className="ref-desktop-shell">
@@ -29,11 +38,19 @@ export default function AppShell({ children }: { children: ReactNode }) {
           <span className="ref-window-title-text" data-tauri-drag-region>
             NANO BANANA // ATELIER STUDIO
           </span>
-          {activeProjectTitle && (
-            <span className="ref-window-project-pill" data-tauri-drag-region>
-              {activeProjectTitle}
-            </span>
-          )}
+          <label className="sr-only" htmlFor="window-titlebar-project-input">
+            Current Project Title
+          </label>
+          <input
+            id="window-titlebar-project-input"
+            type="text"
+            value={activeProjectTitle}
+            onChange={(e) => handleTitlebarProjectChange(e.target.value)}
+            onDoubleClick={(e) => e.stopPropagation()}
+            className="ref-window-project-pill-input"
+            placeholder="Project name..."
+            title="Edit current project name"
+          />
         </div>
 
         <div

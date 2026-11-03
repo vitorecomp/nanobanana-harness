@@ -2,6 +2,8 @@
 
 An installable Desktop & Web studio for creating and iteratively refining images with **Google's Nano Banana (`gemini-2.5-flash-image`)**, featuring a **Neo-Brutalist Editorial Anime UI** inspired by Crypko, a built-in **Rust / TypeScript Interactive Co-Pilot**, **Local SQLite (`rusqlite`)** persistence, and **Native OS Filesystem** image storage.
 
+![Nano Banana Atelier Studio](./docs/studio-preview.png)
+
 ---
 
 ## Architecture Highlights

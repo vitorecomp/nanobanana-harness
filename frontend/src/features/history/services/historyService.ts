@@ -15,11 +15,13 @@ import {
   localDbListConversations,
   localDbSaveConversationTurn,
   localDbToggleTurnPublish,
+  localDbUpdateConversationDna,
   localDbUpdateConversationTitle,
   localDbUpdateTurnSelection,
 } from "@/core/tauri/tauriBridge";
 import {
   BucketGalleryItem,
+  SavedCanonicalDna,
   SavedConversationDetail,
   SavedConversationSummary,
   SavedTurnRecord,
@@ -95,6 +97,7 @@ export async function getConversationDetail(
       user_id: String(conv.user_id || userId || ""),
       title: conv.title || "Untitled Project",
       style_id: conv.style_id,
+      canonical_dna: conv.canonical_dna || null,
       turn_count: rawTurns.length,
       latest_prompt: conv.latest_prompt || undefined,
       preview_image_url: conv.preview_image_url || null,
@@ -179,6 +182,17 @@ export async function updateConversationTitle(
     return await localDbUpdateConversationTitle({ conversationId, title });
   } catch {
     return false;
+  }
+}
+
+export async function updateConversationDna(
+  conversationId: string,
+  canonicalDna: SavedCanonicalDna | null
+): Promise<SavedCanonicalDna | null> {
+  try {
+    return await localDbUpdateConversationDna({ conversationId, canonicalDna });
+  } catch {
+    return canonicalDna;
   }
 }
 

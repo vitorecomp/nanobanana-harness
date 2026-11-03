@@ -20,12 +20,19 @@ export default function ProjectsWorkspacePage() {
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [selectedCategory, setSelectedCategory] = useState<string>("all");
   const [galleryNotice, setGalleryNotice] = useState<string | null>(null);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!galleryNotice) return;
     const timer = window.setTimeout(() => setGalleryNotice(null), 4000);
     return () => window.clearTimeout(timer);
   }, [galleryNotice]);
+
+  useEffect(() => {
+    if (!confirmDeleteId) return;
+    const timer = window.setTimeout(() => setConfirmDeleteId(null), 4000);
+    return () => window.clearTimeout(timer);
+  }, [confirmDeleteId]);
 
   const loadProjectsFromDb = useCallback(async () => {
     setLoading(true);
@@ -68,6 +75,11 @@ export default function ProjectsWorkspacePage() {
     proj: SavedConversationSummary
   ) => {
     e.stopPropagation();
+    if (confirmDeleteId !== proj.id) {
+      setConfirmDeleteId(proj.id);
+      return;
+    }
+    setConfirmDeleteId(null);
     const ok = await deleteConversation(proj.id);
     if (ok) {
       setProjects((prev) => prev.filter((p) => p.id !== proj.id));
@@ -138,7 +150,7 @@ export default function ProjectsWorkspacePage() {
             )}
           </div>
 
-          {/* Center: Search Bar */}
+          {/* Center: Search Bar + Live Status Toast */}
           <div className="ref-gallery-search-box">
             <input
               type="search"
@@ -146,7 +158,13 @@ export default function ProjectsWorkspacePage() {
               onChange={(e) => setSearchQuery(e.target.value)}
               className="ref-input ref-gallery-search-input"
               placeholder="Search projects by title or prompt..."
+              aria-label="Search projects by title or prompt"
             />
+            {galleryNotice && (
+              <div className="ref-gallery-toast-slot" aria-live="polite">
+                <span className="ref-atelier-toast-pill">{galleryNotice}</span>
+              </div>
+            )}
           </div>
 
           {/* Right: Category Filter Pills */}
@@ -194,15 +212,7 @@ export default function ProjectsWorkspacePage() {
                 <article
                   key={proj.id}
                   className="ref-project-card"
-                  role="button"
-                  tabIndex={0}
                   onClick={() => handleOpenProjectInStudio(proj)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" || e.key === " ") {
-                      e.preventDefault();
-                      handleOpenProjectInStudio(proj);
-                    }
-                  }}
                 >
                   {/* 1. TOP ROUNDED ARTWORK FRAME */}
                   <div className="ref-project-card-image-frame">
@@ -270,13 +280,35 @@ export default function ProjectsWorkspacePage() {
                       </button>
                       <button
                         type="button"
-                        className="ref-mura-btn-outline danger"
+                        className={`ref-mura-btn-outline ${
+                          confirmDeleteId === proj.id
+                            ? "danger-confirm"
+                            : "danger"
+                        }`}
                         onClick={(e) => handleDeleteProject(e, proj)}
                         title="Remove project from Gallery (keeps PNG files in ~/Pictures/nanobanana)"
-                        aria-label={`Remove project ${proj.title}`}
+                        aria-label={
+                          confirmDeleteId === proj.id
+                            ? `Confirm removing project ${proj.title}`
+                            : `Remove project ${proj.title}`
+                        }
                       >
-                        Remove ✕
+                        {confirmDeleteId === proj.id
+                          ? "Confirm Remove?"
+                          : "Remove ✕"}
                       </button>
+                      {confirmDeleteId === proj.id && (
+                        <button
+                          type="button"
+                          className="ref-mura-btn-outline"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setConfirmDeleteId(null);
+                          }}
+                        >
+                          Cancel
+                        </button>
+                      )}
                     </div>
                   </div>
                 </article>

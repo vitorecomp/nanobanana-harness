@@ -277,6 +277,13 @@ export async function localDbDeleteConversation(
   return Boolean(dbRes);
 }
 
+export interface LocalCanonicalDna {
+  label: string;
+  imageUrl: string;
+  prompt: string;
+  sourceTurn?: number;
+}
+
 export async function localDbGetConversationDetail(
   conversationId: string
 ): Promise<{
@@ -284,6 +291,7 @@ export async function localDbGetConversationDetail(
   user_id: string;
   title: string;
   style_id: string;
+  canonical_dna?: LocalCanonicalDna | null;
   turn_count: number;
   latest_prompt: string | null;
   preview_image_url: string | null;
@@ -296,6 +304,7 @@ export async function localDbGetConversationDetail(
     user_id: string;
     title: string;
     style_id: string;
+    canonical_dna?: LocalCanonicalDna | null;
     turn_count: number;
     latest_prompt: string | null;
     preview_image_url: string | null;
@@ -310,6 +319,7 @@ export async function localDbGetConversationDetail(
     user_id: string;
     title: string;
     style_id: string;
+    canonical_dna?: LocalCanonicalDna | null;
     turn_count: number;
     latest_prompt: string | null;
     preview_image_url: string | null;
@@ -416,6 +426,16 @@ export async function localDbUpdateConversationTitle(params: {
     params
   );
   return Boolean(dbRes);
+}
+
+export async function localDbUpdateConversationDna(params: {
+  conversationId: string;
+  canonicalDna: LocalCanonicalDna | null;
+}): Promise<LocalCanonicalDna | null> {
+  return await querySqliteApi<LocalCanonicalDna | null>(
+    "update_conversation_dna",
+    params
+  );
 }
 
 export async function localDbToggleTurnPublish(

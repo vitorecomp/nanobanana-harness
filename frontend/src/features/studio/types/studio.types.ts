@@ -2,6 +2,29 @@ export type NanoBananaModel =
   | "gemini-2.5-flash-image"
   | "gemini-2.0-flash-exp-image-generation";
 
+export type CreationFlowMode = "compose" | "surgical-delta";
+
+export type ExplorationMatrixAxis =
+  | "auto-director"
+  | "camera-angles"
+  | "lighting-setups"
+  | "wardrobe-variants"
+  | "storyboard-4"
+  | `cat:${string}`;
+
+export interface PreservationLocks {
+  keepCharacter: boolean;
+  keepPose: boolean;
+  keepBackground: boolean;
+}
+
+export interface CanonicalDnaReference {
+  label: string;
+  imageUrl: string;
+  prompt: string;
+  sourceTurn?: number;
+}
+
 export interface InlineImagePart {
   mimeType: string;
   data: string;
@@ -12,6 +35,7 @@ export interface GenerateNanoBananaRequest {
   model: NanoBananaModel;
   prompt: string;
   referenceImage?: InlineImagePart | null;
+  secondaryReferenceImage?: InlineImagePart | null;
 }
 
 export interface GenerateNanoBananaResult {
