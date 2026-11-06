@@ -32,11 +32,25 @@ import {
 import { GoogleUserProfile, LOCAL_DEV_USER } from "@/features/auth";
 import { useStudioSession } from "@/core/context/StudioSessionContext";
 import {
+  IconAtelierStar,
+  IconAutoGrid,
+  IconChevron,
+  IconClose,
+  IconDna,
+  IconDownload,
+  IconExpand,
+  IconGripDots,
+  IconMinus,
+  IconPlay,
+  IconPlus,
+} from "@/shared";
+import {
   createConversation,
   getConversationDetail,
   listUserConversations,
   saveConversationTurn,
   updateConversationDna,
+  updateConversationTitle,
   updateTurnSelection,
 } from "@/features/history";
 
@@ -499,6 +513,10 @@ export default function InteractiveStudio({
   const [selectedCanvasNodeId, setSelectedCanvasNodeId] =
     useState<string>("draft");
   const [isStepModalOpen, setIsStepModalOpen] = useState<boolean>(false);
+  const [isProjectTitleModalOpen, setIsProjectTitleModalOpen] =
+    useState<boolean>(false);
+  const [projectTitleDraft, setProjectTitleDraft] = useState<string>("");
+  const projectTitleInputRef = useRef<HTMLInputElement | null>(null);
 
   // Pan & Zoom Canvas Viewport
   const [canvasViewport, setCanvasViewport] = useState<{
@@ -1480,6 +1498,26 @@ export default function InteractiveStudio({
         null
       : null;
 
+  const handleOpenEditProjectTitleModal = () => {
+    setProjectTitleDraft(projectTitle || "New Project");
+    setIsProjectTitleModalOpen(true);
+    window.setTimeout(() => {
+      projectTitleInputRef.current?.focus();
+      projectTitleInputRef.current?.select();
+    }, 30);
+  };
+
+  const handleSaveProjectTitleModal = (e: React.FormEvent) => {
+    e.preventDefault();
+    const nextTitle = projectTitleDraft.trim() || "Untitled Project";
+    setProjectTitle(nextTitle);
+    if (activeProjectId) {
+      void updateConversationTitle(activeProjectId, nextTitle);
+    }
+    setIsProjectTitleModalOpen(false);
+    showTransientNotice(`✦ Project renamed to "${nextTitle}"`);
+  };
+
   return (
     <div className="ref-page-container">
       <div className="ref-flow-studio-layout">
@@ -1491,6 +1529,45 @@ export default function InteractiveStudio({
           {/* Floating Top Flow Toolbar */}
           <div className="ref-flow-toolbar">
             <div className="ref-flow-toolbar-left">
+              <div className="ref-flow-project-title-group">
+                <span
+                  className="ref-flow-project-title-text"
+                  title={projectTitle || "New Project"}
+                >
+                  {projectTitle || "New Project"}
+                </span>
+                <button
+                  type="button"
+                  className="ref-flow-project-edit-btn"
+                  onClick={handleOpenEditProjectTitleModal}
+                  title="Edit project name"
+                  aria-label="Edit project name"
+                >
+                  <svg
+                    width="13"
+                    height="13"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    aria-hidden="true"
+                  >
+                    <path
+                      d="M12 20.5H21"
+                      stroke="currentColor"
+                      strokeWidth="2.2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                    <path
+                      d="M16.5 4a2.121 2.121 0 0 1 3 3L7 19.5l-4 1 1-4L16.5 4z"
+                      stroke="currentColor"
+                      strokeWidth="2.2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                  </svg>
+                </button>
+              </div>
+              <span className="ref-flow-toolbar-divider" aria-hidden="true" />
               <span className="ref-flow-toolbar-badge">
                 ⛓ Flow • {totalFlowCardsCount}{" "}
                 {totalFlowCardsCount === 1 ? "Card" : "Cards"} (
@@ -1514,14 +1591,17 @@ export default function InteractiveStudio({
                 disabled={isGenerating}
                 title="Add a new generation step (creates 4 new image cards)"
               >
-                + New Step{" "}
-                {selectedLockedRound
-                  ? `from #${selectedLockedRound.turnNumber}.${
-                      selectedLockedVariantIdx + 1
-                    }`
-                  : interactions.length > 0
-                  ? `from #${interactions[interactions.length - 1].turnNumber}.1`
-                  : ""}
+                <IconPlus size={11} strokeWidth={2.3} />
+                <span>
+                  New Step{" "}
+                  {selectedLockedRound
+                    ? `from #${selectedLockedRound.turnNumber}.${
+                        selectedLockedVariantIdx + 1
+                      }`
+                    : interactions.length > 0
+                    ? `from #${interactions[interactions.length - 1].turnNumber}.1`
+                    : ""}
+                </span>
               </button>
             </div>
 
@@ -1532,7 +1612,8 @@ export default function InteractiveStudio({
                 onClick={handleAutoOrganizeFlow}
                 title="Auto-organize nodes into a clean left-to-right tree"
               >
-                ⊞ Auto-Organize
+                <IconAutoGrid size={13} />
+                <span>Auto-Organize</span>
               </button>
               <button
                 type="button"
@@ -1540,7 +1621,8 @@ export default function InteractiveStudio({
                 onClick={handleFitFlowView}
                 title="Center and fit all nodes on screen"
               >
-                ⤢ Fit View
+                <IconExpand size={13} />
+                <span>Fit View</span>
               </button>
               <div className="ref-flow-zoom-pill">
                 <button
@@ -1557,7 +1639,7 @@ export default function InteractiveStudio({
                   }
                   aria-label="Zoom out"
                 >
-                  −
+                  <IconMinus size={12} strokeWidth={2.1} />
                 </button>
                 <button
                   type="button"
@@ -1583,7 +1665,7 @@ export default function InteractiveStudio({
                   }
                   aria-label="Zoom in"
                 >
-                  +
+                  <IconPlus size={12} strokeWidth={2.1} />
                 </button>
               </div>
             </div>
@@ -1705,6 +1787,8 @@ export default function InteractiveStudio({
                           fill="none"
                           stroke={isHighlighted ? "#fca311" : "#14213d"}
                           strokeWidth={isHighlighted ? "3" : "2.2"}
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
                           markerEnd="url(#flow-arrow-locked)"
                         />
                         <circle
@@ -1742,6 +1826,8 @@ export default function InteractiveStudio({
                             fill="none"
                             stroke="#fca311"
                             strokeWidth="2.8"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
                             strokeDasharray="7 5"
                             markerEnd="url(#flow-arrow-draft)"
                           />
@@ -1822,7 +1908,7 @@ export default function InteractiveStudio({
                           round.turnNumber
                         }.${slotIdx + 1}`}
                       >
-                        +
+                        <IconPlus size={12} strokeWidth={2.3} />
                       </button>
 
                       {/* Draggable Card Header */}
@@ -1851,7 +1937,7 @@ export default function InteractiveStudio({
                             className="ref-flow-drag-grip"
                             title="Drag to organize this card on screen"
                           >
-                            ⠿
+                            <IconGripDots size={12} />
                           </span>
                           <span className="ref-flow-step-badge locked">
                             🔒 #{round.turnNumber}.{slotIdx + 1}
@@ -1908,7 +1994,7 @@ export default function InteractiveStudio({
                                 title="Expand image in full screen (Lightbox)"
                                 aria-label="Expand image in full screen"
                               >
-                                ⤢
+                                <IconExpand size={14} strokeWidth={1.9} />
                               </button>
                               <button
                                 type="button"
@@ -1925,7 +2011,7 @@ export default function InteractiveStudio({
                                 title="Download PNG"
                                 aria-label="Download PNG"
                               >
-                                ↓
+                                <IconDownload size={14} strokeWidth={1.9} />
                               </button>
                               <button
                                 type="button"
@@ -1944,7 +2030,7 @@ export default function InteractiveStudio({
                                 title="Pin this card as Canonical Character DNA across the flow"
                                 aria-label="Pin Canonical DNA"
                               >
-                                🧬
+                                <IconDna size={14} strokeWidth={1.7} />
                               </button>
                             </div>
                           </>
@@ -2025,7 +2111,9 @@ export default function InteractiveStudio({
                         }}
                       >
                         <div className="ref-flow-node-title-group">
-                          <span className="ref-flow-drag-grip">⠿</span>
+                          <span className="ref-flow-drag-grip">
+                            <IconGripDots size={12} />
+                          </span>
                           <span className="ref-flow-step-badge draft">
                             ⚡ #{nextTurnNum}.{draftIdx + 1}
                           </span>
@@ -2104,7 +2192,8 @@ export default function InteractiveStudio({
                         setIsStepModalOpen(true);
                       }}
                     >
-                      <span>+ Create Step #1 (4 Cards)</span>
+                      <IconPlus size={12} strokeWidth={2.2} />
+                      <span>Create Step #1 (4 Cards)</span>
                     </button>
                   </div>
                 </article>
@@ -2143,11 +2232,10 @@ export default function InteractiveStudio({
               <button
                 type="button"
                 aria-label="Close modal"
-                className="ref-circle-icon-btn"
-                style={{ width: "32px", height: "32px" }}
+                className="ref-circle-icon-btn sm"
                 onClick={() => setIsStepModalOpen(false)}
               >
-                ✕
+                <IconClose size={12} />
               </button>
             </div>
 
@@ -2277,11 +2365,12 @@ export default function InteractiveStudio({
                         )
                       }
                     >
-                      <span>✦ Branch 4 New Cards (Compose)</span>
+                      <IconAtelierStar size={13} />
+                      <span>Branch 4 New Cards (Compose)</span>
                     </button>
                     <button
                       type="button"
-                      className="ref-mura-btn-outline"
+                      className="ref-mura-btn-outline lg"
                       onClick={() =>
                         handleStartBranchFromNode(
                           selectedLockedRound,
@@ -2290,7 +2379,7 @@ export default function InteractiveStudio({
                         )
                       }
                     >
-                      ⚡ Branch Surgical Delta
+                      <span>⚡ Branch Surgical Delta</span>
                     </button>
                   </div>
                 </div>
@@ -2323,7 +2412,8 @@ export default function InteractiveStudio({
                   }`}
                   onClick={() => setFlowMode("compose")}
                 >
-                  ✦ Compose
+                  <IconAtelierStar size={12} />
+                  <span>Compose</span>
                 </button>
                 <button
                   type="button"
@@ -2335,7 +2425,7 @@ export default function InteractiveStudio({
                   onClick={() => setFlowMode("surgical-delta")}
                   title="Edit only targeted details while locking Character, Pose, or Background"
                 >
-                  ⚡ Surgical Delta
+                  <span>⚡ Surgical Delta</span>
                 </button>
               </div>
 
@@ -2367,7 +2457,8 @@ export default function InteractiveStudio({
                   onClick={() => void handleEnhanceNarrative()}
                   title="Expand your short idea into a rich cinematic paragraph optimized for Gemini Nano Banana"
                 >
-                  {isEnhancingNarrative ? "✦ Enhancing..." : "✦ Enhance"}
+                  <IconAtelierStar size={12} />
+                  <span>{isEnhancingNarrative ? "Enhancing..." : "Enhance"}</span>
                 </button>
               </div>
             </div>
@@ -2443,7 +2534,7 @@ export default function InteractiveStudio({
                         onClick={() => void handleClearCanonicalDna()}
                         title="Unpin Canonical DNA Reference"
                       >
-                        ✕
+                        <IconClose size={10} strokeWidth={2} />
                       </button>
                     )}
                   </div>
@@ -2588,7 +2679,8 @@ export default function InteractiveStudio({
                       className="ref-mura-btn-solid"
                       onClick={() => setFlowMode("compose")}
                     >
-                      ✦ Compose Scene
+                      <IconAtelierStar size={12} />
+                      <span>Compose Scene</span>
                     </button>
                     <button
                       type="button"
@@ -2986,7 +3078,7 @@ export default function InteractiveStudio({
                 >
                   <button
                     type="button"
-                    className="ref-mura-btn-outline"
+                    className="ref-mura-btn-outline lg"
                     onClick={() => setIsStepModalOpen(false)}
                   >
                     Cancel
@@ -3006,10 +3098,11 @@ export default function InteractiveStudio({
                         : !promptInput.trim())
                     }
                   >
+                    {!isGenerating && <IconPlay size={11} />}
                     <span>
                       {isGenerating
                         ? `Rendering Step #${interactions.length + 1}...`
-                        : `▶ Generate Step #${
+                        : `Generate Step #${
                             interactions.length + 1
                           } (4 Images)`}
                     </span>
@@ -3101,7 +3194,8 @@ export default function InteractiveStudio({
                           }}
                           title="Previous variation (←)"
                         >
-                          ‹ Previous
+                          <IconChevron direction="left" size={12} />
+                          <span>Previous</span>
                         </button>
                         <button
                           type="button"
@@ -3123,7 +3217,8 @@ export default function InteractiveStudio({
                           }}
                           title="Next variation (→)"
                         >
-                          Next ›
+                          <span>Next</span>
+                          <IconChevron direction="right" size={12} />
                         </button>
                       </div>
                     )}
@@ -3172,16 +3267,16 @@ export default function InteractiveStudio({
                         a.click();
                       }}
                     >
-                      ↓ Download PNG
+                      <IconDownload size={13} />
+                      <span>Download PNG</span>
                     </button>
                     <button
                       type="button"
                       aria-label="Close lightbox"
-                      className="ref-circle-icon-btn"
-                      style={{ width: "34px", height: "34px" }}
+                      className="ref-circle-icon-btn md"
                       onClick={() => setLightboxSlot(null)}
                     >
-                      ✕
+                      <IconClose size={13} />
                     </button>
                   </div>
                 </div>
@@ -3227,6 +3322,83 @@ export default function InteractiveStudio({
             </div>
           );
         })()}
+
+      {/* ==================== MODAL FOR EDITING PROJECT NAME ==================== */}
+      {isProjectTitleModalOpen && (
+        <div
+          className="ref-modal-backdrop"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="edit-project-title-modal-heading"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              setIsProjectTitleModalOpen(false);
+            }
+          }}
+        >
+          <form
+            className="ref-modal-card"
+            style={{ maxWidth: "400px", padding: "20px 22px", gap: "14px" }}
+            onSubmit={handleSaveProjectTitleModal}
+          >
+            <div className="ref-modal-header">
+              <strong
+                id="edit-project-title-modal-heading"
+                className="ref-soft-card-title"
+              >
+                ✎ Edit Project Name
+              </strong>
+              <button
+                type="button"
+                aria-label="Close modal"
+                className="ref-circle-icon-btn sm"
+                onClick={() => setIsProjectTitleModalOpen(false)}
+              >
+                <IconClose size={12} />
+              </button>
+            </div>
+
+            <div>
+              <label
+                className="ref-field-label"
+                htmlFor="edit-project-title-input"
+              >
+                Project Name
+              </label>
+              <input
+                ref={projectTitleInputRef}
+                id="edit-project-title-input"
+                type="text"
+                value={projectTitleDraft}
+                onChange={(e) => setProjectTitleDraft(e.target.value)}
+                className="ref-input"
+                placeholder="Enter project name..."
+              />
+            </div>
+
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "flex-end",
+                alignItems: "center",
+                gap: "8px",
+                paddingTop: "2px",
+              }}
+            >
+              <button
+                type="button"
+                className="ref-mura-btn-outline lg"
+                onClick={() => setIsProjectTitleModalOpen(false)}
+              >
+                Cancel
+              </button>
+              <button type="submit" className="ref-dark-pill-btn">
+                <span>Save Name</span>
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
     </div>
   );
 }

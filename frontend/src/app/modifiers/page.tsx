@@ -2,6 +2,7 @@
 
 import React, { useState, useMemo } from "react";
 import { useStudioSession } from "@/core/context/StudioSessionContext";
+import { IconAtelierStar, IconClose, IconPlus } from "@/shared";
 import {
   ModifierCategory,
   ModifierOption,
@@ -10,22 +11,22 @@ import {
 
 const AI_MODIFIER_SUGGESTIONS = [
   {
-    label: "✦ Cyberpunk & Techwear Wardrobe",
+    label: "Cyberpunk & Techwear Wardrobe",
     prompt:
       "Cyberpunk & Urban Techwear Clothing category with tactical jackets, reflective fabrics, and futuristic haute couture",
   },
   {
-    label: "✦ Cinematic Camera Angles",
+    label: "Cinematic Camera Angles",
     prompt:
       "Cinematic Camera Angles & Framing category (Heroic low-angle, Extreme eye close-up, Over-the-shoulder, Long tracking shot)",
   },
   {
-    label: "✦ Analog Lenses & Optics",
+    label: "Analog Lenses & Optics",
     prompt:
       "Analog Cameras & Vintage Lenses category (Medium format Hasselblad 80mm, 16mm Fisheye, Miniature Tilt-Shift, Helios 44-2 swirly bokeh)",
   },
   {
-    label: "✦ Dramatic Lighting & Mood",
+    label: "Dramatic Lighting & Mood",
     prompt:
       "Cinematic Lighting category (Silhouette backlight, Volumetric window rays, Baroque chiaroscuro, Bioluminescent glow)",
   },
@@ -405,9 +406,14 @@ export default function ModifiersManagerPage() {
                           onClick={() => void handleDeleteCategory(cat)}
                           title={`Delete category ${cat.title}`}
                         >
-                          {confirmDeleteCatId === cat.id
-                            ? "Confirm Delete?"
-                            : "Delete ✕"}
+                          {confirmDeleteCatId === cat.id ? (
+                            "Confirm Delete?"
+                          ) : (
+                            <>
+                              <span>Delete</span>
+                              <IconClose size={10} strokeWidth={2.1} />
+                            </>
+                          )}
                         </button>
                       </div>
                     </article>
@@ -534,7 +540,8 @@ export default function ModifiersManagerPage() {
                         }`}
                         onClick={() => setAiMode("new-category")}
                       >
-                        ✦ Create New Category(ies)
+                        <IconAtelierStar size={12} />
+                        <span>Create New Category(ies)</span>
                       </button>
                       <button
                         type="button"
@@ -543,7 +550,8 @@ export default function ModifiersManagerPage() {
                         }`}
                         onClick={() => setAiMode("into-existing")}
                       >
-                        ✦ Generate for Existing Category
+                        <IconAtelierStar size={12} />
+                        <span>Generate for Existing Category</span>
                       </button>
                     </div>
 
@@ -579,7 +587,8 @@ export default function ModifiersManagerPage() {
                             className="ref-pill-chip"
                             onClick={() => setAiPrompt(s.prompt)}
                           >
-                            {s.label}
+                            <IconAtelierStar size={11} />
+                            <span>{s.label}</span>
                           </button>
                         ))}
                       </div>
@@ -630,12 +639,13 @@ export default function ModifiersManagerPage() {
                         className="ref-dark-pill-btn"
                         disabled={isGeneratingAi || !aiPrompt.trim()}
                       >
+                        {!isGeneratingAi && <IconAtelierStar size={12} />}
                         <span>
                           {isGeneratingAi
                             ? "Gemini creating..."
                             : aiMode === "new-category"
-                            ? "✦ Create Category w/ AI"
-                            : "✦ Generate Modifiers w/ AI"}
+                            ? "Create Category w/ AI"
+                            : "Generate Modifiers w/ AI"}
                         </span>
                         <span className="ref-lime-badge">AI</span>
                       </button>
@@ -722,7 +732,8 @@ export default function ModifiersManagerPage() {
                           style={{ height: "36px", flexShrink: 0 }}
                           disabled={!newModLabel.trim() || !activeManualCategory}
                         >
-                          <span>+ Add Modifier</span>
+                          <IconPlus size={12} strokeWidth={2.2} />
+                          <span>Add Modifier</span>
                         </button>
                       </div>
                     </form>
@@ -766,7 +777,7 @@ export default function ModifiersManagerPage() {
                                   title={`Remove ${mod.label}`}
                                   aria-label={`Remove ${mod.label}`}
                                 >
-                                  ✕
+                                  <IconClose size={10} strokeWidth={2} />
                                 </button>
                               </div>
                             ))
@@ -845,7 +856,8 @@ export default function ModifiersManagerPage() {
                         style={{ height: "38px", flexShrink: 0 }}
                         disabled={!newCategoryTitle.trim()}
                       >
-                        <span>+ Create Category</span>
+                        <IconPlus size={12} strokeWidth={2.2} />
+                        <span>Create Category</span>
                       </button>
                     </div>
                   </form>

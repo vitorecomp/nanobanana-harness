@@ -9,6 +9,7 @@ import {
   buildInitialsAvatarDataUrl,
 } from "../services/authService";
 import { AuthProvider, GoogleUserProfile } from "../types/auth.types";
+import { IconClose } from "@/shared/components/icons/AtelierIcons";
 
 declare global {
   interface Window {
@@ -286,7 +287,7 @@ export default function SocialAuthModal({
             onClick={onClose}
             aria-label="Close sign-in modal"
           >
-            ✕
+            <IconClose size={12} />
           </button>
         </div>
 

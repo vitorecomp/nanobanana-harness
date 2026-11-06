@@ -4,6 +4,7 @@ import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { useStudioSession } from "@/core/context/StudioSessionContext";
 import { LOCAL_DEV_USER } from "@/features/auth";
+import { IconClose, IconPlus } from "@/shared";
 import {
   SavedConversationSummary,
   deleteConversation,
@@ -293,9 +294,14 @@ export default function ProjectsWorkspacePage() {
                             : `Remove project ${proj.title}`
                         }
                       >
-                        {confirmDeleteId === proj.id
-                          ? "Confirm Remove?"
-                          : "Remove ✕"}
+                        {confirmDeleteId === proj.id ? (
+                          "Confirm Remove?"
+                        ) : (
+                          <>
+                            <span>Remove</span>
+                            <IconClose size={10} strokeWidth={2.1} />
+                          </>
+                        )}
                       </button>
                       {confirmDeleteId === proj.id && (
                         <button
@@ -333,7 +339,8 @@ export default function ProjectsWorkspacePage() {
                   className="ref-dark-pill-btn"
                   onClick={() => router.push("/create")}
                 >
-                  <span>+ Open Studio & Create Project</span>
+                  <IconPlus size={12} strokeWidth={2.2} />
+                  <span>Open Studio & Create Project</span>
                 </button>
               ) : (
                 <button

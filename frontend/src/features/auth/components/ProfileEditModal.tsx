@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from "react";
 import { GoogleUserProfile } from "../types/auth.types";
 import { useStudioSession } from "@/core/context/StudioSessionContext";
+import { IconClose } from "@/shared/components/icons/AtelierIcons";
 
 export interface ProfileEditModalProps {
   isOpen: boolean;
@@ -66,12 +67,11 @@ export default function ProfileEditModal({
           <span className="ref-pill-chip active">Studio Settings</span>
           <button
             type="button"
-            className="ref-circle-icon-btn"
-            style={{ width: "34px", height: "34px" }}
+            className="ref-circle-icon-btn md"
             onClick={onClose}
             aria-label="Close modal"
           >
-            ✕
+            <IconClose size={12} />
           </button>
         </div>
 
@@ -132,7 +132,11 @@ export default function ProfileEditModal({
               type="checkbox"
               checked={rememberKeyInVault}
               onChange={(e) => setRememberKeyInVault(e.target.checked)}
-              style={{ width: "18px", height: "18px", accentColor: "#fca311" }}
+              style={{
+                width: "18px",
+                height: "18px",
+                accentColor: "var(--ref-lime-accent)",
+              }}
             />
             <span>Save API Key in local SQLite vault</span>
           </label>

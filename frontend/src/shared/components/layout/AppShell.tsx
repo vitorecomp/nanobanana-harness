@@ -2,8 +2,6 @@
 
 import React, { ReactNode, Suspense, useState } from "react";
 import Navbar from "./Navbar";
-import { useStudioSession } from "@/core/context/StudioSessionContext";
-import { updateConversationTitle } from "@/features/history";
 import {
   closeAppWindow,
   minimizeAppWindow,
@@ -11,16 +9,7 @@ import {
 } from "@/core/tauri/tauriBridge";
 
 export default function AppShell({ children }: { children: ReactNode }) {
-  const { activeProjectId, activeProjectTitle, setActiveProjectTitle } =
-    useStudioSession();
   const [isMaximized, setIsMaximized] = useState<boolean>(false);
-
-  const handleTitlebarProjectChange = (nextTitle: string) => {
-    setActiveProjectTitle(nextTitle);
-    if (activeProjectId) {
-      void updateConversationTitle(activeProjectId, nextTitle);
-    }
-  };
 
   return (
     <div className="ref-desktop-shell">
@@ -38,19 +27,6 @@ export default function AppShell({ children }: { children: ReactNode }) {
           <span className="ref-window-title-text" data-tauri-drag-region>
             NANO BANANA // ATELIER STUDIO
           </span>
-          <label className="sr-only" htmlFor="window-titlebar-project-input">
-            Current Project Title
-          </label>
-          <input
-            id="window-titlebar-project-input"
-            type="text"
-            value={activeProjectTitle}
-            onChange={(e) => handleTitlebarProjectChange(e.target.value)}
-            onDoubleClick={(e) => e.stopPropagation()}
-            className="ref-window-project-pill-input"
-            placeholder="Project name..."
-            title="Edit current project name"
-          />
         </div>
 
         <div
@@ -88,8 +64,8 @@ export default function AppShell({ children }: { children: ReactNode }) {
             {isMaximized ? (
               <svg width="11" height="11" viewBox="0 0 12 12" fill="none">
                 <rect
-                  x="2"
-                  y="3.5"
+                  x="1.75"
+                  y="3.75"
                   width="6.5"
                   height="6.5"
                   rx="1"
@@ -97,7 +73,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
                   strokeWidth="1.5"
                 />
                 <path
-                  d="M4 3.5V2.3C4 1.85817 4.35817 1.5 4.8 1.5H9.7C10.1418 1.5 10.5 1.85817 10.5 2.3V7.2C10.5 7.64183 10.1418 8 9.7 8H8.5"
+                  d="M3.75 3.75V2.55C3.75 2.10817 4.10817 1.75 4.55 1.75H9.45C9.8918 1.75 10.25 2.10817 10.25 2.55V7.45C10.25 7.89183 9.8918 8.25 9.45 8.25H8.25"
                   stroke="currentColor"
                   strokeWidth="1.5"
                 />

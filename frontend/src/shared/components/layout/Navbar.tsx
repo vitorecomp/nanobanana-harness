@@ -5,6 +5,12 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { LOCAL_DEV_USER, ProfileEditModal } from "@/features/auth";
 import { useStudioSession } from "@/core/context/StudioSessionContext";
+import {
+  IconAtelierStar,
+  IconClose,
+  IconDoubleChevron,
+  IconPlus,
+} from "../icons/AtelierIcons";
 
 export default function Navbar() {
   const pathname = usePathname();
@@ -73,7 +79,7 @@ export default function Navbar() {
         <div className="ref-sidebar-header">
           <div className="ref-sidebar-brand">
             <span className="ref-sidebar-logo-mark" aria-hidden="true">
-              ✦
+              <IconAtelierStar size={16} />
             </span>
             {!collapsed && (
               <div className="ref-sidebar-brand-text">
@@ -90,7 +96,10 @@ export default function Navbar() {
             title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
             aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
           >
-            {collapsed ? "»" : "«"}
+            <IconDoubleChevron
+              direction={collapsed ? "right" : "left"}
+              size={13}
+            />
           </button>
         </div>
 
@@ -225,9 +234,7 @@ export default function Navbar() {
             onClick={handleOpenNewProjectModal}
             title="Start a new project"
           >
-            <span style={{ fontSize: "1.05rem", fontWeight: 800, lineHeight: 1 }}>
-              +
-            </span>
+            <IconPlus size={16} strokeWidth={2.1} />
             {!collapsed && <span>New Project</span>}
           </button>
         </nav>
@@ -276,7 +283,7 @@ export default function Navbar() {
                 strokeWidth="2"
               />
               <path
-                d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9c.26.604.852.997 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1Z"
+                d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9c.26.604.852.997 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1Z"
                 stroke="currentColor"
                 strokeWidth="1.9"
                 strokeLinecap="round"
@@ -330,11 +337,10 @@ export default function Navbar() {
               <button
                 type="button"
                 aria-label="Close modal"
-                className="ref-circle-icon-btn"
-                style={{ width: "32px", height: "32px" }}
+                className="ref-circle-icon-btn sm"
                 onClick={() => setNewProjectModalOpen(false)}
               >
-                ✕
+                <IconClose size={12} />
               </button>
             </div>
 
@@ -367,7 +373,7 @@ export default function Navbar() {
             >
               <button
                 type="button"
-                className="ref-mura-btn-outline"
+                className="ref-mura-btn-outline lg"
                 onClick={() => setNewProjectModalOpen(false)}
               >
                 Cancel

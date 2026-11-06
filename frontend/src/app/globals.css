@@ -58,6 +58,12 @@ button {
   font-family: inherit;
 }
 
+button svg,
+a svg {
+  display: block;
+  flex-shrink: 0;
+}
+
 input,
 textarea {
   user-select: text;
@@ -195,6 +201,8 @@ textarea {
 .ref-win-control-btn {
   width: 28px;
   height: 24px;
+  padding: 0;
+  line-height: 1;
   border-radius: 7px;
   border: 1px solid rgba(229, 229, 229, 0.22);
   background-color: rgba(255, 255, 255, 0.08);
@@ -272,6 +280,8 @@ textarea {
 .ref-sidebar-logo-mark {
   width: 34px;
   height: 34px;
+  padding: 0;
+  line-height: 1;
   border-radius: 10px;
   background-color: #fca311;
   border: 1.5px solid #14213d;
@@ -311,6 +321,8 @@ textarea {
 .ref-sidebar-collapse-btn {
   width: 26px;
   height: 26px;
+  padding: 0;
+  line-height: 1;
   border-radius: 8px;
   border: 1.5px solid #14213d;
   background-color: #e5e5e5;
@@ -357,9 +369,11 @@ textarea {
 }
 
 .ref-sidebar-nav-item {
+  position: relative;
   width: 100%;
   height: 38px;
   padding: 0 12px;
+  line-height: 1;
   border-radius: 999px;
   border: 1.5px solid #14213d;
   background-color: #ffffff;
@@ -378,6 +392,13 @@ textarea {
 .ref-sidebar.collapsed .ref-sidebar-nav-item {
   justify-content: center;
   padding: 0;
+  gap: 0;
+}
+
+.ref-sidebar.collapsed .ref-sidebar-nav-item .ref-sidebar-status-dot {
+  position: absolute;
+  top: 7px;
+  right: 8px;
 }
 
 .ref-sidebar-nav-item:hover {
@@ -505,6 +526,8 @@ textarea {
 .ref-circle-icon-btn {
   width: 40px;
   height: 40px;
+  padding: 0;
+  line-height: 1;
   border-radius: 50%;
   border: 1.5px solid #14213d;
   background-color: #ffffff;
@@ -517,6 +540,16 @@ textarea {
   flex-shrink: 0;
   cursor: pointer;
   transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease, transform 0.15s ease;
+}
+
+.ref-circle-icon-btn.sm {
+  width: 32px;
+  height: 32px;
+}
+
+.ref-circle-icon-btn.md {
+  width: 36px;
+  height: 36px;
 }
 
 .ref-circle-icon-btn:hover {
@@ -536,6 +569,8 @@ textarea {
 .ref-card-expand-circle {
   width: 32px;
   height: 32px;
+  padding: 0;
+  line-height: 1;
   border-radius: 50%;
   border: 1px solid rgba(20, 33, 61, 0.22);
   background-color: #e5e5e5;
@@ -596,6 +631,7 @@ textarea {
 .ref-pill-chip {
   height: 36px;
   padding: 0 14px;
+  line-height: 1;
   border-radius: 999px;
   border: 1px solid rgba(20, 33, 61, 0.22);
   background-color: #ffffff;
@@ -604,6 +640,7 @@ textarea {
   font-weight: 500;
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 6px;
   white-space: nowrap;
   flex-shrink: 0;
@@ -652,6 +689,7 @@ textarea {
 .ref-dark-pill-btn {
   height: 40px;
   padding: 0 18px;
+  line-height: 1;
   border-radius: 999px;
   border: 1.5px solid #14213d;
   background-color: #14213d;
@@ -660,6 +698,7 @@ textarea {
   font-weight: 600;
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 8px;
   cursor: pointer;
   transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease, transform 0.15s ease;
@@ -680,6 +719,8 @@ textarea {
   height: 20px;
   min-width: 20px;
   padding: 0 6px;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
   border-radius: 999px;
   background-color: #fca311;
   color: #000000;
@@ -1289,6 +1330,8 @@ textarea {
 .ref-quad-overlay-icon-btn {
   width: 32px;
   height: 32px;
+  padding: 0;
+  line-height: 1;
   border-radius: 999px;
   border: 1.5px solid #14213d;
   background-color: rgba(255, 255, 255, 0.94);
@@ -1434,6 +1477,7 @@ textarea {
 .ref-mura-btn-solid {
   height: 31px;
   padding: 0 14px;
+  line-height: 1;
   border-radius: 999px;
   border: 1.5px solid #14213d;
   background-color: #14213d;
@@ -1443,6 +1487,7 @@ textarea {
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  gap: 6px;
   cursor: pointer;
   white-space: nowrap;
   transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
@@ -1468,6 +1513,7 @@ textarea {
 .ref-mura-btn-outline {
   height: 31px;
   padding: 0 13px;
+  line-height: 1;
   border-radius: 999px;
   border: 1.5px solid #14213d;
   background-color: transparent;
@@ -1477,6 +1523,7 @@ textarea {
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  gap: 6px;
   cursor: pointer;
   white-space: nowrap;
   transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
@@ -1484,6 +1531,12 @@ textarea {
 
 .ref-mura-btn-outline.icon-only {
   padding: 0 10px;
+}
+
+.ref-mura-btn-outline.lg {
+  height: 40px;
+  padding: 0 18px;
+  font-size: 0.8rem;
 }
 
 .ref-mura-btn-outline:hover:not(.disabled) {
@@ -1913,6 +1966,7 @@ textarea {
 .ref-studio-mod-cat-tab {
   height: 28px;
   padding: 0 11px;
+  line-height: 1;
   border-radius: 999px;
   background-color: #ffffff;
   border: 1px solid rgba(20, 33, 61, 0.25);
@@ -1922,6 +1976,7 @@ textarea {
   cursor: pointer;
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 5px;
   transition: background-color 0.14s ease, color 0.14s ease, border-color 0.14s ease;
 }
@@ -1940,6 +1995,8 @@ textarea {
   min-width: 15px;
   height: 15px;
   padding: 0 4px;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
   border-radius: 999px;
   background-color: #fca311;
   color: #000000;
@@ -2124,6 +2181,8 @@ textarea {
 .ref-modifier-remove-btn {
   width: 28px;
   height: 28px;
+  padding: 0;
+  line-height: 1;
   border-radius: 999px;
   border: 1px solid rgba(20, 33, 61, 0.28);
   background-color: #ffffff;
@@ -2187,12 +2246,17 @@ textarea {
 .ref-studio-flow-mode-btn {
   height: 30px;
   padding: 0 13px;
+  line-height: 1;
   border-radius: 999px;
   border: none;
   background: transparent;
   color: var(--ref-ink-secondary);
   font-size: 0.72rem;
   font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
   cursor: pointer;
   white-space: nowrap;
   transition: background-color 0.14s ease, color 0.14s ease;
@@ -2212,6 +2276,7 @@ textarea {
 .ref-studio-ghost-action {
   height: 30px;
   padding: 0 10px;
+  line-height: 1;
   border-radius: 9px;
   border: 1px solid rgba(20, 33, 61, 0.2);
   background-color: rgba(255, 255, 255, 0.72);
@@ -2221,6 +2286,7 @@ textarea {
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  gap: 6px;
   cursor: pointer;
   white-space: nowrap;
   transition: background-color 0.14s ease, border-color 0.14s ease, color 0.14s ease;
@@ -2285,6 +2351,17 @@ textarea {
   background-color: rgba(255, 255, 255, 0.7);
 }
 
+.ref-win-control-btn:focus-visible,
+.ref-sidebar-collapse-btn:focus-visible,
+.ref-sidebar-nav-item:focus-visible,
+.ref-circle-icon-btn:focus-visible,
+.ref-dark-pill-btn:focus-visible,
+.ref-modifier-remove-btn:focus-visible,
+.ref-flow-project-edit-btn:focus-visible,
+.ref-flow-zoom-btn:focus-visible,
+.ref-flow-zoom-readout:focus-visible,
+.ref-flow-port.output-port-btn:focus-visible,
+.ref-flow-node-footer-btn:focus-visible,
 .ref-studio-flow-mode-btn:focus-visible,
 .ref-studio-ghost-action:focus-visible,
 .ref-studio-inline-link-btn:focus-visible,
@@ -2433,6 +2510,7 @@ textarea {
 .ref-studio-lock-chip {
   min-height: 27px;
   padding: 0 10px;
+  line-height: 1;
   border-radius: 999px;
   border: 1px solid rgba(20, 33, 61, 0.26);
   background-color: var(--ref-canvas);
@@ -2443,6 +2521,7 @@ textarea {
   white-space: nowrap;
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 4px;
   transition: background-color 0.14s ease, border-color 0.14s ease, color 0.14s ease;
 }
@@ -2517,6 +2596,8 @@ textarea {
 
 .ref-studio-segment-btn {
   height: 30px;
+  padding: 0;
+  line-height: 1;
   border-radius: 8px;
   border: none;
   background: transparent;
@@ -2524,6 +2605,9 @@ textarea {
   font-size: 0.73rem;
   font-weight: 700;
   font-variant-numeric: tabular-nums;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   cursor: pointer;
   transition: background-color 0.14s ease, color 0.14s ease;
 }
@@ -2793,14 +2877,66 @@ textarea {
   flex-wrap: wrap;
 }
 
-.ref-flow-toolbar-badge {
-  font-size: 0.74rem;
+.ref-flow-project-title-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding-left: 2px;
+}
+
+.ref-flow-project-title-text {
+  font-size: 0.86rem;
   font-weight: 800;
   color: #14213d;
-  padding: 4px 10px;
+  max-width: 240px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ref-flow-project-edit-btn {
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  line-height: 1;
+  border-radius: 7px;
+  border: 1px solid rgba(20, 33, 61, 0.22);
+  background-color: #e5e5e5;
+  color: #14213d;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background-color 0.14s ease, color 0.14s ease, border-color 0.14s ease;
+}
+
+.ref-flow-project-edit-btn:hover {
+  background-color: #fca311;
+  color: #000000;
+  border-color: #14213d;
+}
+
+.ref-flow-toolbar-divider {
+  width: 1px;
+  height: 20px;
+  background-color: rgba(20, 33, 61, 0.18);
+  margin: 0 2px;
+}
+
+.ref-flow-toolbar-badge {
+  height: 28px;
+  font-size: 0.74rem;
+  font-weight: 800;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  color: #14213d;
+  padding: 0 10px;
   border-radius: 999px;
   background-color: #e5e5e5;
   border: 1px solid rgba(20, 33, 61, 0.22);
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
 }
 
 .ref-flow-zoom-pill {
@@ -2815,12 +2951,18 @@ textarea {
 .ref-flow-zoom-btn {
   width: 28px;
   height: 28px;
+  padding: 0;
+  line-height: 1;
   border: none;
   background: transparent;
   color: #14213d;
   font-size: 0.9rem;
   font-weight: 800;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   cursor: pointer;
+  transition: background-color 0.14s ease, color 0.14s ease;
 }
 
 .ref-flow-zoom-btn:hover {
@@ -2831,6 +2973,7 @@ textarea {
 .ref-flow-zoom-readout {
   height: 28px;
   padding: 0 8px;
+  line-height: 1;
   border: none;
   border-left: 1px solid rgba(20, 33, 61, 0.15);
   border-right: 1px solid rgba(20, 33, 61, 0.15);
@@ -2839,7 +2982,15 @@ textarea {
   font-weight: 800;
   color: #000000;
   font-variant-numeric: tabular-nums;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   cursor: pointer;
+  transition: background-color 0.14s ease;
+}
+
+.ref-flow-zoom-readout:hover {
+  background-color: rgba(20, 33, 61, 0.06);
 }
 
 .ref-flow-canvas-viewport {
@@ -2971,6 +3122,7 @@ textarea {
   top: 131px;
   width: 28px;
   height: 28px;
+  padding: 0;
   border-radius: 999px;
   background-color: #fca311;
   border: 2px solid #14213d;
@@ -3011,17 +3163,28 @@ textarea {
 }
 
 .ref-flow-drag-grip {
-  font-size: 0.9rem;
+  width: 14px;
+  height: 20px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   color: #14213d;
   opacity: 0.65;
   cursor: move;
+  flex-shrink: 0;
 }
 
 .ref-flow-step-badge {
+  height: 22px;
   font-size: 0.72rem;
   font-weight: 800;
-  padding: 3px 9px;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  padding: 0 9px;
   border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
   white-space: nowrap;
 }
 
@@ -3037,21 +3200,30 @@ textarea {
 }
 
 .ref-flow-step-ratio {
+  height: 20px;
   font-size: 0.68rem;
   font-weight: 800;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
   color: #14213d;
-  padding: 2px 7px;
+  padding: 0 7px;
   border-radius: 6px;
   background-color: #e5e5e5;
+  display: inline-flex;
+  align-items: center;
 }
 
 .ref-flow-step-meta-chip {
+  height: 20px;
   font-size: 0.66rem;
   font-weight: 700;
+  line-height: 1;
   color: #14213d;
-  padding: 2px 7px;
+  padding: 0 7px;
   border-radius: 6px;
   background-color: rgba(252, 163, 17, 0.2);
+  display: inline-flex;
+  align-items: center;
 }
 
 /* Single Hero Image Frame inside Compact Step Node */
@@ -3173,6 +3345,8 @@ textarea {
 .ref-flow-slot-mini-btn {
   width: 24px;
   height: 24px;
+  padding: 0;
+  line-height: 1;
   border-radius: 6px;
   border: 1px solid #14213d;
   background-color: rgba(255, 255, 255, 0.92);

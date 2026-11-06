@@ -228,9 +228,51 @@ export interface StepBezierWireGeometry {
   midY: number;
 }
 
+function buildRoundedOrthogonalSvgPath(
+  points: Array<{ x: number; y: number }>,
+  maxRadius: number = 16
+): string {
+  if (points.length === 0) return "";
+  if (points.length === 1) return `M ${points[0].x} ${points[0].y}`;
+
+  const commands: string[] = [`M ${points[0].x} ${points[0].y}`];
+
+  for (let i = 1; i < points.length - 1; i++) {
+    const prev = points[i - 1];
+    const curr = points[i];
+    const next = points[i + 1];
+
+    const v1x = curr.x - prev.x;
+    const v1y = curr.y - prev.y;
+    const len1 = Math.hypot(v1x, v1y);
+
+    const v2x = next.x - curr.x;
+    const v2y = next.y - curr.y;
+    const len2 = Math.hypot(v2x, v2y);
+
+    if (len1 < 1 || len2 < 1) {
+      commands.push(`L ${curr.x} ${curr.y}`);
+      continue;
+    }
+
+    const r = Math.min(maxRadius, len1 * 0.5, len2 * 0.5);
+    const entryX = Number((curr.x - (v1x / len1) * r).toFixed(2));
+    const entryY = Number((curr.y - (v1y / len1) * r).toFixed(2));
+    const exitX = Number((curr.x + (v2x / len2) * r).toFixed(2));
+    const exitY = Number((curr.y + (v2y / len2) * r).toFixed(2));
+
+    commands.push(`L ${entryX} ${entryY}`);
+    commands.push(`Q ${curr.x} ${curr.y} ${exitX} ${exitY}`);
+  }
+
+  const last = points[points.length - 1];
+  commands.push(`L ${last.x} ${last.y}`);
+  return commands.join(" ");
+}
+
 /**
- * Computes an n8n-style horizontal cubic Bezier wire between a parent image card's right output port
- * and a child image card's left input port.
+ * Computes an orthogonal smooth-step wire (straight horizontal/vertical segments with rounded 90° bends)
+ * between a parent image card's right output port and a child image card's left input port.
  */
 export function buildStepBezierPath(
   sourcePos: FlowNodePosition,
@@ -242,17 +284,36 @@ export function buildStepBezierPath(
   const endX = targetPos.x;
   const endY = targetPos.y + 145;
 
-  const dx = Math.abs(endX - startX);
-  const controlOffset = Math.max(85, Math.min(230, dx * 0.48));
+  const midX = Math.round((startX + endX) / 2);
+  const midY = Math.round((startY + endY) / 2);
 
-  const cp1x = startX + controlOffset;
-  const cp1y = startY;
-  const cp2x = endX - controlOffset;
-  const cp2y = endY;
+  let waypoints: Array<{ x: number; y: number }>;
+  if (Math.abs(endY - startY) < 1 && endX >= startX) {
+    waypoints = [
+      { x: startX, y: startY },
+      { x: endX, y: endY },
+    ];
+  } else if (endX >= startX + 24) {
+    waypoints = [
+      { x: startX, y: startY },
+      { x: midX, y: startY },
+      { x: midX, y: endY },
+      { x: endX, y: endY },
+    ];
+  } else {
+    const outX = startX + 28;
+    const inX = endX - 28;
+    waypoints = [
+      { x: startX, y: startY },
+      { x: outX, y: startY },
+      { x: outX, y: midY },
+      { x: inX, y: midY },
+      { x: inX, y: endY },
+      { x: endX, y: endY },
+    ];
+  }
 
-  const path = `M ${startX} ${startY} C ${cp1x} ${cp1y}, ${cp2x} ${cp2y}, ${endX} ${endY}`;
-  const midX = (startX + endX) / 2;
-  const midY = (startY + endY) / 2;
+  const path = buildRoundedOrthogonalSvgPath(waypoints, 16);
 
   return {
     path,
