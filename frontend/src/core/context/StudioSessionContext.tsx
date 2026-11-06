@@ -15,15 +15,20 @@ import {
 import {
   BootstrapResponse,
   DEFAULT_BOOTSTRAP_DATA,
+  DEFAULT_ENHANCE_SYSTEM_PROMPT,
+  DEFAULT_VARIATION_SYSTEM_PROMPT,
   ModifierCategory,
   fetchBootstrap,
 } from "@/features/studio";
+import { createConversation } from "@/features/history";
 import {
   vaultClearApiKey,
+  vaultGetAiPrompts,
   vaultGetImagesOutputDir,
   vaultGetModifierCategories,
   vaultGetSavedApiKey,
   vaultSaveApiKey,
+  vaultSetAiPrompts,
   vaultSetImagesOutputDir,
   vaultSetModifierCategories,
 } from "@/core/tauri/tauriBridge";
@@ -61,9 +66,16 @@ interface StudioSessionContextValue {
   activeProjectTitle: string;
   setActiveProjectTitle: (title: string) => void;
   newProjectNonce: number;
-  triggerNewProject: (customTitle?: string) => void;
+  triggerNewProject: (customTitle?: string) => Promise<string | null>;
   updateModifierCategories: (categories: ModifierCategory[]) => Promise<void>;
   resetModifierCategories: () => Promise<void>;
+  enhanceSystemPrompt: string;
+  variationSystemPrompt: string;
+  saveAiSystemPrompts: (params: {
+    enhanceSystemPrompt: string;
+    variationSystemPrompt: string;
+  }) => Promise<void>;
+  resetAiSystemPrompts: () => Promise<void>;
   isSettingsModalOpen: boolean;
   setSettingsModalOpen: (open: boolean) => void;
   openSettingsModal: () => void;
@@ -95,16 +107,32 @@ export function StudioSessionProvider({ children }: { children: ReactNode }) {
   const [activeProjectTitle, setActiveProjectTitle] =
     useState<string>("New Project");
   const [newProjectNonce, setNewProjectNonce] = useState<number>(0);
+  const [enhanceSystemPrompt, setEnhanceSystemPrompt] = useState<string>(
+    DEFAULT_ENHANCE_SYSTEM_PROMPT
+  );
+  const [variationSystemPrompt, setVariationSystemPrompt] = useState<string>(
+    DEFAULT_VARIATION_SYSTEM_PROMPT
+  );
   const [isSettingsModalOpen, setSettingsModalOpen] = useState<boolean>(false);
 
   const openSettingsModal = () => setSettingsModalOpen(true);
 
-  const triggerNewProject = (customTitle?: string) => {
+  const triggerNewProject = async (
+    customTitle?: string
+  ): Promise<string | null> => {
     const resolvedTitle = customTitle?.trim() || "New Project";
-    setActiveProjectId(null);
+    const currentUser = user || LOCAL_DEV_USER;
     setActiveProjectTitle(resolvedTitle);
     setPendingRemix(null);
+    const created = await createConversation({
+      user_id: currentUser.id,
+      title: resolvedTitle,
+      style_id: "none",
+    });
+    const createdId = created?.id || null;
+    setActiveProjectId(createdId);
     setNewProjectNonce((n) => n + 1);
+    return createdId;
   };
 
   const setUser = (nextUser: GoogleUserProfile | null) => {
@@ -156,6 +184,35 @@ export function StudioSessionProvider({ children }: { children: ReactNode }) {
       modifier_categories: defaults,
     }));
     await vaultSetModifierCategories(defaults);
+  };
+
+  const saveAiSystemPrompts = async (params: {
+    enhanceSystemPrompt: string;
+    variationSystemPrompt: string;
+  }): Promise<void> => {
+    const cleanEnh =
+      params.enhanceSystemPrompt.trim() || DEFAULT_ENHANCE_SYSTEM_PROMPT;
+    const cleanVar =
+      params.variationSystemPrompt.trim() || DEFAULT_VARIATION_SYSTEM_PROMPT;
+
+    setEnhanceSystemPrompt(cleanEnh);
+    setVariationSystemPrompt(cleanVar);
+
+    await vaultSetAiPrompts({
+      enhanceSystemPrompt:
+        cleanEnh === DEFAULT_ENHANCE_SYSTEM_PROMPT ? "" : cleanEnh,
+      variationSystemPrompt:
+        cleanVar === DEFAULT_VARIATION_SYSTEM_PROMPT ? "" : cleanVar,
+    });
+  };
+
+  const resetAiSystemPrompts = async (): Promise<void> => {
+    setEnhanceSystemPrompt(DEFAULT_ENHANCE_SYSTEM_PROMPT);
+    setVariationSystemPrompt(DEFAULT_VARIATION_SYSTEM_PROMPT);
+    await vaultSetAiPrompts({
+      enhanceSystemPrompt: "",
+      variationSystemPrompt: "",
+    });
   };
 
   useEffect(() => {
@@ -212,6 +269,17 @@ export function StudioSessionProvider({ children }: { children: ReactNode }) {
         setImagesOutputDirState(savedDir);
       }
     });
+    vaultGetAiPrompts().then((savedPrompts) => {
+      if (!mounted) return;
+      setEnhanceSystemPrompt(
+        savedPrompts.enhanceSystemPrompt?.trim() ||
+          DEFAULT_ENHANCE_SYSTEM_PROMPT
+      );
+      setVariationSystemPrompt(
+        savedPrompts.variationSystemPrompt?.trim() ||
+          DEFAULT_VARIATION_SYSTEM_PROMPT
+      );
+    });
     return () => {
       mounted = false;
     };
@@ -254,6 +322,10 @@ export function StudioSessionProvider({ children }: { children: ReactNode }) {
         triggerNewProject,
         updateModifierCategories,
         resetModifierCategories,
+        enhanceSystemPrompt,
+        variationSystemPrompt,
+        saveAiSystemPrompts,
+        resetAiSystemPrompts,
         isSettingsModalOpen,
         setSettingsModalOpen,
         openSettingsModal,

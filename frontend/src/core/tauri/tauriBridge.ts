@@ -527,6 +527,79 @@ export async function vaultSetModifierCategories<T = unknown>(
   return res || categories;
 }
 
+export interface PersistedAiPromptSettings {
+  enhanceSystemPrompt: string | null;
+  variationSystemPrompt: string | null;
+}
+
+const AI_PROMPTS_LOCAL_KEY = "nanobanana_ai_prompts_v1";
+
+export async function vaultGetAiPrompts(): Promise<PersistedAiPromptSettings> {
+  const dbRes = await querySqliteApi<PersistedAiPromptSettings>(
+    "vault_get_ai_prompts"
+  );
+  if (
+    dbRes &&
+    (dbRes.enhanceSystemPrompt !== null || dbRes.variationSystemPrompt !== null)
+  ) {
+    return dbRes;
+  }
+  if (typeof window !== "undefined") {
+    try {
+      const raw = window.localStorage.getItem(AI_PROMPTS_LOCAL_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw) as Partial<PersistedAiPromptSettings>;
+        return {
+          enhanceSystemPrompt: parsed.enhanceSystemPrompt || null,
+          variationSystemPrompt: parsed.variationSystemPrompt || null,
+        };
+      }
+    } catch {
+      // Ignore storage access errors
+    }
+  }
+  return {
+    enhanceSystemPrompt: null,
+    variationSystemPrompt: null,
+  };
+}
+
+export async function vaultSetAiPrompts(params: {
+  enhanceSystemPrompt: string;
+  variationSystemPrompt: string;
+}): Promise<PersistedAiPromptSettings> {
+  if (typeof window !== "undefined") {
+    try {
+      const cleanEnh = params.enhanceSystemPrompt.trim();
+      const cleanVar = params.variationSystemPrompt.trim();
+      if (!cleanEnh && !cleanVar) {
+        window.localStorage.removeItem(AI_PROMPTS_LOCAL_KEY);
+      } else {
+        window.localStorage.setItem(
+          AI_PROMPTS_LOCAL_KEY,
+          JSON.stringify({
+            enhanceSystemPrompt: cleanEnh || null,
+            variationSystemPrompt: cleanVar || null,
+          })
+        );
+      }
+    } catch {
+      // Ignore storage access errors
+    }
+  }
+
+  const dbRes = await querySqliteApi<PersistedAiPromptSettings>(
+    "vault_set_ai_prompts",
+    params
+  );
+  return (
+    dbRes || {
+      enhanceSystemPrompt: params.enhanceSystemPrompt.trim() || null,
+      variationSystemPrompt: params.variationSystemPrompt.trim() || null,
+    }
+  );
+}
+
 export async function minimizeAppWindow(): Promise<void> {
   if (isTauriDesktop()) {
     try {

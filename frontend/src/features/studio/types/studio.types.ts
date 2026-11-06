@@ -1,8 +1,23 @@
 export type NanoBananaModel =
   | "gemini-2.5-flash-image"
+  | "gemini-3-pro-image-preview"
   | "gemini-2.0-flash-exp-image-generation";
 
-export type CreationFlowMode = "compose" | "surgical-delta";
+export interface ModelGenerationParams {
+  temperature: number;
+  topP: number;
+  seed?: number | null;
+}
+
+export type CreationFlowMode =
+  | "prompt"
+  | "reference"
+  | "compose"
+  | "surgical-delta";
+
+export type CreationTabMode = "prompt" | "reference";
+
+export type CreationWizardStep = 1 | 2 | 3;
 
 export type ExplorationMatrixAxis =
   | "auto-director"
@@ -36,6 +51,7 @@ export interface GenerateNanoBananaRequest {
   prompt: string;
   referenceImage?: InlineImagePart | null;
   secondaryReferenceImage?: InlineImagePart | null;
+  modelParams?: ModelGenerationParams;
 }
 
 export interface GenerateNanoBananaResult {
@@ -148,9 +164,14 @@ export interface FlowNodePosition {
 export interface FlowStepParameterSnapshot {
   flowMode: CreationFlowMode;
   aspectRatio: string;
-  matrixAxis: ExplorationMatrixAxis;
+  matrixAxis?: ExplorationMatrixAxis;
   styleId: string;
   modifierIds: string[];
   preservationLocks: PreservationLocks;
+  imageCount?: number;
+  enhanceWithAi?: boolean;
+  varyPromptsWithAi?: boolean;
+  modelUsed?: NanoBananaModel;
+  modelParams?: ModelGenerationParams;
 }
 

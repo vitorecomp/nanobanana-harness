@@ -13,6 +13,7 @@ import {
   GenerateNanoBananaRequest,
   GenerateNanoBananaResult,
   InlineImagePart,
+  ModelGenerationParams,
   ModifierCategory,
   ModifierOption,
   PreservationLocks,
@@ -87,6 +88,7 @@ export async function generateWithNanoBanana({
   prompt,
   referenceImage,
   secondaryReferenceImage,
+  modelParams,
 }: GenerateNanoBananaRequest): Promise<GenerateNanoBananaResult> {
   const trimmedKey = apiKey.trim();
   if (!trimmedKey) {
@@ -126,15 +128,35 @@ export async function generateWithNanoBanana({
     text: prompt,
   });
 
+  const generationConfig: Record<string, unknown> = {
+    responseModalities: ["TEXT", "IMAGE"],
+  };
+  if (
+    typeof modelParams?.temperature === "number" &&
+    Number.isFinite(modelParams.temperature)
+  ) {
+    generationConfig.temperature = modelParams.temperature;
+  }
+  if (
+    typeof modelParams?.topP === "number" &&
+    Number.isFinite(modelParams.topP)
+  ) {
+    generationConfig.topP = modelParams.topP;
+  }
+  if (
+    typeof modelParams?.seed === "number" &&
+    Number.isFinite(modelParams.seed)
+  ) {
+    generationConfig.seed = Math.round(modelParams.seed);
+  }
+
   const payload = {
     contents: [
       {
         parts,
       },
     ],
-    generationConfig: {
-      responseModalities: ["TEXT", "IMAGE"],
-    },
+    generationConfig,
   };
 
   const response = await fetch(endpoint, {
@@ -214,6 +236,30 @@ export interface QuadGeneratedSlot {
   base64Data: string;
 }
 
+export const DEFAULT_ENHANCE_SYSTEM_PROMPT = [
+  "You are an expert Art Director and Prompt Architect for Google Gemini 2.5 Flash Image ('Nano Banana').",
+  "Gemini 2.5 Flash Image produces vastly superior artwork when given a cohesive, natural-language paragraph describing:",
+  "1. Subject identity, expression, posture, and wardrobe materials.",
+  "2. Spatial environment, foreground/background layering, and atmosphere.",
+  "3. Camera framing, lens focal length, and lighting direction/color temperature.",
+  "Rewrite and expand the user's idea into ONE rich, vivid paragraph in English (45 to 80 words). Do NOT use bullet points, markdown, or comma-tag soup.",
+].join("\n");
+
+export const DEFAULT_VARIATION_SYSTEM_PROMPT = [
+  "You are an expert Visual Director and Prompt Engineer for Google Gemini 2.5 Flash Image ('Nano Banana').",
+  "Create distinct, cohesive scene prompt variations in English based on the user's prompt.",
+  "Keep Variation #1 faithful to the core scene, and give each subsequent variation a distinct directorial emphasis (camera optics/framing, lighting mood, atmospheric environment, material texture, or expressive staging) while keeping subject continuity.",
+].join("\n");
+
+function interpolatePromptTemplate(
+  template: string,
+  vars: Record<string, string>
+): string {
+  return template.replace(/\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g, (match, key) =>
+    key in vars ? vars[key] : match
+  );
+}
+
 /**
  * Expands a short user prompt into a rich, cinematic visual narrative optimized
  * for Gemini 2.5 Flash Image ("Nano Banana"), emphasizing spatial relationships,
@@ -225,17 +271,30 @@ export async function enhanceNarrativeWithGemini(params: {
   styleLabel?: string;
   modifierLabels?: string[];
   aspectRatio?: string;
+  hasReferenceImage?: boolean;
+  preservationLocks?: PreservationLocks;
+  customSystemPrompt?: string;
 }): Promise<string> {
   const cleanIdea = params.rawIdea.trim();
   if (!cleanIdea) return "";
 
+  const lockLead = params.hasReferenceImage
+    ? buildPreservationPrefix(params.preservationLocks, true, false)
+    : "";
   const styleHint = params.styleLabel ? ` in a ${params.styleLabel} aesthetic` : "";
   const modHint =
     params.modifierLabels && params.modifierLabels.length > 0
       ? `, featuring ${params.modifierLabels.join(", ")}`
       : "";
 
-  const fallbackNarrative = `${cleanIdea}${styleHint} — composed with intentional foreground-to-background depth, tactile surface materiality, expressive subject posture, and directional cinematic illumination${modHint}.`;
+  const fallbackNarrative = finalizeExactImageModelPrompt({
+    prompt: `${lockLead}${cleanIdea}${styleHint} — composed with intentional foreground-to-background depth, tactile surface materiality, expressive subject posture, and directional cinematic illumination${modHint}.`,
+    styleLabel: params.styleLabel,
+    modifierLabels: params.modifierLabels,
+    aspectRatio: params.aspectRatio,
+    preservationLocks: params.preservationLocks,
+    hasReferenceImage: params.hasReferenceImage,
+  });
 
   const trimmedKey = params.apiKey.trim();
   if (!trimmedKey) {
@@ -245,18 +304,27 @@ export async function enhanceNarrativeWithGemini(params: {
   try {
     const endpoint =
       "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent";
+    const resolvedInstruction = interpolatePromptTemplate(
+      params.customSystemPrompt?.trim() || DEFAULT_ENHANCE_SYSTEM_PROMPT,
+      {
+        prompt: cleanIdea,
+        style: params.styleLabel || "",
+        modifiers: params.modifierLabels?.join(", ") || "",
+        aspect_ratio: params.aspectRatio || "",
+      }
+    );
     const systemPrompt = [
-      "You are an expert Art Director and Prompt Architect for Google Gemini 2.5 Flash Image ('Nano Banana').",
-      "Gemini 2.5 Flash Image produces vastly superior artwork when given a cohesive, natural-language paragraph describing:",
-      "1. Subject identity, expression, posture, and wardrobe materials.",
-      "2. Spatial environment, foreground/background layering, and atmosphere.",
-      "3. Camera framing, lens focal length, and lighting direction/color temperature.",
+      resolvedInstruction,
+      params.hasReferenceImage
+        ? "A reference image will be supplied alongside this prompt. Frame the scene so it transforms or extends the reference seamlessly."
+        : "",
+      lockLead ? `Mandatory preservation instruction to include: "${lockLead.trim()}"` : "",
       params.styleLabel ? `Target visual style: ${params.styleLabel}.` : "",
       params.modifierLabels?.length
         ? `Incorporate these optical/lighting modifiers naturally: ${params.modifierLabels.join(", ")}.`
         : "",
       params.aspectRatio ? `Target aspect ratio: ${params.aspectRatio}.` : "",
-      "Rewrite and expand the user's idea into ONE rich, vivid paragraph in English (45 to 75 words). Do NOT use bullet points, markdown, or comma-tag soup. Return ONLY the enhanced prompt text.",
+      "Return ONLY the enhanced prompt text without surrounding quotes or commentary.",
       `User idea: "${cleanIdea}"`,
     ]
       .filter(Boolean)
@@ -281,7 +349,17 @@ export async function enhanceNarrativeWithGemini(params: {
         ?.map((p) => p.text || "")
         .join(" ")
         .trim() || "";
-    return text ? text.replace(/^["']|["']$/g, "").trim() : fallbackNarrative;
+    const cleaned = text ? text.replace(/^["']|["']$/g, "").trim() : "";
+    if (!cleaned) return fallbackNarrative;
+
+    return finalizeExactImageModelPrompt({
+      prompt: cleaned,
+      styleLabel: params.styleLabel,
+      modifierLabels: params.modifierLabels,
+      aspectRatio: params.aspectRatio,
+      preservationLocks: params.preservationLocks,
+      hasReferenceImage: params.hasReferenceImage,
+    });
   } catch {
     return fallbackNarrative;
   }
@@ -751,6 +829,349 @@ export async function generateQuadWithNanoBanana(params: {
     return {
       label: v.label,
       prompt: v.prompt,
+      imageUrl: "",
+      mimeType: "image/png",
+      base64Data: "",
+    };
+  });
+}
+
+/**
+ * Ensures a prompt string contains all active creation parameters (reference preservation
+ * locks, visual style, selected modifiers, and target aspect ratio) idempotently without
+ * duplicating clauses that are already present in the text.
+ */
+export function finalizeExactImageModelPrompt(params: {
+  prompt: string;
+  styleLabel?: string;
+  modifierLabels?: string[];
+  aspectRatio?: string;
+  preservationLocks?: PreservationLocks;
+  hasReferenceImage?: boolean;
+}): string {
+  let result = params.prompt.trim();
+  if (!result) return "";
+
+  const lockPrefix = params.hasReferenceImage
+    ? buildPreservationPrefix(params.preservationLocks, true, false)
+    : "";
+
+  if (lockPrefix && !/strictly preserve the/i.test(result)) {
+    result = `${lockPrefix}${result}`;
+  }
+
+  const missingModifiers = (params.modifierLabels || []).filter(
+    (mod) =>
+      mod.trim() && !result.toLowerCase().includes(mod.trim().toLowerCase())
+  );
+  if (missingModifiers.length > 0) {
+    const hadTrailingDot = /\.\s*$/.test(result);
+    const withoutTrailingDot = result.replace(/\s*\.+$/, "");
+    result = `${withoutTrailingDot}, ${missingModifiers.join(", ")}${
+      hadTrailingDot ? "." : ""
+    }`;
+  }
+
+  if (
+    params.styleLabel?.trim() &&
+    !result.toLowerCase().includes(params.styleLabel.trim().toLowerCase())
+  ) {
+    result = `${result} [${params.styleLabel.trim()}]`;
+  }
+
+  if (params.aspectRatio?.trim()) {
+    const escapedRatio = params.aspectRatio
+      .trim()
+      .replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const hasRatio = new RegExp(`aspect\\s*ratio\\s*${escapedRatio}`, "i").test(
+      result
+    );
+    if (!hasRatio) {
+      result = `${result} (Aspect Ratio ${params.aspectRatio.trim()})`;
+    }
+  }
+
+  return result.trim();
+}
+
+function stripTrailingPromptTags(text: string): string {
+  return text
+    .replace(/\s*\(Aspect Ratio [^)]+\)\s*$/i, "")
+    .replace(/\s*\[[^\]]+\]\s*$/, "")
+    .trim();
+}
+
+/**
+ * Builds a single consolidated prompt combining optional preservation locks,
+ * core prompt text, visual style, selected modifiers, and target aspect ratio.
+ */
+export function buildConsolidatedScenePrompt(params: {
+  basePrompt: string;
+  styleLabel?: string;
+  modifierLabels?: string[];
+  aspectRatio?: string;
+  preservationLocks?: PreservationLocks;
+  hasReferenceImage?: boolean;
+}): string {
+  return finalizeExactImageModelPrompt({
+    prompt: params.basePrompt,
+    styleLabel: params.styleLabel,
+    modifierLabels: params.modifierLabels,
+    aspectRatio: params.aspectRatio,
+    preservationLocks: params.preservationLocks,
+    hasReferenceImage: params.hasReferenceImage,
+  });
+}
+
+const DYNAMIC_VARIATION_ARCHETYPES: Array<{
+  title: string;
+  emphasis: string;
+}> = [
+  {
+    title: "Faithful Core Scene",
+    emphasis: "",
+  },
+  {
+    title: "Lighting & Atmosphere",
+    emphasis:
+      " — with heightened focus on volumetric lighting, sculpted shadow contrast, and atmospheric color depth",
+  },
+  {
+    title: "Optical Framing & Depth",
+    emphasis:
+      " — composed with intentional cinema lens perspective, layered foreground-to-background depth, and crisp spatial geometry",
+  },
+  {
+    title: "Material & Micro-Texture",
+    emphasis:
+      " — emphasizing tactile fabric weave, surface micro-textures, specular reflections, and expressive subject detail",
+  },
+  {
+    title: "Wide Environmental Scale",
+    emphasis:
+      " — captured as an expansive 24mm establishing composition revealing surrounding architecture and horizon atmosphere",
+  },
+  {
+    title: "Intimate Portrait Focus",
+    emphasis:
+      " — framed on an 85mm f/1.4 portrait lens with creamy bokeh isolating facial expression and nuanced gaze",
+  },
+  {
+    title: "Dynamic Low-Angle Hero",
+    emphasis:
+      " — shot from a dramatic 35mm upward hero angle imparting monumental presence and kinetic visual tension",
+  },
+  {
+    title: "Editorial Color & Contrast",
+    emphasis:
+      " — styled with bold editorial tonal contrast, rich shadow density, and warm-cool chromatic counterpoint",
+  },
+];
+
+/**
+ * Generates `count` (1..8) distinct creative prompt variations via Gemini 2.5 Flash
+ * for Step 3 review, returning the exact model-ready prompt string for each frame.
+ */
+export async function generatePromptVariationsWithGemini(params: {
+  apiKey: string;
+  count: number;
+  basePrompt: string;
+  styleLabel?: string;
+  modifierLabels?: string[];
+  aspectRatio?: string;
+  preservationLocks?: PreservationLocks;
+  hasReferenceImage?: boolean;
+  customSystemPrompt?: string;
+}): Promise<QuadPromptVariation[]> {
+  const safeCount = Math.max(1, Math.min(8, Math.round(params.count || 4)));
+  const cleanBase = params.basePrompt.trim();
+  const narrativeCore = stripTrailingPromptTags(cleanBase);
+  const lockPrefix = params.hasReferenceImage
+    ? buildPreservationPrefix(params.preservationLocks, true, false)
+    : "";
+
+  const fallbackList: QuadPromptVariation[] = Array.from(
+    { length: safeCount },
+    (_, idx) => {
+      const archetype =
+        DYNAMIC_VARIATION_ARCHETYPES[idx % DYNAMIC_VARIATION_ARCHETYPES.length];
+      const candidate = `${narrativeCore}${archetype.emphasis}`.trim();
+      return {
+        label: `${idx + 1} • ${archetype.title}`,
+        prompt: finalizeExactImageModelPrompt({
+          prompt: candidate,
+          styleLabel: params.styleLabel,
+          modifierLabels: params.modifierLabels,
+          aspectRatio: params.aspectRatio,
+          preservationLocks: params.preservationLocks,
+          hasReferenceImage: params.hasReferenceImage,
+        }),
+      };
+    }
+  );
+
+  const trimmedKey = params.apiKey.trim();
+  if (!trimmedKey || !cleanBase) {
+    return fallbackList;
+  }
+
+  try {
+    const endpoint =
+      "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent";
+
+    const resolvedInstruction = interpolatePromptTemplate(
+      params.customSystemPrompt?.trim() || DEFAULT_VARIATION_SYSTEM_PROMPT,
+      {
+        count: String(safeCount),
+        prompt: narrativeCore,
+        style: params.styleLabel || "",
+        modifiers: params.modifierLabels?.join(", ") || "",
+        aspect_ratio: params.aspectRatio || "",
+      }
+    );
+
+    const systemPrompt = [
+      resolvedInstruction,
+      `Generate exactly ${safeCount} distinct variations.`,
+      lockPrefix
+        ? `Mandatory reference preservation rule for ALL ${safeCount} prompts: "${lockPrefix.trim()}"`
+        : "",
+      params.styleLabel ? `Target visual style: ${params.styleLabel}.` : "",
+      params.aspectRatio ? `Target aspect ratio: ${params.aspectRatio}.` : "",
+      params.modifierLabels?.length
+        ? `Incorporate these active modifiers naturally: ${params.modifierLabels.join(", ")}.`
+        : "",
+      `Return ONLY valid JSON with an array of ${safeCount} items in the exact format: {"variations": [{"label": "1 • Short Title", "prompt": "Complete descriptive English scene prompt..."}]}`,
+      `Base prompt: "${narrativeCore}"`,
+    ]
+      .filter(Boolean)
+      .join("\n");
+
+    const response = await fetch(endpoint, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-goog-api-key": trimmedKey,
+      },
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: systemPrompt }] }],
+        generationConfig: {
+          responseMimeType: "application/json",
+        },
+      }),
+      cache: "no-store",
+    });
+
+    if (!response.ok) {
+      return fallbackList;
+    }
+
+    const data = (await response.json()) as GeminiGenerateContentResponse;
+    const rawText =
+      data.candidates?.[0]?.content?.parts
+        ?.map((p) => p.text || "")
+        .join("")
+        .trim() || "";
+
+    if (!rawText) return fallbackList;
+
+    const parsed = JSON.parse(rawText) as {
+      variations?: Array<{ label?: string; title?: string; prompt?: string }>;
+    };
+    const vList = Array.isArray(parsed.variations) ? parsed.variations : [];
+    if (vList.length === 0) {
+      return fallbackList;
+    }
+
+    return Array.from({ length: safeCount }, (_, idx) => {
+      const item = vList[idx];
+      const rawLabel = (item?.label || item?.title || "").trim();
+      const numberedLabel = rawLabel
+        ? /^\d/.test(rawLabel)
+          ? rawLabel
+          : `${idx + 1} • ${rawLabel}`
+        : fallbackList[idx].label;
+      const rawCandidate = item?.prompt?.trim();
+      return {
+        label: numberedLabel,
+        prompt: rawCandidate
+          ? finalizeExactImageModelPrompt({
+              prompt: rawCandidate,
+              styleLabel: params.styleLabel,
+              modifierLabels: params.modifierLabels,
+              aspectRatio: params.aspectRatio,
+              preservationLocks: params.preservationLocks,
+              hasReferenceImage: params.hasReferenceImage,
+            })
+          : fallbackList[idx].prompt,
+      };
+    });
+  } catch {
+    return fallbackList;
+  }
+}
+
+/**
+ * Renders an arbitrary list of 1..8 prepared prompts in parallel via Gemini 2.5 Flash Image,
+ * streaming individual slot completions via `onSlotCompleted`.
+ */
+export async function renderPreparedBatchWithNanoBanana(params: {
+  apiKey: string;
+  model: GenerateNanoBananaRequest["model"];
+  items: QuadPromptVariation[];
+  referenceImage?: InlineImagePart | null;
+  secondaryReferenceImage?: InlineImagePart | null;
+  modelParams?: ModelGenerationParams;
+  onSlotCompleted?: (index: number, slot: QuadGeneratedSlot) => void;
+}): Promise<QuadGeneratedSlot[]> {
+  const safeItems =
+    params.items.length > 0
+      ? params.items
+      : [{ label: "1 • Generated Frame", prompt: "Scene composition" }];
+
+  const trimmedKey = params.apiKey.trim();
+  if (!trimmedKey) {
+    return safeItems.map((item) => ({
+      label: item.label,
+      prompt: item.prompt,
+      imageUrl: "",
+      mimeType: "image/png",
+      base64Data: "",
+    }));
+  }
+
+  const settled = await Promise.allSettled(
+    safeItems.map(async (item, idx) => {
+      const result = await generateWithNanoBanana({
+        apiKey: trimmedKey,
+        model: params.model,
+        prompt: item.prompt,
+        referenceImage: params.referenceImage,
+        secondaryReferenceImage: params.secondaryReferenceImage,
+        modelParams: params.modelParams,
+      });
+      const completedSlot: QuadGeneratedSlot = {
+        label: item.label,
+        prompt: item.prompt,
+        imageUrl: result.imageDataUrl,
+        mimeType: result.mimeType,
+        base64Data: result.base64Data,
+      };
+      if (params.onSlotCompleted) {
+        params.onSlotCompleted(idx, completedSlot);
+      }
+      return completedSlot;
+    })
+  );
+
+  return safeItems.map((item, idx) => {
+    const res = settled[idx];
+    if (res.status === "fulfilled") {
+      return res.value;
+    }
+    return {
+      label: item.label,
+      prompt: item.prompt,
       imageUrl: "",
       mimeType: "image/png",
       base64Data: "",

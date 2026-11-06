@@ -21,6 +21,7 @@ export default function ProjectsWorkspacePage() {
     setActiveProjectId,
     setActiveProjectTitle,
     imagesOutputDir,
+    newProjectNonce,
   } = useStudioSession();
   const activeUser = user || LOCAL_DEV_USER;
 
@@ -72,14 +73,14 @@ export default function ProjectsWorkspacePage() {
 
   useEffect(() => {
     loadProjectsFromDb();
-  }, [loadProjectsFromDb]);
+  }, [loadProjectsFromDb, newProjectNonce]);
 
   const handleOpenProjectInStudio = (proj: SavedConversationSummary) => {
     setPendingRemix({
       idea: proj.title,
       prompt: proj.latest_prompt || undefined,
       imageUrl: proj.preview_image_url || undefined,
-      styleId: proj.style_id || "editorial-anime",
+      styleId: proj.style_id || "none",
       conversationId: proj.id,
       nonce: Date.now(),
     });
@@ -242,11 +243,14 @@ export default function ProjectsWorkspacePage() {
           {!loading &&
             filteredProjects.map((proj, projIdx) => {
               const styleLabel =
-                bootstrapData.style_presets
-                  .find((s) => s.id === proj.style_id)
-                  ?.title.split(" (")[0] || proj.style_id;
+                !proj.style_id || proj.style_id === "none"
+                  ? "Custom"
+                  : bootstrapData.style_presets
+                      .find((s) => s.id === proj.style_id)
+                      ?.title.split(" (")[0] || proj.style_id;
               const turnCount = Number(proj.turn_count || 0);
-              const filledDots = Math.min(6, Math.max(1, turnCount));
+              const filledDots =
+                turnCount === 0 ? 0 : Math.min(6, Math.max(1, turnCount));
 
               return (
                 <article
@@ -264,7 +268,9 @@ export default function ProjectsWorkspacePage() {
                       />
                     ) : (
                       <span className="ref-project-card-no-image">
-                        No rendered preview • {styleLabel}
+                        {turnCount === 0
+                          ? "New project • Click to start generating"
+                          : `No rendered preview • ${styleLabel}`}
                       </span>
                     )}
                   </div>

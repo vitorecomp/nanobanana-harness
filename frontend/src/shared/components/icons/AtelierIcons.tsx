@@ -358,3 +358,121 @@ export function IconTrash({
     </svg>
   );
 }
+
+export function IconUploadImage({
+  size = 16,
+  strokeWidth = 1.75,
+  className,
+}: AtelierIconProps) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 16 16"
+      fill="none"
+      aria-hidden="true"
+      className={className}
+    >
+      <rect
+        x="2"
+        y="2.5"
+        width="12"
+        height="11"
+        rx="2.2"
+        stroke="currentColor"
+        strokeWidth={strokeWidth}
+      />
+      <circle cx="5.5" cy="6" r="1.15" fill="currentColor" />
+      <path
+        d="M2.4 11.6L5.9 8.4L8.6 10.9L10.7 9L13.6 11.8"
+        stroke="currentColor"
+        strokeWidth={strokeWidth}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+export function IconPromptText({
+  size = 16,
+  strokeWidth = 1.85,
+  className,
+}: AtelierIconProps) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 16 16"
+      fill="none"
+      aria-hidden="true"
+      className={className}
+    >
+      <rect
+        x="2"
+        y="2.5"
+        width="12"
+        height="11"
+        rx="2.2"
+        stroke="currentColor"
+        strokeWidth={strokeWidth}
+      />
+      <path
+        d="M5 6.25H11M5 9.75H8.8"
+        stroke="currentColor"
+        strokeWidth={strokeWidth}
+        strokeLinecap="round"
+      />
+    </svg>
+  );
+}
+
+export function IconRefresh({
+  size = 13,
+  strokeWidth = 1.85,
+  className,
+}: AtelierIconProps) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 16 16"
+      fill="none"
+      aria-hidden="true"
+      className={className}
+    >
+      <path
+        d="M13.25 8A5.25 5.25 0 1 1 11.7 4.28L13.25 5.75M13.25 2.75V5.75H10.25"
+        stroke="currentColor"
+        strokeWidth={strokeWidth}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+export function IconCheck({
+  size = 12,
+  strokeWidth = 2.2,
+  className,
+}: AtelierIconProps) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 12 12"
+      fill="none"
+      aria-hidden="true"
+      className={className}
+    >
+      <path
+        d="M2.25 6.25L4.85 8.85L9.75 3.35"
+        stroke="currentColor"
+        strokeWidth={strokeWidth}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}

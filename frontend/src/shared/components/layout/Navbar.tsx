@@ -59,11 +59,11 @@ export default function Navbar() {
     setNewProjectModalOpen(true);
   };
 
-  const handleConfirmCreateNewProject = (e: React.FormEvent) => {
+  const handleConfirmCreateNewProject = async (e: React.FormEvent) => {
     e.preventDefault();
     const chosenTitle = newProjectNameInput.trim() || "New Project";
-    triggerNewProject(chosenTitle);
     setNewProjectModalOpen(false);
+    await triggerNewProject(chosenTitle);
     if (!isCreate) {
       router.push("/create");
     }

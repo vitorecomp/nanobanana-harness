@@ -1,29 +1,43 @@
 "use client";
 
-import React, { useState, useEffect, useCallback, useRef } from "react";
+import React, {
+  useState,
+  useEffect,
+  useCallback,
+  useMemo,
+  useRef,
+} from "react";
 import Link from "next/link";
 import {
   BootstrapResponse,
   CanonicalDnaReference,
   CreationFlowMode,
-  ExplorationMatrixAxis,
+  CreationTabMode,
+  CreationWizardStep,
   FlowNodePosition,
   FlowStepParameterSnapshot,
+  InlineImagePart,
   NanoBananaModel,
   PreservationLocks,
   SessionFrame,
 } from "../types/studio.types";
 import {
+  buildConsolidatedScenePrompt,
   enhanceNarrativeWithGemini,
-  generateQuadWithNanoBanana,
+  generatePromptVariationsWithGemini,
   imageUrlToInlinePart,
   parseDataUrl,
   QuadGeneratedSlot,
+  QuadPromptVariation,
+  renderPreparedBatchWithNanoBanana,
 } from "../services/nanobananaClient";
 import {
   buildStepBezierPath,
   computeBatchBranchNodePositions,
   computeTreeAutoLayout,
+  FLOW_HORIZONTAL_SPACING,
+  FLOW_VERTICAL_SPACING,
+  FlowObstacleNode,
   getFrameNodeId,
   loadProjectFlowMeta,
   parseFrameNodeId,
@@ -34,6 +48,7 @@ import { useStudioSession } from "@/core/context/StudioSessionContext";
 import {
   IconAtelierStar,
   IconAutoGrid,
+  IconCheck,
   IconChevron,
   IconClose,
   IconDna,
@@ -43,6 +58,9 @@ import {
   IconMinus,
   IconPlay,
   IconPlus,
+  IconPromptText,
+  IconRefresh,
+  IconUploadImage,
 } from "@/shared";
 import {
   createConversation,
@@ -69,216 +87,22 @@ export interface StudioInteractionRound {
   variants: QuadGeneratedSlot[];
 }
 
-const ASPECT_RATIO_OPTIONS = ["1:1", "3:4", "4:3", "16:9", "9:16"] as const;
-
-const EXPLORATION_MATRIX_OPTIONS: Array<{
-  id: ExplorationMatrixAxis;
+interface ReferenceCardAnchor {
+  roundId: string;
+  turnNumber: number;
+  variantIndex: number;
   label: string;
-  shortTag: string;
-  blueprints: Array<{ code: string; title: string; caption: string }>;
-}> = [
-  {
-    id: "auto-director",
-    label: "🎬 Auto Director",
-    shortTag: "1 Base + 3 Emphases",
-    blueprints: [
-      {
-        code: "01 • Base Prompt",
-        title: "Direct Scene Fidelity",
-        caption:
-          "Faithful interpretation of your primary prompt combined with your active style and modifiers.",
-      },
-      {
-        code: "02 • Dynamic Emphasis I",
-        title: "Light, Mood & Atmosphere",
-        caption:
-          "Gemini isolates the lighting and atmosphere of your scene to craft a dramatic visual reading.",
-      },
-      {
-        code: "03 • Dynamic Emphasis II",
-        title: "Framing & Optics",
-        caption:
-          "Second Gemini variation highlighting camera perspective, depth of field, and spatial geometry.",
-      },
-      {
-        code: "04 • Dynamic Emphasis III",
-        title: "Material, Texture & Subject",
-        caption:
-          "Third variation focused on surface micro-details, material richness, and character expression.",
-      },
-    ],
-  },
-  {
-    id: "camera-angles",
-    label: "🎥 4 Camera Angles",
-    shortTag: "24mm • 50mm • 85mm • Low",
-    blueprints: [
-      {
-        code: "01 • 24mm Wide",
-        title: "Establishing Wide Shot",
-        caption:
-          "Full environmental scale and architectural context with 24mm cinema optics.",
-      },
-      {
-        code: "02 • 50mm Medium",
-        title: "Editorial Medium Frame",
-        caption:
-          "Natural eye-level 50mm framing balancing character posture and scene depth.",
-      },
-      {
-        code: "03 • 85mm Close-Up",
-        title: "Intimate Portrait Optics",
-        caption:
-          "Shallow f/1.4 depth of field isolating facial expression and fine textures.",
-      },
-      {
-        code: "04 • 35mm Low Hero",
-        title: "Dramatic Low-Angle Hero",
-        caption:
-          "Upward-looking 35mm perspective adding monumental presence and dynamic lines.",
-      },
-    ],
-  },
-  {
-    id: "lighting-setups",
-    label: "💡 4 Lighting Setups",
-    shortTag: "Golden • Noir • Mist • Neon",
-    blueprints: [
-      {
-        code: "01 • Golden Rim",
-        title: "Golden Hour Backlight",
-        caption:
-          "Warm low-angle sunlight with luminous rim highlights and long sculpted shadows.",
-      },
-      {
-        code: "02 • Chiaroscuro",
-        title: "High-Contrast Noir",
-        caption:
-          "Dramatic single-source key light carving subject geometry out of deep shadow.",
-      },
-      {
-        code: "03 • Overcast Mist",
-        title: "Soft Diffused Atmosphere",
-        caption:
-          "Delicate skylight filtering through volumetric mist with painterly tonal transitions.",
-      },
-      {
-        code: "04 • Dual-Tone Neon",
-        title: "Cyan & Amber Practicals",
-        caption:
-          "Cybernetic color contrast pairing cool cyan key light with warm amber reflections.",
-      },
-    ],
-  },
-  {
-    id: "wardrobe-variants",
-    label: "🧥 4 Wardrobe Variants",
-    shortTag: "4 Costume Explorations",
-    blueprints: [
-      {
-        code: "01 • Technical",
-        title: "Bespoke Technical Outerwear",
-        caption:
-          "Matte ballistic textiles, structured collar geometry, and precision metal fasteners.",
-      },
-      {
-        code: "02 • Artisanal",
-        title: "Ceremonial Silk & Leather",
-        caption:
-          "Draped raw silk layers, embroidered motifs, and weathered heirloom leatherwork.",
-      },
-      {
-        code: "03 • Avant-Garde",
-        title: "Sculptural Minimalist",
-        caption:
-          "Clean monochrome tailoring with sharp architectural silhouettes.",
-      },
-      {
-        code: "04 • Field Gear",
-        title: "Weathered Expedition Attire",
-        caption:
-          "Lived-in waxed canvas cloak, brass clasps, and rain-worn rugged textures.",
-      },
-    ],
-  },
-  {
-    id: "storyboard-4",
-    label: "🎞️ 4-Frame Storyboard",
-    shortTag: "Sequential Narrative Beats",
-    blueprints: [
-      {
-        code: "01 • Beat I",
-        title: "Arrival & Establishing",
-        caption:
-          "Opening narrative beat introducing the character within the world.",
-      },
-      {
-        code: "02 • Beat II",
-        title: "Discovery & Rising Tension",
-        caption:
-          "Medium tracking beat as the subject reacts to a pivotal element.",
-      },
-      {
-        code: "03 • Beat III",
-        title: "Decisive Climax Moment",
-        caption:
-          "Close dynamic angle capturing the peak emotional or kinetic action.",
-      },
-      {
-        code: "04 • Beat IV",
-        title: "Aftermath & Resolution",
-        caption:
-          "Contemplative pull-back frame showing the lingering atmosphere.",
-      },
-    ],
-  },
-];
+  imageUrl: string;
+  prompt: string;
+}
 
-const SURGICAL_DELTA_QUICK_CHIPS = [
-  {
-    label: "💡 Golden Hour Rim",
-    delta: "Change lighting to warm golden-hour rim sunlight with long dramatic shadows",
-  },
-  {
-    label: "🎥 85mm Close-Up",
-    delta: "Reframe as an intimate 85mm f/1.4 close-up portrait focusing on eyes and expression",
-  },
-  {
-    label: "🌧️ Add Rain & Neon",
-    delta: "Add fine atmospheric rain and wet reflections with subtle amber and cyan practical lights",
-  },
-  {
-    label: "🧥 Crimson Leather Jacket",
-    delta: "Change wardrobe to a tailored crimson weathered leather jacket with brass zippers",
-  },
-  {
-    label: "🌆 Minimalist Studio Backdrop",
-    delta: "Replace the background with a clean architectural concrete atelier bathed in soft skylight",
-  },
-] as const;
-
-const ATELIER_SCENE_STARTERS = [
-  {
-    label: "✦ Samurai in Rainy Alley",
-    prompt:
-      "Cinematic portrait of a cybernetic swordswoman under fine rain in an alley lit by amber paper lanterns and Prussian-blue reflections on wet asphalt",
-  },
-  {
-    label: "✦ Sunlit Botanical Atelier",
-    prompt:
-      "Interior of an architectural studio bathed in late-afternoon golden sunlight, wooden table with exotic plants, brass instruments, and drafted scrolls",
-  },
-  {
-    label: "✦ Brutalist Cliff Observatory",
-    prompt:
-      "Sculptural concrete astronomical observatory atop a coastal cliff at dusk, amber and vermilion sky over a deep ink ocean",
-  },
-] as const;
+const ASPECT_RATIO_OPTIONS = ["1:1", "3:4", "4:3", "16:9", "9:16"] as const;
+const IMAGE_COUNT_TICKS = [1, 2, 3, 4, 5, 6, 7, 8] as const;
 
 const PROMPT_COMPLETENESS_PILLARS = [
   {
     id: "subject",
-    label: "👤 Subject",
+    label: "Subject",
     regex:
       /\b(woman|man|girl|boy|samurai|swordswoman|explorer|character|figure|portrait|person|warrior|architect|monk|traveler|pilot|hero|silhouette|robot|cyborg|interior|observatory)\b/i,
     suggestions: [
@@ -288,43 +112,49 @@ const PROMPT_COMPLETENESS_PILLARS = [
       },
       {
         label: "Tailored technical attire",
-        snippet: "wearing tailored technical outerwear with weathered brass fasteners",
+        snippet:
+          "wearing tailored technical outerwear with weathered brass fasteners",
       },
       {
         label: "Artisanal silk & leather",
-        snippet: "draped in layered raw silk garments with heirloom leather strapping",
+        snippet:
+          "draped in layered raw silk garments with heirloom leather strapping",
       },
     ],
   },
   {
     id: "environment",
-    label: "🌆 Environment",
+    label: "Environment",
     regex:
       /\b(alley|street|studio|atelier|cliff|city|forest|temple|room|landscape|courtyard|rain|mist|sky|ocean|horizon|architecture|backdrop|garden|bridge|station)\b/i,
     suggestions: [
       {
         label: "Rain-slicked lantern alley",
-        snippet: "set in a rain-slicked cobblestone alley lined with glowing paper lanterns",
+        snippet:
+          "set in a rain-slicked cobblestone alley lined with glowing paper lanterns",
       },
       {
         label: "Sunlit concrete atelier",
-        snippet: "inside a minimalist architectural concrete atelier with tall skylights",
+        snippet:
+          "inside a minimalist architectural concrete atelier with tall skylights",
       },
       {
         label: "Misty coastal cliff",
-        snippet: "overlooking a misty coastal cliff against a deep Prussian-blue horizon",
+        snippet:
+          "overlooking a misty coastal cliff against a deep Prussian-blue horizon",
       },
     ],
   },
   {
     id: "camera",
-    label: "🎥 Camera",
+    label: "Camera",
     regex:
       /\b(24mm|35mm|50mm|85mm|lens|close-up|closeup|wide|angle|framing|depth of field|f\/1|bokeh|telephoto|anamorphic|eye-level|low-angle|establishing)\b/i,
     suggestions: [
       {
         label: "85mm f/1.4 Portrait",
-        snippet: "captured on an 85mm f/1.4 portrait lens with shallow depth of field",
+        snippet:
+          "captured on an 85mm f/1.4 portrait lens with shallow depth of field",
       },
       {
         label: "35mm Cinematic Street",
@@ -338,47 +168,56 @@ const PROMPT_COMPLETENESS_PILLARS = [
   },
   {
     id: "lighting",
-    label: "💡 Lighting",
+    label: "Lighting",
     regex:
       /\b(light|lighting|sunlight|golden|hour|rim|shadow|chiaroscuro|neon|lantern|glow|dusk|dawn|amber|backlit|volumetric|overcast|skylight|illumination)\b/i,
     suggestions: [
       {
         label: "Warm Golden Hour Rim",
-        snippet: "bathed in warm late-afternoon golden-hour rim sunlight with long shadows",
+        snippet:
+          "bathed in warm late-afternoon golden-hour rim sunlight with long shadows",
       },
       {
         label: "Chiaroscuro Contrast",
-        snippet: "lit with dramatic chiaroscuro key light and deep sculpted ink shadows",
+        snippet:
+          "lit with dramatic chiaroscuro key light and deep sculpted ink shadows",
       },
       {
         label: "Amber & Cyan Reflections",
-        snippet: "illuminated by warm amber practicals and cool cyan atmospheric fill",
+        snippet:
+          "illuminated by warm amber practicals and cool cyan atmospheric fill",
       },
     ],
   },
   {
     id: "texture",
-    label: "✨ Texture & Mood",
+    label: "Texture & Mood",
     regex:
       /\b(texture|grain|film|cel-shaded|ink|watercolor|linen|paper|patina|wet|asphalt|silk|leather|concrete|brass|tactile|micro-texture|cinematic|editorial)\b/i,
     suggestions: [
       {
         label: "Tactile fabric & film grain",
-        snippet: "featuring tactile fabric weave, subtle 35mm film grain, and crisp ink contours",
+        snippet:
+          "featuring tactile fabric weave, subtle 35mm film grain, and crisp ink contours",
       },
       {
         label: "Washi paper & sumi ink",
-        snippet: "rendered with archival washi paper tooth and bold sumi-e ink brushwork",
+        snippet:
+          "rendered with archival washi paper tooth and bold sumi-e ink brushwork",
       },
       {
         label: "Wet specular reflections",
-        snippet: "with crisp specular reflections on wet surfaces and rich atmospheric haze",
+        snippet:
+          "with crisp specular reflections on wet surfaces and rich atmospheric haze",
       },
     ],
   },
 ] as const;
 
-function normalizeSlotLabelToEnglish(rawLabel: string | undefined, idx: number): string {
+function normalizeSlotLabelToEnglish(
+  rawLabel: string | undefined,
+  idx: number
+): string {
   if (!rawLabel) return `Variation #${idx + 1}`;
   return rawLabel
     .replace("Prompt Base", "Base Prompt")
@@ -387,7 +226,11 @@ function normalizeSlotLabelToEnglish(rawLabel: string | undefined, idx: number):
 }
 
 function normalizeProjectTitleToEnglish(rawTitle: string | undefined): string {
-  if (!rawTitle || rawTitle.trim() === "Novo Projeto" || rawTitle.trim() === "Sem título") {
+  if (
+    !rawTitle ||
+    rawTitle.trim() === "Novo Projeto" ||
+    rawTitle.trim() === "Sem título"
+  ) {
     return "New Project";
   }
   return rawTitle;
@@ -426,18 +269,50 @@ export default function InteractiveStudio({
     setActiveProjectTitle: setProjectTitle,
     newProjectNonce,
     openSettingsModal,
+    enhanceSystemPrompt,
+    variationSystemPrompt,
   } = useStudioSession();
-  const [model] = useState<NanoBananaModel>("gemini-2.5-flash-image");
+  const [model, setModel] = useState<NanoBananaModel>(
+    "gemini-2.5-flash-image"
+  );
+  const [modelTemperature, setModelTemperature] = useState<number>(1.0);
+  const [modelTopP, setModelTopP] = useState<number>(0.95);
+  const [modelSeedInput, setModelSeedInput] = useState<string>("");
 
+  // Creation Modal 3-Step Wizard State
+  const [wizardStep, setWizardStep] = useState<CreationWizardStep>(1);
+  const [creationTab, setCreationTab] = useState<CreationTabMode>("prompt");
   const [promptInput, setPromptInput] = useState<string>("");
-  const [deltaInput, setDeltaInput] = useState<string>("");
-  const [flowMode, setFlowMode] = useState<CreationFlowMode>("compose");
-  const [matrixAxis, setMatrixAxis] =
-    useState<ExplorationMatrixAxis>("auto-director");
+  const [imageCount, setImageCount] = useState<number>(4);
+  const [enhancePromptWithAi, setEnhancePromptWithAi] =
+    useState<boolean>(false);
+  const [varyPromptsWithAi, setVaryPromptsWithAi] = useState<boolean>(false);
+
+  // Step 2 & Step 3 AI Review Buffers
+  const [enhancedPromptDraft, setEnhancedPromptDraft] = useState<string>("");
+  const [isPreparingStep2, setIsPreparingStep2] = useState<boolean>(false);
+  const [variationDrafts, setVariationDrafts] = useState<QuadPromptVariation[]>(
+    []
+  );
+  const [isPreparingStep3, setIsPreparingStep3] = useState<boolean>(false);
+
+  // Tab 2 Reference Image State (either pre-loaded from a Canvas Card or uploaded/pasted from computer)
+  const [referenceCardInfo, setReferenceCardInfo] =
+    useState<ReferenceCardAnchor | null>(null);
+  const [uploadedReference, setUploadedReference] = useState<{
+    name: string;
+    dataUrl: string;
+  } | null>(null);
+  const [isDraggingOverDropzone, setIsDraggingOverDropzone] =
+    useState<boolean>(false);
+  const fileUploadInputRef = useRef<HTMLInputElement | null>(null);
+
+  // Prompt Hints & Modifier / Model Selectors
   const [showPromptHints, setShowPromptHints] = useState<boolean>(false);
-  const [activeParamTab, setActiveParamTab] = useState<
-    "matrix" | "style" | "modifiers"
-  >("matrix");
+  const [activePillarId, setActivePillarId] = useState<string | null>(null);
+  const [activeParamTab, setActiveParamTab] = useState<"modifiers" | "model">(
+    "modifiers"
+  );
   const [preservationLocks, setPreservationLocks] = useState<PreservationLocks>(
     {
       keepCharacter: true,
@@ -447,51 +322,39 @@ export default function InteractiveStudio({
   );
   const [canonicalDnaRef, setCanonicalDnaRef] =
     useState<CanonicalDnaReference | null>(null);
-  const [isEnhancingNarrative, setIsEnhancingNarrative] =
-    useState<boolean>(false);
-  const [preEnhancePrompt, setPreEnhancePrompt] = useState<string | null>(null);
-  const [activePillarId, setActivePillarId] = useState<string | null>(null);
   const [lightboxCompareMode, setLightboxCompareMode] =
     useState<boolean>(false);
-  const fileUploadInputRef = useRef<HTMLInputElement | null>(null);
 
-  const [selectedStyleId, setSelectedStyleId] =
-    useState<string>("editorial-anime");
+  const [selectedStyleId, setSelectedStyleId] = useState<string>("none");
   const [selectedAspectRatio, setSelectedAspectRatio] =
     useState<string>("3:4");
-  const [selectedModifiers, setSelectedModifiers] = useState<string[]>([
-    "golden-hour",
-    "lens-85mm",
-  ]);
+  const [selectedModifiers, setSelectedModifiers] = useState<string[]>([]);
   const [activeModCategoryId, setActiveModCategoryId] = useState<string>(
     bootstrapData.modifier_categories[0]?.id || "camera"
   );
-  const [useReferenceImage, setUseReferenceImage] = useState<boolean>(true);
+
+  // Live Generation & Canvas State
   const [isGenerating, setIsGenerating] = useState<boolean>(false);
   const [generationStage, setGenerationStage] = useState<
     "idle" | "analyzing-scene" | "rendering-images"
   >("idle");
   const [liveDraftSlots, setLiveDraftSlots] = useState<
     Array<QuadGeneratedSlot | null>
-  >([null, null, null, null]);
-  const [completedSlotsCount, setCompletedSlotsCount] = useState<number>(0);
+  >([]);
   const [statusNotice, setStatusNotice] = useState<string | null>(null);
 
-  // Lightbox modal state for inspecting any of the 4 generated images at full resolution
   const [lightboxSlot, setLightboxSlot] = useState<{
     slot: QuadGeneratedSlot;
     index: number;
     turnNumber: number;
   } | null>(null);
 
-  // Immutable generation steps on the n8n Flow Canvas
   const [interactions, setInteractions] = useState<StudioInteractionRound[]>(
     []
   );
   const [activeInteractionIndex, setActiveInteractionIndex] =
     useState<number>(-1);
 
-  // Flow Canvas Node Positions, Parent Variant Map, Immutable Parameter Snapshots & Active Draft Step
   const [nodePositions, setNodePositions] = useState<
     Record<string, FlowNodePosition>
   >({});
@@ -508,7 +371,7 @@ export default function InteractiveStudio({
   } | null>({
     parentTurnNumber: null,
     parentVariantIndex: 0,
-    positions: computeBatchBranchNodePositions(null, [], 4),
+    positions: [{ x: 140, y: 140 }],
   });
   const [selectedCanvasNodeId, setSelectedCanvasNodeId] =
     useState<string>("draft");
@@ -555,15 +418,41 @@ export default function InteractiveStudio({
     return () => window.clearTimeout(timer);
   }, [statusNotice]);
 
+  // Helper to resolve current style & modifier labels (only when explicitly selected)
+  const getActiveStyleAndModifierLabels = useCallback(() => {
+    const activeStyleObj =
+      selectedStyleId && selectedStyleId !== "none"
+        ? bootstrapData.style_presets.find((s) => s.id === selectedStyleId)
+        : undefined;
+    const allModifierOpts = bootstrapData.modifier_categories.flatMap(
+      (c) => c.options
+    );
+    const activeModifierLabels = selectedModifiers
+      .map((id) => {
+        const found = allModifierOpts.find((o) => o.id === id);
+        if (!found) return null;
+        return found.token || found.label.split(" (")[0];
+      })
+      .filter((x): x is string => Boolean(x));
+
+    return {
+      styleLabel: activeStyleObj?.title.split(" (")[0],
+      modifierLabels: activeModifierLabels,
+    };
+  }, [
+    bootstrapData.modifier_categories,
+    bootstrapData.style_presets,
+    selectedModifiers,
+    selectedStyleId,
+  ]);
+
   const loadProjectById = useCallback(
     async (convId: string) => {
       setActiveProjectId(convId);
       const detail = await getConversationDetail(convId, activeUser.id);
       if (!detail) return;
       setProjectTitle(normalizeProjectTitleToEnglish(detail.title));
-      if (detail.style_id) setSelectedStyleId(detail.style_id);
       setCanonicalDnaRef(detail.canonical_dna || null);
-      setPreEnhancePrompt(null);
 
       const loadedRounds: StudioInteractionRound[] = detail.turns.map((t) => {
         const savedVars = Array.isArray(t.variants) ? t.variants : [];
@@ -598,8 +487,6 @@ export default function InteractiveStudio({
           parentTurnNumber:
             t.parent_turn_number !== undefined && t.parent_turn_number !== null
               ? Number(t.parent_turn_number)
-              : t.turn_number > 1
-              ? t.turn_number - 1
               : null,
           basePrompt: t.raw_idea || t.master_prompt,
           chosenPrompt: t.master_prompt || chosen?.prompt || "",
@@ -638,23 +525,25 @@ export default function InteractiveStudio({
           getFrameNodeId(lastRound.id, lastRound.selectedVariantIndex || 0)
         );
         setDraftStep(null);
-        setPromptInput(lastRound.chosenPrompt);
-        setDeltaInput("");
         if (lastRound.aspectRatio) {
           setSelectedAspectRatio(lastRound.aspectRatio);
         }
-        setFlowMode("compose");
       } else {
         setActiveInteractionIndex(-1);
+        setNodePositions({});
+        setParentVariantByTurn({});
+        setSnapshotsByTurn({});
         setSelectedCanvasNodeId("draft");
         setDraftStep({
           parentTurnNumber: null,
           parentVariantIndex: 0,
-          positions: computeBatchBranchNodePositions(null, [], 4),
+          positions: [{ x: 140, y: 140 }],
         });
         setPromptInput("");
-        setDeltaInput("");
-        setFlowMode("compose");
+        setEnhancedPromptDraft("");
+        setVariationDrafts([]);
+        setSelectedStyleId("none");
+        setSelectedModifiers([]);
       }
     },
     [activeUser.id, setActiveProjectId, setProjectTitle]
@@ -664,6 +553,30 @@ export default function InteractiveStudio({
   useEffect(() => {
     if (externalPresetRequest?.conversationId) {
       void loadProjectById(externalPresetRequest.conversationId);
+      return;
+    }
+    if (externalPresetRequest && !externalPresetRequest.conversationId) {
+      if (externalPresetRequest.styleId) {
+        setSelectedStyleId(externalPresetRequest.styleId);
+      }
+      if (externalPresetRequest.prompt || externalPresetRequest.idea) {
+        setPromptInput(
+          externalPresetRequest.prompt || externalPresetRequest.idea
+        );
+      }
+      if (externalPresetRequest.imageUrl) {
+        setUploadedReference({
+          name: "Gallery Remix Reference",
+          dataUrl: externalPresetRequest.imageUrl,
+        });
+        setReferenceCardInfo(null);
+        setCreationTab("reference");
+      } else {
+        setCreationTab("prompt");
+      }
+      setWizardStep(1);
+      setSelectedCanvasNodeId("draft");
+      setIsStepModalOpen(true);
       return;
     }
     if (newProjectNonce > 0) {
@@ -679,7 +592,7 @@ export default function InteractiveStudio({
   const activeInteraction =
     activeInteractionIndex >= 0 ? interactions[activeInteractionIndex] : null;
 
-  // Close lightbox on Escape & navigate across the 4 variations with ArrowLeft / ArrowRight
+  // Close lightbox on Escape & navigate across variations with ArrowLeft / ArrowRight
   useEffect(() => {
     if (!lightboxSlot) return;
     const handleKey = (e: KeyboardEvent) => {
@@ -712,17 +625,21 @@ export default function InteractiveStudio({
     return () => window.removeEventListener("keydown", handleKey);
   }, [lightboxSlot, activeInteraction]);
 
-  // Reset to a completely empty new project when triggered from Sidebar
+  // Reset to a completely empty new project showing ONLY the minimalist '+' flow item
+  // (while keeping the newly created SQLite project ID so the project stays in Gallery!)
   useEffect(() => {
     if (newProjectNonce === 0) return;
-    setActiveProjectId(null);
     setPromptInput("");
-    setDeltaInput("");
-    setPreEnhancePrompt(null);
+    setEnhancedPromptDraft("");
+    setVariationDrafts([]);
+    setWizardStep(1);
+    setCreationTab("prompt");
+    setReferenceCardInfo(null);
+    setUploadedReference(null);
     setActivePillarId(null);
-    setFlowMode("compose");
-    setMatrixAxis("auto-director");
     setCanonicalDnaRef(null);
+    setSelectedStyleId("none");
+    setSelectedModifiers([]);
     setInteractions([]);
     setActiveInteractionIndex(-1);
     setNodePositions({});
@@ -731,15 +648,61 @@ export default function InteractiveStudio({
     setDraftStep({
       parentTurnNumber: null,
       parentVariantIndex: 0,
-      positions: computeBatchBranchNodePositions(null, [], 4),
+      positions: [{ x: 140, y: 140 }],
     });
     setSelectedCanvasNodeId("draft");
+    setIsStepModalOpen(false);
     setCanvasViewport({ x: 24, y: 24, zoom: 0.92 });
     setLightboxSlot(null);
-    setLiveDraftSlots([null, null, null, null]);
+    setLiveDraftSlots([]);
     setGenerationStage("idle");
-    showTransientNotice("✦ New project started — configure Step #1");
-  }, [newProjectNonce, setActiveProjectId, showTransientNotice]);
+    showTransientNotice("✦ New project created — click '+' to start");
+  }, [newProjectNonce, showTransientNotice]);
+
+  // Clipboard image paste support when Creation Modal is open on Step 1 -> Tab 2 ("reference")
+  useEffect(() => {
+    if (
+      !isStepModalOpen ||
+      selectedCanvasNodeId !== "draft" ||
+      wizardStep !== 1 ||
+      creationTab !== "reference"
+    ) {
+      return;
+    }
+    const handlePaste = (e: ClipboardEvent) => {
+      const items = e.clipboardData?.items;
+      if (!items) return;
+      for (let i = 0; i < items.length; i++) {
+        const item = items[i];
+        if (item.type.startsWith("image/")) {
+          const file = item.getAsFile();
+          if (!file) continue;
+          e.preventDefault();
+          const reader = new FileReader();
+          reader.onloadend = () => {
+            if (typeof reader.result === "string") {
+              setUploadedReference({
+                name: file.name || "Pasted image",
+                dataUrl: reader.result,
+              });
+              setReferenceCardInfo(null);
+              showTransientNotice("✦ Reference image pasted from clipboard");
+            }
+          };
+          reader.readAsDataURL(file);
+          break;
+        }
+      }
+    };
+    window.addEventListener("paste", handlePaste);
+    return () => window.removeEventListener("paste", handlePaste);
+  }, [
+    creationTab,
+    isStepModalOpen,
+    selectedCanvasNodeId,
+    showTransientNotice,
+    wizardStep,
+  ]);
 
   // Global mousemove / mouseup listeners for Canvas Panning & Node Drag-and-Drop Organization
   useEffect(() => {
@@ -811,22 +774,22 @@ export default function InteractiveStudio({
     snapshotsByTurn,
   ]);
 
+  // Opens Creation Modal on Step 1 / Tab 1 ("From Prompt") for a fresh root generation
+  const openCreationModalAsNewRoot = useCallback(() => {
+    setSelectedCanvasNodeId("draft");
+    setWizardStep(1);
+    setCreationTab("prompt");
+    setReferenceCardInfo(null);
+    setEnhancedPromptDraft("");
+    setVariationDrafts([]);
+    setIsStepModalOpen(true);
+  }, []);
+
+  // Opens Creation Modal on Step 1 / Tab 2 ("With Reference Image") pre-loaded with a specific Canvas Card
   const handleStartBranchFromNode = useCallback(
-    (
-      parentRound: StudioInteractionRound | null,
-      variantIndex: number = 0,
-      preferredMode: CreationFlowMode = "compose"
-    ) => {
-      const existingCoords = Object.values(nodePositions);
+    (parentRound: StudioInteractionRound | null, variantIndex: number = 0) => {
       if (!parentRound) {
-        setDraftStep({
-          parentTurnNumber: null,
-          parentVariantIndex: 0,
-          positions: computeBatchBranchNodePositions(null, existingCoords, 4),
-        });
-        setSelectedCanvasNodeId("draft");
-        setFlowMode("compose");
-        setIsStepModalOpen(true);
+        openCreationModalAsNewRoot();
         return;
       }
 
@@ -834,59 +797,70 @@ export default function InteractiveStudio({
       if (roundIdx >= 0) {
         setActiveInteractionIndex(roundIdx);
       }
+
       const chosenSlot =
         parentRound.variants[variantIndex] || parentRound.variants[0];
-      if (chosenSlot?.prompt) {
-        setPromptInput(chosenSlot.prompt);
-      }
       if (parentRound.aspectRatio) {
         setSelectedAspectRatio(parentRound.aspectRatio);
       }
-      setFlowMode(preferredMode);
 
-      const parentCardId = getFrameNodeId(parentRound.id, variantIndex);
-      const parentPos = nodePositions[parentCardId] || { x: 70, y: 60 };
-      const nextBatchPositions = computeBatchBranchNodePositions(
-        parentPos,
-        existingCoords,
-        4
-      );
-
-      setDraftStep({
-        parentTurnNumber: parentRound.turnNumber,
-        parentVariantIndex: variantIndex,
-        positions: nextBatchPositions,
+      setReferenceCardInfo({
+        roundId: parentRound.id,
+        turnNumber: parentRound.turnNumber,
+        variantIndex,
+        label: `Card #${parentRound.turnNumber}.${variantIndex + 1}`,
+        imageUrl: chosenSlot?.imageUrl || parentRound.chosenImageUrl || "",
+        prompt: chosenSlot?.prompt || parentRound.chosenPrompt || "",
       });
+      setUploadedReference(null);
+      setPromptInput("");
+      setEnhancedPromptDraft("");
+      setVariationDrafts([]);
+      setWizardStep(1);
+      setCreationTab("reference");
       setSelectedCanvasNodeId("draft");
       setIsStepModalOpen(true);
-
-      // Smoothly pan viewport so the newly spawned 4 cards will be visible
-      if (canvasViewportRef.current && nextBatchPositions[0]) {
-        const rect = canvasViewportRef.current.getBoundingClientRect();
-        const zoom = canvasViewport.zoom;
-        const desiredX =
-          rect.width * 0.52 - (nextBatchPositions[0].x + 150) * zoom;
-        const desiredY =
-          rect.height * 0.35 - (nextBatchPositions[0].y + 260) * zoom;
-        setCanvasViewport((prev) => ({
-          ...prev,
-          x: Math.round(desiredX),
-          y: Math.round(desiredY),
-        }));
-      }
-
-      showTransientNotice(
-        `✦ New Step #${interactions.length + 1} (4 cards) branched from Card #${
-          parentRound.turnNumber
-        }.${variantIndex + 1}`
-      );
     },
-    [
-      canvasViewport.zoom,
-      interactions,
-      nodePositions,
-      showTransientNotice,
-    ]
+    [interactions, openCreationModalAsNewRoot]
+  );
+
+  const applyFitViewportToPositions = useCallback(
+    (allCoords: FlowNodePosition[]) => {
+      if (allCoords.length === 0 || !canvasViewportRef.current) {
+        setCanvasViewport({ x: 28, y: 28, zoom: 0.9 });
+        return;
+      }
+      const minX = Math.min(...allCoords.map((p) => p.x));
+      const maxX = Math.max(...allCoords.map((p) => p.x + 310));
+      const minY = Math.min(...allCoords.map((p) => p.y));
+      const maxY = Math.max(...allCoords.map((p) => p.y + 316));
+
+      const rect = canvasViewportRef.current.getBoundingClientRect();
+      const toolbarSafeTop = 76;
+      const sidePad = 28;
+      const usableWidth = Math.max(320, rect.width - sidePad * 2);
+      const usableHeight = Math.max(260, rect.height - toolbarSafeTop - 24);
+      const rawW = Math.max(320, maxX - minX);
+      const rawH = Math.max(320, maxY - minY);
+      const nextZoom = Math.min(
+        1.0,
+        Math.max(0.18, Math.min(usableWidth / rawW, usableHeight / rawH))
+      );
+      const centerX = (minX + maxX) / 2;
+      const centerY = (minY + maxY) / 2;
+      const centeredX = Math.round(rect.width / 2 - centerX * nextZoom);
+      const centeredY = Math.round(
+        toolbarSafeTop + usableHeight / 2 - centerY * nextZoom
+      );
+      const minAllowedX = Math.round(sidePad - minX * nextZoom);
+      const minAllowedY = Math.round(toolbarSafeTop + 8 - minY * nextZoom);
+      setCanvasViewport({
+        zoom: Number(nextZoom.toFixed(2)),
+        x: rawW * nextZoom > usableWidth ? minAllowedX : centeredX,
+        y: rawH * nextZoom > usableHeight ? minAllowedY : centeredY,
+      });
+    },
+    []
   );
 
   const handleAutoOrganizeFlow = useCallback(() => {
@@ -905,28 +879,13 @@ export default function InteractiveStudio({
       parentVariantByTurn,
       snapshotsByTurn,
     });
-    if (draftStep) {
-      const parentRound = interactions.find(
-        (r) => r.turnNumber === draftStep.parentTurnNumber
-      );
-      const parentCardId = parentRound
-        ? getFrameNodeId(parentRound.id, draftStep.parentVariantIndex)
-        : null;
-      const parentPos = parentCardId ? autoMap[parentCardId] : null;
-      setDraftStep({
-        ...draftStep,
-        positions: computeBatchBranchNodePositions(
-          parentPos || null,
-          Object.values(autoMap),
-          4
-        ),
-      });
-    }
-    setCanvasViewport({ x: 28, y: 28, zoom: 0.85 });
-    showTransientNotice("✦ All image cards auto-organized into a clean tree");
+    applyFitViewportToPositions(Object.values(autoMap));
+    showTransientNotice(
+      "✦ Flow auto-organized with collision-free wire corridors"
+    );
   }, [
     activeProjectId,
-    draftStep,
+    applyFitViewportToPositions,
     interactions,
     parentVariantByTurn,
     showTransientNotice,
@@ -935,35 +894,15 @@ export default function InteractiveStudio({
 
   const handleFitFlowView = useCallback(() => {
     const allCoords = [
-      ...interactions.flatMap((r) =>
-        r.variants.map((_, vIdx) => nodePositions[getFrameNodeId(r.id, vIdx)])
-      ).filter((p): p is FlowNodePosition => Boolean(p)),
+      ...interactions
+        .flatMap((r) =>
+          r.variants.map((_, vIdx) => nodePositions[getFrameNodeId(r.id, vIdx)])
+        )
+        .filter((p): p is FlowNodePosition => Boolean(p)),
       ...(isGenerating && draftStep ? draftStep.positions : []),
     ];
-    if (allCoords.length === 0 || !canvasViewportRef.current) {
-      setCanvasViewport({ x: 28, y: 28, zoom: 0.9 });
-      return;
-    }
-    const minX = Math.min(...allCoords.map((p) => p.x));
-    const maxX = Math.max(...allCoords.map((p) => p.x + 310));
-    const minY = Math.min(...allCoords.map((p) => p.y));
-    const maxY = Math.max(...allCoords.map((p) => p.y + 320));
-
-    const rect = canvasViewportRef.current.getBoundingClientRect();
-    const contentW = Math.max(420, maxX - minX + 120);
-    const contentH = Math.max(440, maxY - minY + 120);
-    const nextZoom = Math.min(
-      1.05,
-      Math.max(0.38, Math.min(rect.width / contentW, rect.height / contentH))
-    );
-    const centerX = (minX + maxX) / 2;
-    const centerY = (minY + maxY) / 2;
-    setCanvasViewport({
-      zoom: Number(nextZoom.toFixed(2)),
-      x: Math.round(rect.width / 2 - centerX * nextZoom),
-      y: Math.round(rect.height / 2 - centerY * nextZoom),
-    });
-  }, [draftStep, interactions, isGenerating, nodePositions]);
+    applyFitViewportToPositions(allCoords);
+  }, [applyFitViewportToPositions, draftStep, interactions, isGenerating, nodePositions]);
 
   const handleToggleModifier = (modId: string) => {
     setSelectedModifiers((prev) =>
@@ -978,74 +917,35 @@ export default function InteractiveStudio({
     }));
   };
 
-  const handleEnhanceNarrative = async () => {
-    const raw = promptInput.trim();
-    if (!raw || isEnhancingNarrative || isGenerating) return;
-    setIsEnhancingNarrative(true);
-    try {
-      const activeStyleObj =
-        bootstrapData.style_presets.find((s) => s.id === selectedStyleId) ||
-        bootstrapData.style_presets[0];
-      const allModifierOpts = bootstrapData.modifier_categories.flatMap(
-        (c) => c.options
-      );
-      const activeModifierLabels = selectedModifiers
-        .map((id) => {
-          const found = allModifierOpts.find((o) => o.id === id);
-          if (!found) return null;
-          return found.token || found.label.split(" (")[0];
-        })
-        .filter((x): x is string => Boolean(x));
-
-      const enhanced = await enhanceNarrativeWithGemini({
-        apiKey,
-        rawIdea: raw,
-        styleLabel: activeStyleObj?.title.split(" (")[0],
-        modifierLabels: activeModifierLabels,
-        aspectRatio: selectedAspectRatio,
-      });
-      if (enhanced) {
-        setPreEnhancePrompt(raw);
-        setPromptInput(enhanced);
-        showTransientNotice("✦ Narrative enhanced for Gemini Nano Banana");
+  const readImageFileIntoTab2 = useCallback(
+    (file: File) => {
+      if (!file.type.startsWith("image/")) {
+        showTransientNotice("Please select a PNG, JPG, or WebP image file");
+        return;
       }
-    } finally {
-      setIsEnhancingNarrative(false);
-    }
-  };
-
-  const handleUndoEnhance = () => {
-    if (!preEnhancePrompt) return;
-    setPromptInput(preEnhancePrompt);
-    setPreEnhancePrompt(null);
-    showTransientNotice("↺ Reverted to original scene prompt");
-  };
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        if (typeof reader.result === "string") {
+          setUploadedReference({
+            name: file.name,
+            dataUrl: reader.result,
+          });
+          setReferenceCardInfo(null);
+          showTransientNotice(`✦ Reference photo "${file.name}" loaded`);
+        }
+      };
+      reader.readAsDataURL(file);
+    },
+    [showTransientNotice]
+  );
 
   const handleUploadReferenceFile = (
     e: React.ChangeEvent<HTMLInputElement>
   ) => {
     const file = e.target.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onloadend = async () => {
-      if (typeof reader.result === "string") {
-        const nextDna: CanonicalDnaReference = {
-          label: `Uploaded: ${file.name}`,
-          imageUrl: reader.result,
-          prompt: promptInput.trim() || "Uploaded visual reference",
-        };
-        setCanonicalDnaRef(nextDna);
-        setUseReferenceImage(true);
-        if (activeProjectId) {
-          const savedDna = await updateConversationDna(activeProjectId, nextDna);
-          if (savedDna) {
-            setCanonicalDnaRef(savedDna);
-          }
-        }
-        showTransientNotice(`📤 Reference "${file.name}" locked as DNA anchor`);
-      }
-    };
-    reader.readAsDataURL(file);
+    if (file) {
+      readImageFileIntoTab2(file);
+    }
     e.target.value = "";
   };
 
@@ -1061,7 +961,6 @@ export default function InteractiveStudio({
       sourceTurn: turnNum,
     };
     setCanonicalDnaRef(nextDna);
-    setUseReferenceImage(true);
     if (activeProjectId) {
       const savedDna = await updateConversationDna(activeProjectId, nextDna);
       if (savedDna) {
@@ -1073,19 +972,7 @@ export default function InteractiveStudio({
     );
   };
 
-  const handleClearCanonicalDna = async () => {
-    setCanonicalDnaRef(null);
-    if (activeProjectId) {
-      await updateConversationDna(activeProjectId, null);
-    }
-    showTransientNotice("Canonical Character DNA unpinned");
-  };
-
-  // User clicks one of the 4 generated cards to choose the one they like best and modify its prompt
-  const handleChooseVariant = async (
-    variantIdx: number,
-    nextFlowMode?: CreationFlowMode
-  ) => {
+  const handleChooseVariant = async (variantIdx: number) => {
     if (activeInteractionIndex < 0) return;
     const currentRound = interactions[activeInteractionIndex];
     if (!currentRound) return;
@@ -1093,13 +980,8 @@ export default function InteractiveStudio({
     if (!chosenSlot) return;
 
     setPromptInput(chosenSlot.prompt);
-    if (nextFlowMode) {
-      setFlowMode(nextFlowMode);
-    }
     showTransientNotice(
-      nextFlowMode === "surgical-delta"
-        ? `⚡ "${chosenSlot.label}" locked for Surgical Delta edit`
-        : `✓ "${chosenSlot.label}" selected — prompt loaded into editor`
+      `✓ "${chosenSlot.label}" selected — prompt loaded into editor`
     );
 
     setInteractions((prev) =>
@@ -1123,347 +1005,592 @@ export default function InteractiveStudio({
     });
   };
 
-  const customSweepCategory = matrixAxis.startsWith("cat:")
-    ? bootstrapData.modifier_categories.find(
-        (c) => `cat:${c.id}` === matrixAxis
-      ) || null
-    : null;
+  // ==================== STEP 2 & STEP 3 AI PREPARATION ====================
 
-  const activeMatrixConfig = customSweepCategory
-    ? {
-        id: matrixAxis,
-        label: `⚡ 4 ${
-          customSweepCategory.title.split(" & ")[0].split(" (")[0]
-        }`,
-        shortTag: `4-Way ${
-          customSweepCategory.title.split(" & ")[0].split(" (")[0]
-        } Sweep`,
-        blueprints: [0, 1, 2, 3].map((idx) => {
-          const opt =
-            customSweepCategory.options[
-              idx % Math.max(1, customSweepCategory.options.length)
-            ];
-          return {
-            code: `0${idx + 1} • ${
-              customSweepCategory.title.split(" & ")[0].split(" (")[0]
-            }`,
-            title: opt ? opt.label.split(" (")[0] : `Variation #${idx + 1}`,
-            caption: opt
-              ? opt.token
-              : "Modifier variation from your custom library.",
-          };
-        }),
-      }
-    : EXPLORATION_MATRIX_OPTIONS.find((m) => m.id === matrixAxis) ||
-      EXPLORATION_MATRIX_OPTIONS[0];
-
-  // Main flow: supports both Compose Scene mode and Surgical Delta Edit mode + 2x2 Matrix Axis + Dual-Anchor (Canonical DNA + Turn Reference)
-  const handleGenerateInteraction = async (e?: React.FormEvent) => {
-    if (e) e.preventDefault();
-    const isSurgicalActive =
-      flowMode === "surgical-delta" &&
-      Boolean(activeInteraction || canonicalDnaRef?.imageUrl) &&
-      Boolean(deltaInput.trim());
-
-    const cleanPrompt = isSurgicalActive
-      ? deltaInput.trim()
-      : promptInput.trim();
-    if (!cleanPrompt || isGenerating) return;
-
-    const effectiveFlowMode: CreationFlowMode = isSurgicalActive
-      ? "surgical-delta"
-      : "compose";
-
-    setIsStepModalOpen(false);
-    setIsGenerating(true);
-    setGenerationStage("analyzing-scene");
-    setCompletedSlotsCount(0);
-    setLiveDraftSlots([
-      {
-        label:
-          effectiveFlowMode === "surgical-delta"
-            ? "1 • Surgical Edit: Direct Precision"
-            : "1 • Base Prompt",
-        prompt: cleanPrompt,
-        imageUrl: "",
-        mimeType: "image/png",
-        base64Data: "",
-      },
-      null,
-      null,
-      null,
-    ]);
-
+  const runEnhancePromptForStep2 = useCallback(async () => {
+    const raw = promptInput.trim();
+    if (!raw || isPreparingStep2) return;
+    setIsPreparingStep2(true);
     try {
-      const activeStyleObj =
-        bootstrapData.style_presets.find((s) => s.id === selectedStyleId) ||
-        bootstrapData.style_presets[0];
-
-      const allModifierOpts = bootstrapData.modifier_categories.flatMap(
-        (c) => c.options
-      );
-      const activeModifierLabels = selectedModifiers
-        .map((id) => {
-          const found = allModifierOpts.find((o) => o.id === id);
-          if (!found) return null;
-          return found.token || found.label.split(" (")[0];
-        })
-        .filter((x): x is string => Boolean(x));
-
-      const originRound =
-        draftStep?.parentTurnNumber !== undefined &&
-        draftStep?.parentTurnNumber !== null
-          ? interactions.find(
-              (r) => r.turnNumber === draftStep.parentTurnNumber
-            ) || null
-          : activeInteractionIndex >= 0
-          ? interactions[activeInteractionIndex]
-          : null;
-      const parentTurnNumber = originRound ? originRound.turnNumber : null;
-      const parentVariantIndex = originRound
-        ? draftStep?.parentTurnNumber === originRound.turnNumber
-          ? draftStep.parentVariantIndex
-          : originRound.selectedVariantIndex
-        : 0;
-      const parentSlot =
-        originRound?.variants[parentVariantIndex] || originRound?.variants[0];
-
-      // Dual-Anchor Resolution:
-      // - If both Canonical DNA and Parent Turn frame exist (and are distinct), pass both!
-      // - Otherwise pass whichever reference exists.
-      const dnaUrl = canonicalDnaRef?.imageUrl || "";
-      const turnUrl =
-        parentSlot?.imageUrl || originRound?.chosenImageUrl || "";
-      const hasDistinctDualAnchor =
-        Boolean(dnaUrl) && Boolean(turnUrl) && dnaUrl !== turnUrl;
-
-      let primaryReferencePart = null;
-      let secondaryReferencePart = null;
-
-      if (useReferenceImage) {
-        const primaryUrl = dnaUrl || turnUrl;
-        if (primaryUrl) {
-          primaryReferencePart =
-            parseDataUrl(primaryUrl) || (await imageUrlToInlinePart(primaryUrl));
-        }
-        if (hasDistinctDualAnchor && turnUrl) {
-          secondaryReferencePart =
-            parseDataUrl(turnUrl) || (await imageUrlToInlinePart(turnUrl));
-        }
-      }
-
-      const quadVariants = await generateQuadWithNanoBanana({
+      const { styleLabel, modifierLabels } = getActiveStyleAndModifierLabels();
+      const enhanced = await enhanceNarrativeWithGemini({
         apiKey,
-        model,
-        basePrompt: cleanPrompt,
-        styleLabel: activeStyleObj?.title.split(" (")[0],
-        modifierLabels: activeModifierLabels,
+        rawIdea: raw,
+        styleLabel,
+        modifierLabels,
         aspectRatio: selectedAspectRatio,
-        referenceImage: primaryReferencePart,
-        secondaryReferenceImage: secondaryReferencePart,
-        flowMode: effectiveFlowMode,
-        matrixAxis,
+        hasReferenceImage: creationTab === "reference",
         preservationLocks:
-          effectiveFlowMode === "surgical-delta" || Boolean(primaryReferencePart)
-            ? preservationLocks
-            : undefined,
-        anchorScenePrompt:
-          effectiveFlowMode === "surgical-delta"
-            ? parentSlot?.prompt ||
-              originRound?.chosenPrompt ||
-              canonicalDnaRef?.prompt ||
-              promptInput.trim()
-            : undefined,
-        categorySweepTitle: customSweepCategory?.title,
-        categorySweepOptions: customSweepCategory?.options.map((o) => ({
-          label: o.label,
-          token: o.token,
-        })),
-        onVariationsReady: (variations) => {
-          setGenerationStage("rendering-images");
-          setLiveDraftSlots(
-            variations.map((v) => ({
-              label: v.label,
-              prompt: v.prompt,
-              imageUrl: "",
-              mimeType: "image/png",
-              base64Data: "",
-            }))
-          );
-        },
-        onSlotCompleted: (slotIdx, completedSlot) => {
-          setCompletedSlotsCount((prev) => prev + 1);
-          setLiveDraftSlots((prev) =>
-            prev.map((item, idx) => (idx === slotIdx ? completedSlot : item))
-          );
-        },
+          creationTab === "reference" ? preservationLocks : undefined,
+        customSystemPrompt: enhanceSystemPrompt,
       });
+      setEnhancedPromptDraft(enhanced || raw);
+      setWizardStep(2);
+    } finally {
+      setIsPreparingStep2(false);
+    }
+  }, [
+    apiKey,
+    creationTab,
+    enhanceSystemPrompt,
+    getActiveStyleAndModifierLabels,
+    isPreparingStep2,
+    preservationLocks,
+    promptInput,
+    selectedAspectRatio,
+  ]);
 
-      let targetConvId = activeProjectId;
-      if (!targetConvId) {
-        const created = await createConversation({
-          user_id: activeUser.id,
-          title: projectTitle.trim() || "New Project",
-          style_id: selectedStyleId,
+  const runGenerateVariationsForStep3 = useCallback(
+    async (sourcePrompt: string) => {
+      const cleanSource = sourcePrompt.trim();
+      if (!cleanSource || isPreparingStep3) return;
+      setIsPreparingStep3(true);
+      try {
+        const { styleLabel, modifierLabels } =
+          getActiveStyleAndModifierLabels();
+        const generated = await generatePromptVariationsWithGemini({
+          apiKey,
+          count: imageCount,
+          basePrompt: cleanSource,
+          styleLabel,
+          modifierLabels,
+          aspectRatio: selectedAspectRatio,
+          hasReferenceImage: creationTab === "reference",
+          preservationLocks:
+            creationTab === "reference" ? preservationLocks : undefined,
+          customSystemPrompt: variationSystemPrompt,
         });
-        targetConvId = created?.id || `conv_${Date.now()}`;
-        setActiveProjectId(targetConvId);
-        if (canonicalDnaRef) {
-          const persistedDna = await updateConversationDna(
-            targetConvId,
-            canonicalDnaRef
-          );
-          if (persistedDna) {
-            setCanonicalDnaRef(persistedDna);
-          }
-        }
+        setVariationDrafts(generated);
+        setWizardStep(3);
+      } finally {
+        setIsPreparingStep3(false);
+      }
+    },
+    [
+      apiKey,
+      creationTab,
+      getActiveStyleAndModifierLabels,
+      imageCount,
+      isPreparingStep3,
+      preservationLocks,
+      selectedAspectRatio,
+      variationSystemPrompt,
+    ]
+  );
+
+  // ==================== FINAL BATCH EXECUTION (1..8 IMAGES ON FLOW CANVAS) ====================
+
+  const executeBatchGeneration = useCallback(
+    async (opts: {
+      finalPrompts: QuadPromptVariation[] | null;
+      basePromptOverride?: string;
+    }) => {
+      if (isGenerating) return;
+      const safeCount = Math.max(1, Math.min(8, Math.round(imageCount || 4)));
+      const { styleLabel, modifierLabels } = getActiveStyleAndModifierLabels();
+      const rawCore = (opts.basePromptOverride ?? promptInput).trim();
+      if (!rawCore && (!opts.finalPrompts || opts.finalPrompts.length === 0)) {
+        return;
       }
 
-      const nextTurnNumber = interactions.length + 1;
-      const defaultChosen = quadVariants[0];
-      const computedEditInstruction =
-        effectiveFlowMode === "surgical-delta"
-          ? `⚡ Delta: ${cleanPrompt}`
-          : matrixAxis !== "auto-director"
-          ? `${activeMatrixConfig.label}`
-          : parentTurnNumber
-          ? `Step #${nextTurnNumber} (from #${parentTurnNumber} • Frame ${
-              parentVariantIndex + 1
-            })`
-          : `Scene Compose`;
+      const preparedItems: QuadPromptVariation[] =
+        opts.finalPrompts && opts.finalPrompts.length > 0
+          ? Array.from({ length: safeCount }, (_, idx) => {
+              const item = opts.finalPrompts![idx] || opts.finalPrompts![0];
+              return {
+                label: item?.label || `${idx + 1} • Variation #${idx + 1}`,
+                prompt: (item?.prompt || rawCore).trim(),
+              };
+            })
+          : (() => {
+              const consolidated = buildConsolidatedScenePrompt({
+                basePrompt: rawCore,
+                styleLabel,
+                modifierLabels,
+                aspectRatio: selectedAspectRatio,
+                preservationLocks:
+                  creationTab === "reference" ? preservationLocks : undefined,
+                hasReferenceImage: creationTab === "reference",
+              });
+              return Array.from({ length: safeCount }, (_, idx) => ({
+                label:
+                  safeCount === 1
+                    ? "1 • Generated Frame"
+                    : `${idx + 1} • Frame #${idx + 1}`,
+                prompt: consolidated,
+              }));
+            })();
 
-      const savedTurn = await saveConversationTurn(targetConvId, {
-        user_id: activeUser.id,
-        title: projectTitle.trim() || "New Project",
-        parent_turn_number: parentTurnNumber,
-        role: "assistant",
-        raw_idea: cleanPrompt,
-        master_prompt: defaultChosen.prompt,
-        edit_instruction: computedEditInstruction,
-        style_id: selectedStyleId,
-        modifiers: selectedModifiers,
-        completeness_score: 95,
-        image_data_url: defaultChosen.imageUrl || undefined,
-        aspect_ratio: selectedAspectRatio,
-        model_used: model,
-        variants: quadVariants.map((v) => ({
-          label: v.label,
-          prompt: v.prompt,
-          image_data_url: v.imageUrl,
-        })),
-        selected_variant_index: 0,
-      });
+      setIsStepModalOpen(false);
+      setIsGenerating(true);
+      setGenerationStage("rendering-images");
 
-      const persistedVariants: QuadGeneratedSlot[] =
-        savedTurn?.variants && savedTurn.variants.length > 0
-          ? savedTurn.variants.map((v, i) => ({
-              label: normalizeSlotLabelToEnglish(v.label, i),
-              prompt: v.prompt,
-              imageUrl: v.imageUrl || quadVariants[i]?.imageUrl || "",
-              mimeType: "image/png",
-              base64Data: "",
-            }))
-          : quadVariants;
-
-      const newRound: StudioInteractionRound = {
-        id: savedTurn?.id || `int-${Date.now()}`,
-        turnNumber: nextTurnNumber,
-        parentTurnNumber,
-        basePrompt: cleanPrompt,
-        chosenPrompt: defaultChosen.prompt,
-        chosenImageUrl:
-          savedTurn?.image_url || persistedVariants[0]?.imageUrl || "",
-        selectedVariantIndex: 0,
-        aspectRatio: selectedAspectRatio,
-        editInstruction: computedEditInstruction,
-        variants: persistedVariants,
-      };
-
-      const parentCardId = originRound
-        ? getFrameNodeId(originRound.id, parentVariantIndex)
-        : null;
-      const parentCardPos = parentCardId
-        ? nodePositions[parentCardId] || null
-        : null;
-      const batchPositions =
-        draftStep?.positions &&
-        draftStep.positions.length >= persistedVariants.length
-          ? draftStep.positions
-          : computeBatchBranchNodePositions(
-              parentCardPos,
-              Object.values(nodePositions),
-              persistedVariants.length
-            );
-
-      const nextPositions: Record<string, FlowNodePosition> = {
+      let currentInteractions = [...interactions];
+      let currentPositions: Record<string, FlowNodePosition> = {
         ...nodePositions,
       };
-      persistedVariants.forEach((_, vIdx) => {
-        const frameId = getFrameNodeId(newRound.id, vIdx);
-        nextPositions[frameId] = batchPositions[vIdx] || {
-          x: batchPositions[0]?.x ?? 70,
-          y: (batchPositions[0]?.y ?? 60) + vIdx * 315,
-        };
-      });
-
-      const nextParentVariants = {
+      let currentParentVariants: Record<number, number> = {
         ...parentVariantByTurn,
-        ...(parentTurnNumber !== null
-          ? { [nextTurnNumber]: parentVariantIndex }
-          : {}),
       };
-      const nextSnapshots: Record<number, FlowStepParameterSnapshot> = {
+      let currentSnapshots: Record<number, FlowStepParameterSnapshot> = {
         ...snapshotsByTurn,
-        [nextTurnNumber]: {
-          flowMode: effectiveFlowMode,
-          aspectRatio: selectedAspectRatio,
-          matrixAxis,
-          styleId: selectedStyleId,
-          modifierIds: [...selectedModifiers],
-          preservationLocks: { ...preservationLocks },
-        },
       };
+      let targetConvId = activeProjectId;
 
-      setNodePositions(nextPositions);
-      setParentVariantByTurn(nextParentVariants);
-      setSnapshotsByTurn(nextSnapshots);
-      saveProjectFlowMeta(targetConvId, {
-        positions: nextPositions,
-        parentVariantByTurn: nextParentVariants,
-        snapshotsByTurn: nextSnapshots,
-      });
+      try {
+        let parentTurnNumber: number | null = null;
+        let parentVariantIndex = 0;
+        let parentPos: FlowNodePosition | null = null;
+        let parentTurnMaxX: number | undefined = undefined;
+        let primaryReferencePart: InlineImagePart | null = null;
 
-      setInteractions((prev) => {
-        const next = [...prev, newRound];
-        setActiveInteractionIndex(next.length - 1);
-        return next;
-      });
-      setDraftStep(null);
-      setSelectedCanvasNodeId(getFrameNodeId(newRound.id, 0));
-      setPromptInput(defaultChosen.prompt);
-      setPreEnhancePrompt(null);
-      if (effectiveFlowMode === "surgical-delta") {
-        setDeltaInput("");
-      }
+        if (creationTab === "reference") {
+          if (referenceCardInfo) {
+            const parentRound =
+              currentInteractions.find(
+                (r) => r.turnNumber === referenceCardInfo.turnNumber
+              ) || null;
+            if (parentRound) {
+              parentTurnNumber = parentRound.turnNumber;
+              parentVariantIndex = referenceCardInfo.variantIndex;
+              const pCardId = getFrameNodeId(
+                parentRound.id,
+                parentVariantIndex
+              );
+              parentPos = currentPositions[pCardId] || { x: 70, y: 60 };
+              parentTurnMaxX = Math.max(
+                ...parentRound.variants.map(
+                  (_, vIdx) =>
+                    currentPositions[getFrameNodeId(parentRound.id, vIdx)]?.x ??
+                    parentPos!.x
+                )
+              );
+            }
+            if (referenceCardInfo.imageUrl) {
+              primaryReferencePart =
+                parseDataUrl(referenceCardInfo.imageUrl) ||
+                (await imageUrlToInlinePart(referenceCardInfo.imageUrl));
+            }
+          } else if (uploadedReference?.dataUrl) {
+            primaryReferencePart =
+              parseDataUrl(uploadedReference.dataUrl) ||
+              (await imageUrlToInlinePart(uploadedReference.dataUrl));
 
-      const renderedCount = persistedVariants.filter((v) =>
-        Boolean(v.imageUrl)
-      ).length;
-      if (!apiKey.trim()) {
-        showTransientNotice(
-          "✦ 4 blueprint cards created! Add your Gemini API key in ⚙ Settings to render PNGs."
+            if (!targetConvId) {
+              const created = await createConversation({
+                user_id: activeUser.id,
+                title: projectTitle.trim() || "New Project",
+                style_id: selectedStyleId,
+              });
+              targetConvId = created?.id || `conv_${Date.now()}`;
+              setActiveProjectId(targetConvId);
+            }
+
+            // Persist 1-card Reference Image Origin Node on the Flow Canvas
+            const originTurnNumber = currentInteractions.length + 1;
+            const originPos = computeBatchBranchNodePositions(
+              null,
+              Object.values(currentPositions),
+              1
+            )[0];
+            const originPromptDesc = `Reference image: ${
+              uploadedReference.name || "Uploaded photo"
+            }`;
+
+            const savedOrigin = await saveConversationTurn(targetConvId, {
+              user_id: activeUser.id,
+              title: projectTitle.trim() || "New Project",
+              parent_turn_number: null,
+              role: "assistant",
+              raw_idea: uploadedReference.name || "Reference Image",
+              master_prompt: originPromptDesc,
+              edit_instruction: "Reference Image",
+              style_id: selectedStyleId,
+              modifiers: [],
+              completeness_score: 100,
+              image_data_url: uploadedReference.dataUrl,
+              aspect_ratio: selectedAspectRatio,
+              model_used: model,
+              variants: [
+                {
+                  label: "1 • Reference Image",
+                  prompt: originPromptDesc,
+                  image_data_url: uploadedReference.dataUrl,
+                },
+              ],
+              selected_variant_index: 0,
+            });
+
+            const originImageUrl =
+              savedOrigin?.variants?.[0]?.imageUrl ||
+              savedOrigin?.image_url ||
+              uploadedReference.dataUrl;
+
+            const originRound: StudioInteractionRound = {
+              id: savedOrigin?.id || `ref-origin-${Date.now()}`,
+              turnNumber: originTurnNumber,
+              parentTurnNumber: null,
+              basePrompt: originPromptDesc,
+              chosenPrompt: originPromptDesc,
+              chosenImageUrl: originImageUrl,
+              selectedVariantIndex: 0,
+              aspectRatio: selectedAspectRatio,
+              editInstruction: "Reference Image",
+              variants: [
+                {
+                  label: "1 • Reference Image",
+                  prompt: originPromptDesc,
+                  imageUrl: originImageUrl,
+                  mimeType: "image/png",
+                  base64Data: "",
+                },
+              ],
+            };
+
+            const originCardId = getFrameNodeId(originRound.id, 0);
+            currentPositions = {
+              ...currentPositions,
+              [originCardId]: originPos,
+            };
+            currentSnapshots = {
+              ...currentSnapshots,
+              [originTurnNumber]: {
+                flowMode: "reference",
+                aspectRatio: selectedAspectRatio,
+                styleId: selectedStyleId,
+                modifierIds: [],
+                preservationLocks: { ...preservationLocks },
+                imageCount: 1,
+                enhanceWithAi: false,
+                varyPromptsWithAi: false,
+              },
+            };
+            currentInteractions = [...currentInteractions, originRound];
+
+            setNodePositions(currentPositions);
+            setSnapshotsByTurn(currentSnapshots);
+            setInteractions(currentInteractions);
+            setActiveInteractionIndex(currentInteractions.length - 1);
+
+            parentTurnNumber = originTurnNumber;
+            parentVariantIndex = 0;
+            parentPos = originPos;
+            parentTurnMaxX = originPos.x;
+          }
+        }
+
+        const batchPositions = computeBatchBranchNodePositions(
+          parentPos,
+          Object.values(currentPositions),
+          safeCount,
+          parentTurnMaxX
         );
-      } else if (renderedCount > 0) {
-        showTransientNotice(
-          `🔒 ${persistedVariants.length} image cards created for Step #${nextTurnNumber} (${renderedCount}/${persistedVariants.length} rendered)`
+
+        setDraftStep({
+          parentTurnNumber,
+          parentVariantIndex,
+          positions: batchPositions,
+        });
+        setLiveDraftSlots(
+          preparedItems.map((it) => ({
+            label: it.label,
+            prompt: it.prompt,
+            imageUrl: "",
+            mimeType: "image/png",
+            base64Data: "",
+          }))
         );
+
+        // Smoothly pan viewport so the newly generating cards are framed cleanly
+        if (canvasViewportRef.current && batchPositions[0]) {
+          const rect = canvasViewportRef.current.getBoundingClientRect();
+          const zoom = canvasViewport.zoom;
+          const focusX = parentPos
+            ? (parentPos.x + batchPositions[0].x) / 2 + 120
+            : batchPositions[0].x + 150;
+          const desiredX = rect.width * 0.46 - focusX * zoom;
+          const desiredY =
+            rect.height * 0.36 - (batchPositions[0].y + 180) * zoom;
+          setCanvasViewport((prev) => ({
+            ...prev,
+            x: Math.round(desiredX),
+            y: Math.round(desiredY),
+          }));
+        }
+
+        const parsedSeed =
+          modelSeedInput.trim() !== "" &&
+          Number.isFinite(Number(modelSeedInput))
+            ? Math.round(Number(modelSeedInput))
+            : null;
+        const activeModelParams = {
+          temperature: modelTemperature,
+          topP: modelTopP,
+          seed: parsedSeed,
+        };
+
+        const renderedSlots = await renderPreparedBatchWithNanoBanana({
+          apiKey,
+          model,
+          items: preparedItems,
+          referenceImage: primaryReferencePart,
+          modelParams: activeModelParams,
+          onSlotCompleted: (slotIdx, completedSlot) => {
+            setLiveDraftSlots((prev) =>
+              prev.map((item, idx) => (idx === slotIdx ? completedSlot : item))
+            );
+          },
+        });
+
+        if (!targetConvId) {
+          const created = await createConversation({
+            user_id: activeUser.id,
+            title: projectTitle.trim() || "New Project",
+            style_id: selectedStyleId,
+          });
+          targetConvId = created?.id || `conv_${Date.now()}`;
+          setActiveProjectId(targetConvId);
+          if (canonicalDnaRef) {
+            const persistedDna = await updateConversationDna(
+              targetConvId,
+              canonicalDnaRef
+            );
+            if (persistedDna) {
+              setCanonicalDnaRef(persistedDna);
+            }
+          }
+        }
+
+        const nextTurnNumber = currentInteractions.length + 1;
+        const defaultChosen = renderedSlots[0];
+        const effectiveFlowMode: CreationFlowMode =
+          creationTab === "reference" ? "reference" : "prompt";
+        const computedEditInstruction =
+          creationTab === "reference"
+            ? parentTurnNumber
+              ? `With Reference (#${parentTurnNumber}.${
+                  parentVariantIndex + 1
+                })`
+              : "With Reference Image"
+            : "From Prompt";
+
+        const savedTurn = await saveConversationTurn(targetConvId, {
+          user_id: activeUser.id,
+          title: projectTitle.trim() || "New Project",
+          parent_turn_number: parentTurnNumber,
+          role: "assistant",
+          raw_idea: promptInput.trim() || rawCore,
+          master_prompt: defaultChosen.prompt,
+          edit_instruction: computedEditInstruction,
+          style_id: selectedStyleId,
+          modifiers: selectedModifiers,
+          completeness_score: 95,
+          image_data_url: defaultChosen.imageUrl || undefined,
+          aspect_ratio: selectedAspectRatio,
+          model_used: model,
+          variants: renderedSlots.map((v) => ({
+            label: v.label,
+            prompt: v.prompt,
+            image_data_url: v.imageUrl,
+          })),
+          selected_variant_index: 0,
+        });
+
+        const persistedVariants: QuadGeneratedSlot[] =
+          savedTurn?.variants && savedTurn.variants.length > 0
+            ? savedTurn.variants.map((v, i) => ({
+                label: normalizeSlotLabelToEnglish(v.label, i),
+                prompt: v.prompt,
+                imageUrl: v.imageUrl || renderedSlots[i]?.imageUrl || "",
+                mimeType: "image/png",
+                base64Data: "",
+              }))
+            : renderedSlots;
+
+        const newRound: StudioInteractionRound = {
+          id: savedTurn?.id || `int-${Date.now()}`,
+          turnNumber: nextTurnNumber,
+          parentTurnNumber,
+          basePrompt: promptInput.trim() || rawCore,
+          chosenPrompt: defaultChosen.prompt,
+          chosenImageUrl:
+            savedTurn?.image_url || persistedVariants[0]?.imageUrl || "",
+          selectedVariantIndex: 0,
+          aspectRatio: selectedAspectRatio,
+          editInstruction: computedEditInstruction,
+          variants: persistedVariants,
+        };
+
+        const nextPositions: Record<string, FlowNodePosition> = {
+          ...currentPositions,
+        };
+        persistedVariants.forEach((_, vIdx) => {
+          const frameId = getFrameNodeId(newRound.id, vIdx);
+          nextPositions[frameId] = batchPositions[vIdx] || {
+            x: batchPositions[0]?.x ?? 80,
+            y: (batchPositions[0]?.y ?? 84) + vIdx * FLOW_VERTICAL_SPACING,
+          };
+        });
+
+        currentParentVariants = {
+          ...currentParentVariants,
+          ...(parentTurnNumber !== null
+            ? { [nextTurnNumber]: parentVariantIndex }
+            : {}),
+        };
+        currentSnapshots = {
+          ...currentSnapshots,
+          [nextTurnNumber]: {
+            flowMode: effectiveFlowMode,
+            aspectRatio: selectedAspectRatio,
+            styleId: selectedStyleId,
+            modifierIds: [...selectedModifiers],
+            preservationLocks: { ...preservationLocks },
+            imageCount: safeCount,
+            enhanceWithAi: enhancePromptWithAi,
+            varyPromptsWithAi: safeCount > 1 && varyPromptsWithAi,
+            modelUsed: model,
+            modelParams: activeModelParams,
+          },
+        };
+
+        const finalInteractions = [...currentInteractions, newRound];
+        setNodePositions(nextPositions);
+        setParentVariantByTurn(currentParentVariants);
+        setSnapshotsByTurn(currentSnapshots);
+        saveProjectFlowMeta(targetConvId, {
+          positions: nextPositions,
+          parentVariantByTurn: currentParentVariants,
+          snapshotsByTurn: currentSnapshots,
+        });
+
+        setInteractions(finalInteractions);
+        setActiveInteractionIndex(finalInteractions.length - 1);
+        setDraftStep(null);
+        setSelectedCanvasNodeId(getFrameNodeId(newRound.id, 0));
+
+        const renderedCount = persistedVariants.filter((v) =>
+          Boolean(v.imageUrl)
+        ).length;
+        if (!apiKey.trim()) {
+          showTransientNotice(
+            `✦ ${persistedVariants.length} blueprint ${
+              persistedVariants.length === 1 ? "card" : "cards"
+            } created! Add your Gemini API key in Settings to render PNGs.`
+          );
+        } else if (renderedCount > 0) {
+          showTransientNotice(
+            `✦ ${persistedVariants.length} ${
+              persistedVariants.length === 1 ? "card" : "cards"
+            } created for Step #${nextTurnNumber} (${renderedCount}/${
+              persistedVariants.length
+            } rendered)`
+          );
+        }
+      } finally {
+        setIsGenerating(false);
+        setGenerationStage("idle");
+        setLiveDraftSlots([]);
       }
-    } finally {
-      setIsGenerating(false);
-      setGenerationStage("idle");
-      setLiveDraftSlots([null, null, null, null]);
+    },
+    [
+      activeProjectId,
+      activeUser.id,
+      apiKey,
+      canonicalDnaRef,
+      canvasViewport.zoom,
+      creationTab,
+      enhancePromptWithAi,
+      getActiveStyleAndModifierLabels,
+      imageCount,
+      interactions,
+      isGenerating,
+      model,
+      modelSeedInput,
+      modelTemperature,
+      modelTopP,
+      nodePositions,
+      parentVariantByTurn,
+      preservationLocks,
+      projectTitle,
+      promptInput,
+      referenceCardInfo,
+      selectedAspectRatio,
+      selectedModifiers,
+      selectedStyleId,
+      setActiveProjectId,
+      showTransientNotice,
+      snapshotsByTurn,
+      uploadedReference,
+      varyPromptsWithAi,
+    ]
+  );
+
+  // Step 1 Primary Button Handler (Automatic Step Skipping)
+  const hasValidReferenceInTab2 =
+    Boolean(uploadedReference?.dataUrl) || Boolean(referenceCardInfo);
+  const canProceedFromStep1 =
+    Boolean(promptInput.trim()) &&
+    (creationTab === "prompt" || hasValidReferenceInTab2) &&
+    !isGenerating &&
+    !isPreparingStep2 &&
+    !isPreparingStep3;
+
+  const isStep2Enabled = enhancePromptWithAi;
+  const isStep3Enabled = imageCount > 1 && varyPromptsWithAi;
+
+  const handleStep1Submit = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!canProceedFromStep1) return;
+
+    if (isStep2Enabled) {
+      await runEnhancePromptForStep2();
+      return;
     }
+    if (isStep3Enabled) {
+      await runGenerateVariationsForStep3(promptInput.trim());
+      return;
+    }
+    await executeBatchGeneration({
+      finalPrompts: null,
+      basePromptOverride: promptInput.trim(),
+    });
   };
+
+  const handleStep2Submit = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    const approved = enhancedPromptDraft.trim() || promptInput.trim();
+    if (!approved || isPreparingStep3 || isGenerating) return;
+
+    if (isStep3Enabled) {
+      await runGenerateVariationsForStep3(approved);
+      return;
+    }
+    const safeCount = Math.max(1, Math.min(8, Math.round(imageCount || 1)));
+    const exactReviewedPrompts: QuadPromptVariation[] = Array.from(
+      { length: safeCount },
+      (_, idx) => ({
+        label:
+          safeCount === 1
+            ? "1 • Generated Frame"
+            : `${idx + 1} • Frame #${idx + 1}`,
+        prompt: approved,
+      })
+    );
+    await executeBatchGeneration({
+      finalPrompts: exactReviewedPrompts,
+    });
+  };
+
+  const handleStep3Submit = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (variationDrafts.length === 0 || isGenerating) return;
+    await executeBatchGeneration({
+      finalPrompts: variationDrafts,
+    });
+  };
+
+  // ==================== INSPECTOR SELECTION HELPERS ====================
 
   const parsedSelectedNode = parseFrameNodeId(selectedCanvasNodeId);
   const selectedLockedRound = parsedSelectedNode
@@ -1498,6 +1625,152 @@ export default function InteractiveStudio({
         null
       : null;
 
+  // Obstacle-aware orthogonal wire routing across all active canvas cards
+  const flowObstacleNodes = useMemo<FlowObstacleNode[]>(() => {
+    const list: FlowObstacleNode[] = [];
+    interactions.forEach((round, roundIdx) => {
+      round.variants.forEach((_, slotIdx) => {
+        const cardId = getFrameNodeId(round.id, slotIdx);
+        const pos = nodePositions[cardId] || {
+          x: 80 + roundIdx * FLOW_HORIZONTAL_SPACING,
+          y: 84 + slotIdx * FLOW_VERTICAL_SPACING,
+        };
+        list.push({ id: cardId, x: pos.x, y: pos.y });
+      });
+    });
+    if (isGenerating && draftStep) {
+      draftStep.positions.forEach((pos, draftIdx) => {
+        list.push({ id: `draft::${draftIdx}`, x: pos.x, y: pos.y });
+      });
+    }
+    return list;
+  }, [draftStep, interactions, isGenerating, nodePositions]);
+
+  const laneOffsetByParentCardId = useMemo<Record<string, number>>(() => {
+    const parentsByColBucket = new Map<
+      number,
+      Array<{ cardId: string; y: number }>
+    >();
+    const seenParents = new Set<string>();
+
+    interactions.forEach((round) => {
+      if (!round.parentTurnNumber) return;
+      const parentRound = interactions.find(
+        (r) => r.turnNumber === round.parentTurnNumber
+      );
+      if (!parentRound) return;
+      const parentVarIdx =
+        parentVariantByTurn[round.turnNumber] ??
+        parentRound.selectedVariantIndex ??
+        0;
+      const parentCardId = getFrameNodeId(parentRound.id, parentVarIdx);
+      if (seenParents.has(parentCardId)) return;
+      seenParents.add(parentCardId);
+
+      const sourcePos = nodePositions[parentCardId] || {
+        x: 80,
+        y: 84 + parentVarIdx * FLOW_VERTICAL_SPACING,
+      };
+      const bucket = Math.round(sourcePos.x / 140);
+      const arr = parentsByColBucket.get(bucket) || [];
+      arr.push({ cardId: parentCardId, y: sourcePos.y });
+      parentsByColBucket.set(bucket, arr);
+    });
+
+    const offsets: Record<string, number> = {};
+    for (const group of parentsByColBucket.values()) {
+      if (group.length <= 1) {
+        if (group[0]) offsets[group[0].cardId] = 0;
+        continue;
+      }
+      group.sort((a, b) => a.y - b.y);
+      const kCount = group.length;
+      group.forEach((item, idx) => {
+        const raw = Math.round((idx - (kCount - 1) / 2) * 14);
+        offsets[item.cardId] = Math.max(-28, Math.min(28, raw));
+      });
+    }
+    return offsets;
+  }, [interactions, nodePositions, parentVariantByTurn]);
+
+  const lockedEdgeItems = useMemo(() => {
+    return interactions.flatMap((round) => {
+      if (!round.parentTurnNumber) return [];
+      const parentRound = interactions.find(
+        (r) => r.turnNumber === round.parentTurnNumber
+      );
+      if (!parentRound) return [];
+      const parentVarIdx =
+        parentVariantByTurn[round.turnNumber] ??
+        parentRound.selectedVariantIndex ??
+        0;
+      const parentCardId = getFrameNodeId(parentRound.id, parentVarIdx);
+      const sourcePos = nodePositions[parentCardId] || {
+        x: 80,
+        y: 84 + parentVarIdx * FLOW_VERTICAL_SPACING,
+      };
+      const laneOffset = laneOffsetByParentCardId[parentCardId] ?? 0;
+
+      return round.variants.map((_, slotIdx) => {
+        const childCardId = getFrameNodeId(round.id, slotIdx);
+        const targetPos = nodePositions[childCardId] || {
+          x: sourcePos.x + FLOW_HORIZONTAL_SPACING,
+          y: 84 + slotIdx * FLOW_VERTICAL_SPACING,
+        };
+        const wire = buildStepBezierPath(sourcePos, targetPos, {
+          obstacles: flowObstacleNodes,
+          sourceId: parentCardId,
+          targetId: childCardId,
+          laneOffset,
+        });
+        return {
+          key: `edge-${parentCardId}-${childCardId}`,
+          parentCardId,
+          childCardId,
+          wire,
+        };
+      });
+    });
+  }, [
+    flowObstacleNodes,
+    interactions,
+    laneOffsetByParentCardId,
+    nodePositions,
+    parentVariantByTurn,
+  ]);
+
+  const draftEdgeItems = useMemo(() => {
+    if (!isGenerating || !draftStep || !draftParentRound) return [];
+    const parentCardId = getFrameNodeId(
+      draftParentRound.id,
+      draftStep.parentVariantIndex
+    );
+    const sourcePos = nodePositions[parentCardId] || {
+      x: 80,
+      y: 84,
+    };
+    return draftStep.positions.map((targetPos, draftIdx) => {
+      const draftCardId = `draft::${draftIdx}`;
+      const wire = buildStepBezierPath(sourcePos, targetPos, {
+        obstacles: flowObstacleNodes,
+        sourceId: parentCardId,
+        targetId: draftCardId,
+        laneOffset: laneOffsetByParentCardId[parentCardId] ?? 0,
+      });
+      return {
+        key: `edge-draft-active-${draftIdx}`,
+        wire,
+      };
+    });
+  }, [
+    draftParentRound,
+    draftStep,
+    flowObstacleNodes,
+    isGenerating,
+    laneOffsetByParentCardId,
+    nodePositions,
+  ]);
+
   const handleOpenEditProjectTitleModal = () => {
     setProjectTitleDraft(projectTitle || "New Project");
     setIsProjectTitleModalOpen(true);
@@ -1518,8 +1791,362 @@ export default function InteractiveStudio({
     showTransientNotice(`✦ Project renamed to "${nextTitle}"`);
   };
 
+  // ==================== SHARED SUB-SECTIONS INSIDE CREATION STEP 1 ====================
+
+  const renderEnhancePromptToggle = (switchId: string) => (
+    <div className="ref-toggle-switch-row">
+      <div className="ref-toggle-switch-copy">
+        <label htmlFor={switchId} className="ref-toggle-switch-title">
+          Enhance prompt with AI
+        </label>
+        <span className="ref-toggle-switch-sub">
+          Review an AI-refined scene prompt in Step 2 before generating
+        </span>
+      </div>
+      <button
+        id={switchId}
+        type="button"
+        role="switch"
+        aria-checked={enhancePromptWithAi}
+        className={`ref-atelier-switch ${enhancePromptWithAi ? "is-on" : ""}`}
+        onClick={() => setEnhancePromptWithAi((prev) => !prev)}
+      >
+        <span className="ref-atelier-switch-thumb" />
+      </button>
+    </div>
+  );
+
+  const renderStyleAndModifiersSection = () => (
+    <div className="ref-creation-modifiers-stack">
+      <div className="ref-params-field-group">
+        <div className="ref-studio-label-row">
+          <span className="ref-field-label">Frame Aspect Ratio</span>
+          <span className="ref-studio-ratio-readout">
+            {selectedAspectRatio}
+          </span>
+        </div>
+        <div
+          className="ref-studio-segmented-bar"
+          role="radiogroup"
+          aria-label="Aspect Ratio"
+        >
+          {ASPECT_RATIO_OPTIONS.map((ratio) => (
+            <button
+              key={ratio}
+              type="button"
+              role="radio"
+              aria-checked={selectedAspectRatio === ratio}
+              className={`ref-studio-segment-btn ${
+                selectedAspectRatio === ratio ? "active" : ""
+              }`}
+              onClick={() => setSelectedAspectRatio(ratio)}
+            >
+              {ratio}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="ref-studio-param-deck-container">
+        <div
+          className="ref-studio-param-tabs two-cols"
+          role="tablist"
+          aria-label="Modifiers and Model Parameters"
+        >
+          <button
+            type="button"
+            id="param-tab-modifiers"
+            role="tab"
+            aria-selected={activeParamTab === "modifiers"}
+            className={`ref-studio-param-tab ${
+              activeParamTab === "modifiers" ? "active" : ""
+            }`}
+            onClick={() => setActiveParamTab("modifiers")}
+          >
+            <span className="ref-studio-param-tab-title">Modifiers</span>
+            <span className="ref-studio-param-tab-value">
+              {selectedModifiers.length} active
+            </span>
+          </button>
+
+          <button
+            type="button"
+            id="param-tab-model"
+            role="tab"
+            aria-selected={activeParamTab === "model"}
+            className={`ref-studio-param-tab ${
+              activeParamTab === "model" ? "active" : ""
+            }`}
+            onClick={() => setActiveParamTab("model")}
+          >
+            <span className="ref-studio-param-tab-title">
+              Model & Parameters
+            </span>
+            <span className="ref-studio-param-tab-value">
+              {model === "gemini-3-pro-image-preview"
+                ? "Gemini 3 Pro"
+                : model === "gemini-2.0-flash-exp-image-generation"
+                ? "Gemini 2.0 Exp"
+                : "Nano Banana 2.5"}{" "}
+              • T:{modelTemperature.toFixed(1)}
+            </span>
+          </button>
+        </div>
+
+        <div className="ref-studio-param-tab-panel" role="tabpanel">
+          {activeParamTab === "modifiers" ? (
+            <div className="ref-studio-tab-section">
+              <div className="ref-studio-mod-header-row">
+                <div
+                  className="ref-studio-mod-cat-tabs"
+                  role="tablist"
+                  aria-label="Modifier categories"
+                >
+                  {bootstrapData.modifier_categories.map((cat) => {
+                    const isCurrentCat =
+                      (bootstrapData.modifier_categories.some(
+                        (c) => c.id === activeModCategoryId
+                      )
+                        ? activeModCategoryId
+                        : bootstrapData.modifier_categories[0]?.id) === cat.id;
+                    const activeInCatCount = cat.options.filter((o) =>
+                      selectedModifiers.includes(o.id)
+                    ).length;
+                    const shortTitle = cat.title
+                      .split(" & ")[0]
+                      .split(" (")[0];
+                    return (
+                      <button
+                        key={cat.id}
+                        type="button"
+                        role="tab"
+                        aria-selected={isCurrentCat}
+                        className={`ref-studio-mod-cat-tab ${
+                          isCurrentCat ? "active" : ""
+                        }`}
+                        onClick={() => setActiveModCategoryId(cat.id)}
+                      >
+                        <span>{shortTitle}</span>
+                        {activeInCatCount > 0 && (
+                          <span className="ref-studio-mod-cat-badge">
+                            {activeInCatCount}
+                          </span>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                <Link href="/modifiers" className="ref-studio-inline-link-btn">
+                  Manage ↗
+                </Link>
+              </div>
+
+              <div className="ref-params-pills-wrap">
+                {(
+                  bootstrapData.modifier_categories.find(
+                    (c) => c.id === activeModCategoryId
+                  ) || bootstrapData.modifier_categories[0]
+                )?.options.map((opt) => {
+                  const active = selectedModifiers.includes(opt.id);
+                  return (
+                    <button
+                      key={opt.id}
+                      type="button"
+                      className={`ref-pill-chip ${active ? "active" : ""}`}
+                      onClick={() => handleToggleModifier(opt.id)}
+                      title={opt.token}
+                    >
+                      {opt.label.split(" (")[0]}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          ) : (
+            <div className="ref-studio-tab-section ref-model-params-panel">
+              {/* 1. MODEL SELECTOR */}
+              <div className="ref-params-field-group">
+                <span className="ref-field-label">Select Model</span>
+                <div
+                  className="ref-model-selector-list"
+                  role="radiogroup"
+                  aria-label="Image Generation Model"
+                >
+                  {[
+                    {
+                      id: "gemini-2.5-flash-image" as NanoBananaModel,
+                      title: "Nano Banana • Gemini 2.5 Flash Image",
+                      sub: "gemini-2.5-flash-image • Fast multimodal studio generation",
+                    },
+                    {
+                      id: "gemini-3-pro-image-preview" as NanoBananaModel,
+                      title: "Nano Banana Pro • Gemini 3 Pro Image",
+                      sub: "gemini-3-pro-image-preview • High-fidelity rendering",
+                    },
+                    {
+                      id: "gemini-2.0-flash-exp-image-generation" as NanoBananaModel,
+                      title: "Gemini 2.0 Flash Image (Exp)",
+                      sub: "gemini-2.0-flash-exp-image-generation • Experimental",
+                    },
+                  ].map((mOpt) => (
+                    <button
+                      key={mOpt.id}
+                      id={`model-opt-${mOpt.id}`}
+                      type="button"
+                      role="radio"
+                      aria-checked={model === mOpt.id}
+                      className={`ref-studio-grid-option ref-model-option-btn ${
+                        model === mOpt.id ? "active" : ""
+                      }`}
+                      onClick={() => setModel(mOpt.id)}
+                    >
+                      <strong className="ref-studio-grid-option-title">
+                        {mOpt.title}
+                      </strong>
+                      <span className="ref-studio-grid-option-sub">
+                        {mOpt.sub}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* 2. MODEL GENERATION PARAMETERS (TEMPERATURE, TOP-P, SEED) */}
+              <div className="ref-model-sliders-grid">
+                <div className="ref-model-param-control">
+                  <div className="ref-studio-label-row">
+                    <label
+                      htmlFor="model-param-temperature"
+                      className="ref-field-label ref-no-margin"
+                    >
+                      Temperature
+                    </label>
+                    <span className="ref-studio-ratio-readout">
+                      {modelTemperature.toFixed(2)}
+                    </span>
+                  </div>
+                  <input
+                    id="model-param-temperature"
+                    type="range"
+                    min={0}
+                    max={2}
+                    step={0.05}
+                    value={modelTemperature}
+                    style={
+                      {
+                        "--slider-pct": `${Math.round(
+                          (modelTemperature / 2) * 100
+                        )}%`,
+                      } as React.CSSProperties
+                    }
+                    onChange={(e) =>
+                      setModelTemperature(Number(e.target.value))
+                    }
+                    className="ref-atelier-range-slider"
+                  />
+                </div>
+
+                <div className="ref-model-param-control">
+                  <div className="ref-studio-label-row">
+                    <label
+                      htmlFor="model-param-top-p"
+                      className="ref-field-label ref-no-margin"
+                    >
+                      Top P
+                    </label>
+                    <span className="ref-studio-ratio-readout">
+                      {modelTopP.toFixed(2)}
+                    </span>
+                  </div>
+                  <input
+                    id="model-param-top-p"
+                    type="range"
+                    min={0.1}
+                    max={1}
+                    step={0.05}
+                    value={modelTopP}
+                    style={
+                      {
+                        "--slider-pct": `${Math.round(
+                          ((modelTopP - 0.1) / 0.9) * 100
+                        )}%`,
+                      } as React.CSSProperties
+                    }
+                    onChange={(e) => setModelTopP(Number(e.target.value))}
+                    className="ref-atelier-range-slider"
+                  />
+                </div>
+              </div>
+
+              <div className="ref-model-seed-row">
+                <div className="ref-model-seed-field">
+                  <label
+                    htmlFor="model-param-seed"
+                    className="ref-field-label ref-no-margin"
+                  >
+                    Seed (Optional)
+                  </label>
+                  <div className="ref-model-seed-inputs">
+                    <input
+                      id="model-param-seed"
+                      type="number"
+                      className="ref-input ref-model-seed-input"
+                      value={modelSeedInput}
+                      onChange={(e) => setModelSeedInput(e.target.value)}
+                      placeholder="Random seed"
+                    />
+                    <button
+                      type="button"
+                      className="ref-pill-chip"
+                      onClick={() =>
+                        setModelSeedInput(
+                          String(Math.floor(100000 + Math.random() * 900000))
+                        )
+                      }
+                    >
+                      Randomize
+                    </button>
+                    {modelSeedInput && (
+                      <button
+                        type="button"
+                        className="ref-pill-chip"
+                        onClick={() => setModelSeedInput("")}
+                      >
+                        Clear
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+
+  const activeReferencePreviewUrl =
+    uploadedReference?.dataUrl || referenceCardInfo?.imageUrl || "";
+  const activeReferenceSourceLabel = uploadedReference
+    ? uploadedReference.name
+    : referenceCardInfo
+    ? `${referenceCardInfo.label} Reference`
+    : "";
+
+  const isInspectingLockedCard =
+    selectedCanvasNodeId !== "draft" && Boolean(selectedLockedRound);
+
   return (
     <div className="ref-page-container">
+      <input
+        ref={fileUploadInputRef}
+        type="file"
+        accept="image/png,image/jpeg,image/webp"
+        className="ref-sr-only-file-input"
+        onChange={handleUploadReferenceFile}
+      />
+
       <div className="ref-flow-studio-layout">
         {/* ==================== FULL-WIDTH INTERACTIVE n8n IMMUTABLE CREATION FLOW CANVAS ==================== */}
         <section
@@ -1577,31 +2204,12 @@ export default function InteractiveStudio({
               <button
                 type="button"
                 className="ref-mura-btn-solid"
-                onClick={() => {
-                  const baseRound =
-                    selectedLockedRound ||
-                    (interactions.length > 0
-                      ? interactions[interactions.length - 1]
-                      : null);
-                  const baseVarIdx = selectedLockedRound
-                    ? selectedLockedVariantIdx
-                    : baseRound?.selectedVariantIndex ?? 0;
-                  handleStartBranchFromNode(baseRound, baseVarIdx, "compose");
-                }}
+                onClick={openCreationModalAsNewRoot}
                 disabled={isGenerating}
-                title="Add a new generation step (creates 4 new image cards)"
+                title="Open creation modal to add a new step"
               >
                 <IconPlus size={11} strokeWidth={2.3} />
-                <span>
-                  New Step{" "}
-                  {selectedLockedRound
-                    ? `from #${selectedLockedRound.turnNumber}.${
-                        selectedLockedVariantIdx + 1
-                      }`
-                    : interactions.length > 0
-                    ? `from #${interactions[interactions.length - 1].turnNumber}.1`
-                    : ""}
-                </span>
+                <span>New Step</span>
               </button>
             </div>
 
@@ -1632,7 +2240,7 @@ export default function InteractiveStudio({
                     setCanvasViewport((prev) => ({
                       ...prev,
                       zoom: Math.max(
-                        0.45,
+                        0.18,
                         Number((prev.zoom - 0.1).toFixed(2))
                       ),
                     }))
@@ -1671,6 +2279,12 @@ export default function InteractiveStudio({
             </div>
           </div>
 
+          {statusNotice && (
+            <div className="ref-flow-floating-toast" role="status">
+              <span className="ref-atelier-toast-pill">{statusNotice}</span>
+            </div>
+          )}
+
           {/* Infinite Pan & Zoom Dotted Viewport */}
           <div
             ref={canvasViewportRef}
@@ -1681,6 +2295,7 @@ export default function InteractiveStudio({
               const target = e.target as HTMLElement;
               if (
                 target.closest(".ref-flow-step-card") ||
+                target.closest(".ref-flow-starter-plus-wrapper") ||
                 target.closest(".ref-flow-toolbar")
               ) {
                 return;
@@ -1702,7 +2317,7 @@ export default function InteractiveStudio({
                   ...prev,
                   zoom: Math.min(
                     1.45,
-                    Math.max(0.45, Number((prev.zoom + delta).toFixed(2)))
+                    Math.max(0.18, Number((prev.zoom + delta).toFixed(2)))
                   ),
                 }));
               } else {
@@ -1720,7 +2335,7 @@ export default function InteractiveStudio({
                 transform: `translate3d(${canvasViewport.x}px, ${canvasViewport.y}px, 0) scale(${canvasViewport.zoom})`,
               }}
             >
-              {/* 1. SVG BEZIER WIRES LAYER (Immutable Parent->Child Lineage + Draft Wire) */}
+              {/* 1. SVG ORTHOGONAL WIRES LAYER */}
               <svg
                 className="ref-flow-edges-svg"
                 width="4800"
@@ -1736,7 +2351,7 @@ export default function InteractiveStudio({
                     refY="4.5"
                     orient="auto"
                   >
-                    <path d="M0,0 L9,4.5 L0,9 Z" fill="#14213d" />
+                    <path d="M0,0 L9,4.5 L0,9 Z" fill="var(--ref-moss-outer)" />
                   </marker>
                   <marker
                     id="flow-arrow-draft"
@@ -1746,106 +2361,159 @@ export default function InteractiveStudio({
                     refY="4.5"
                     orient="auto"
                   >
-                    <path d="M0,0 L9,4.5 L0,9 Z" fill="#fca311" />
+                    <path
+                      d="M0,0 L9,4.5 L0,9 Z"
+                      fill="var(--ref-lime-accent)"
+                    />
                   </marker>
                 </defs>
 
-                {interactions.flatMap((round) => {
-                  if (!round.parentTurnNumber) return [];
-                  const parentRound = interactions.find(
-                    (r) => r.turnNumber === round.parentTurnNumber
-                  );
-                  if (!parentRound) return [];
-                  const parentVarIdx =
-                    parentVariantByTurn[round.turnNumber] ??
-                    parentRound.selectedVariantIndex ??
-                    0;
-                  const parentCardId = getFrameNodeId(
-                    parentRound.id,
-                    parentVarIdx
-                  );
-                  const sourcePos = nodePositions[parentCardId] || {
-                    x: 70,
-                    y: 60 + parentVarIdx * 315,
-                  };
+                {(() => {
+                  const byParent = new Map<
+                    string,
+                    typeof lockedEdgeItems
+                  >();
+                  for (const edge of lockedEdgeItems) {
+                    const list = byParent.get(edge.parentCardId) || [];
+                    list.push(edge);
+                    byParent.set(edge.parentCardId, list);
+                  }
 
-                  return round.variants.map((_, slotIdx) => {
-                    const childCardId = getFrameNodeId(round.id, slotIdx);
-                    const targetPos = nodePositions[childCardId] || {
-                      x: sourcePos.x + 410,
-                      y: 60 + slotIdx * 315,
-                    };
-                    const wire = buildStepBezierPath(sourcePos, targetPos);
-                    const isHighlighted =
-                      selectedCanvasNodeId === childCardId ||
-                      selectedCanvasNodeId === parentCardId;
+                  const groups = Array.from(byParent.entries()).sort(
+                    ([, listA], [, listB]) => {
+                      const aHi = listA.some(
+                        (e) =>
+                          selectedCanvasNodeId === e.parentCardId ||
+                          selectedCanvasNodeId === e.childCardId
+                      )
+                        ? 1
+                        : 0;
+                      const bHi = listB.some(
+                        (e) =>
+                          selectedCanvasNodeId === e.parentCardId ||
+                          selectedCanvasNodeId === e.childCardId
+                      )
+                        ? 1
+                        : 0;
+                      return aHi - bHi;
+                    }
+                  );
+
+                  return groups.map(([parentCardId, edges]) => {
+                    const orderedEdges = [...edges].sort((a, b) => {
+                      const aHi =
+                        selectedCanvasNodeId === a.childCardId ||
+                        selectedCanvasNodeId === a.parentCardId
+                          ? 1
+                          : 0;
+                      const bHi =
+                        selectedCanvasNodeId === b.childCardId ||
+                        selectedCanvasNodeId === b.parentCardId
+                          ? 1
+                          : 0;
+                      return aHi - bHi;
+                    });
+                    const anchor = orderedEdges[0]?.wire;
 
                     return (
-                      <g key={`edge-${parentCardId}-${childCardId}`}>
-                        <path
-                          d={wire.path}
-                          fill="none"
-                          stroke={isHighlighted ? "#fca311" : "#14213d"}
-                          strokeWidth={isHighlighted ? "3" : "2.2"}
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          markerEnd="url(#flow-arrow-locked)"
-                        />
-                        <circle
-                          cx={wire.startX}
-                          cy={wire.startY}
-                          r="4.5"
-                          fill="#fca311"
-                          stroke="#14213d"
-                          strokeWidth="1.8"
-                        />
+                      <g key={`fanout-${parentCardId}`}>
+                        {orderedEdges.map(({ key, parentCardId: pId, childCardId, wire }) => {
+                          const isHighlighted =
+                            selectedCanvasNodeId === childCardId ||
+                            selectedCanvasNodeId === pId;
+                          return (
+                            <path
+                              key={`${key}-bridge`}
+                              d={wire.path}
+                              fill="none"
+                              stroke="var(--ref-canvas)"
+                              strokeWidth={isHighlighted ? "6.5" : "5.5"}
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                            />
+                          );
+                        })}
+                        {orderedEdges.map(({ key, parentCardId: pId, childCardId, wire }) => {
+                          const isHighlighted =
+                            selectedCanvasNodeId === childCardId ||
+                            selectedCanvasNodeId === pId;
+                          return (
+                            <path
+                              key={key}
+                              data-flow-wire="main"
+                              d={wire.path}
+                              fill="none"
+                              stroke={
+                                isHighlighted
+                                  ? "var(--ref-lime-accent)"
+                                  : "var(--ref-moss-outer)"
+                              }
+                              strokeWidth={isHighlighted ? "3" : "2.2"}
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              markerEnd={
+                                isHighlighted
+                                  ? "url(#flow-arrow-draft)"
+                                  : "url(#flow-arrow-locked)"
+                              }
+                            />
+                          );
+                        })}
+                        {anchor && (
+                          <circle
+                            cx={anchor.startX}
+                            cy={anchor.startY}
+                            r="4.5"
+                            fill="var(--ref-lime-accent)"
+                            stroke="var(--ref-moss-outer)"
+                            strokeWidth="1.8"
+                          />
+                        )}
                       </g>
                     );
                   });
-                })}
+                })()}
 
-                {/* Active Generating 4-Card Wires (shown while actively generating 4 new image cards) */}
-                {isGenerating &&
-                  draftStep &&
-                  draftParentRound &&
-                  (() => {
-                    const parentCardId = getFrameNodeId(
-                      draftParentRound.id,
-                      draftStep.parentVariantIndex
-                    );
-                    const sourcePos = nodePositions[parentCardId] || {
-                      x: 70,
-                      y: 60,
-                    };
-                    return draftStep.positions.map((targetPos, draftIdx) => {
-                      const wire = buildStepBezierPath(sourcePos, targetPos);
-                      return (
-                        <g key={`edge-draft-active-${draftIdx}`}>
-                          <path
-                            d={wire.path}
-                            fill="none"
-                            stroke="#fca311"
-                            strokeWidth="2.8"
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeDasharray="7 5"
-                            markerEnd="url(#flow-arrow-draft)"
-                          />
-                          <circle
-                            cx={wire.startX}
-                            cy={wire.startY}
-                            r="5"
-                            fill="#fca311"
-                            stroke="#000000"
-                            strokeWidth="1.8"
-                          />
-                        </g>
-                      );
-                    });
-                  })()}
+                {draftEdgeItems.length > 0 && (
+                  <g key="fanout-draft-active">
+                    {draftEdgeItems.map(({ key, wire }) => (
+                      <path
+                        key={`${key}-bridge`}
+                        d={wire.path}
+                        fill="none"
+                        stroke="var(--ref-canvas)"
+                        strokeWidth="6"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      />
+                    ))}
+                    {draftEdgeItems.map(({ key, wire }) => (
+                      <path
+                        key={key}
+                        data-flow-wire="draft"
+                        d={wire.path}
+                        fill="none"
+                        stroke="var(--ref-lime-accent)"
+                        strokeWidth="2.8"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeDasharray="7 5"
+                        markerEnd="url(#flow-arrow-draft)"
+                      />
+                    ))}
+                    <circle
+                      cx={draftEdgeItems[0].wire.startX}
+                      cy={draftEdgeItems[0].wire.startY}
+                      r="5"
+                      fill="var(--ref-lime-accent)"
+                      stroke="var(--ref-ink-primary)"
+                      strokeWidth="1.8"
+                    />
+                  </g>
+                )}
               </svg>
 
-              {/* 2. COMPLETED IMMUTABLE IMAGE CARDS (1 Card per Generated Image; 4 Images = 4 Cards) */}
+              {/* 2. COMPLETED IMMUTABLE IMAGE CARDS */}
               {interactions.flatMap((round, roundIdx) => {
                 const snap = snapshotsByTurn[round.turnNumber];
                 const styleTitle =
@@ -1858,14 +2526,16 @@ export default function InteractiveStudio({
                 return round.variants.map((slot, slotIdx) => {
                   const cardId = getFrameNodeId(round.id, slotIdx);
                   const pos = nodePositions[cardId] || {
-                    x: 70 + roundIdx * 410,
-                    y: 60 + slotIdx * 315,
+                    x: 80 + roundIdx * FLOW_HORIZONTAL_SPACING,
+                    y: 84 + slotIdx * FLOW_VERTICAL_SPACING,
                   };
                   const isNodeSelected = selectedCanvasNodeId === cardId;
                   const cleanVariantTitle =
                     slot?.label
                       ?.replace(/^[0-9]+\s*•\s*/, "")
                       .split(" (")[0] || `Image #${slotIdx + 1}`;
+                  const isReferenceOriginCard =
+                    round.editInstruction === "Reference Image";
 
                   return (
                     <article
@@ -1882,7 +2552,6 @@ export default function InteractiveStudio({
                         setSelectedCanvasNodeId(cardId);
                       }}
                     >
-                      {/* Left Input Socket */}
                       {round.parentTurnNumber !== null && (
                         <span
                           className="ref-flow-port input-port"
@@ -1892,18 +2561,18 @@ export default function InteractiveStudio({
                         />
                       )}
 
-                      {/* Right n8n '+' Output Port Button (Branches 4 new image cards from THIS card) */}
+                      {/* Right n8n '+' Output Port Button (Opens Creation Modal on Tab 2 with THIS card as reference) */}
                       <button
                         type="button"
                         className="ref-flow-port output-port-btn"
                         disabled={isGenerating}
                         onClick={(e) => {
                           e.stopPropagation();
-                          handleStartBranchFromNode(round, slotIdx, "compose");
+                          handleStartBranchFromNode(round, slotIdx);
                         }}
-                        title={`Branch 4 new image cards from Card #${
+                        title={`Create new step using Card #${
                           round.turnNumber
-                        }.${slotIdx + 1}`}
+                        }.${slotIdx + 1} as reference image`}
                         aria-label={`Branch new step from Card #${
                           round.turnNumber
                         }.${slotIdx + 1}`}
@@ -1940,7 +2609,7 @@ export default function InteractiveStudio({
                             <IconGripDots size={12} />
                           </span>
                           <span className="ref-flow-step-badge locked">
-                            🔒 #{round.turnNumber}.{slotIdx + 1}
+                            #{round.turnNumber}.{slotIdx + 1}
                           </span>
                           <span className="ref-flow-step-ratio">
                             {round.aspectRatio}
@@ -1949,12 +2618,14 @@ export default function InteractiveStudio({
                             className="ref-flow-step-meta-chip"
                             title={cleanVariantTitle}
                           >
-                            {styleTitle || cleanVariantTitle}
+                            {isReferenceOriginCard
+                              ? "Reference"
+                              : styleTitle || cleanVariantTitle}
                           </span>
                         </div>
                       </div>
 
-                      {/* Single Image Stage + Hover Actions (⤢ Expand, ↓ Download, 🧬 Pin DNA) */}
+                      {/* Single Image Stage */}
                       <div
                         className="ref-flow-hero-frame"
                         onDoubleClick={(e) => {
@@ -1991,7 +2662,7 @@ export default function InteractiveStudio({
                                     turnNumber: round.turnNumber,
                                   });
                                 }}
-                                title="Expand image in full screen (Lightbox)"
+                                title="Expand image in full screen"
                                 aria-label="Expand image in full screen"
                               >
                                 <IconExpand size={14} strokeWidth={1.9} />
@@ -2027,7 +2698,7 @@ export default function InteractiveStudio({
                                     round.turnNumber
                                   );
                                 }}
-                                title="Pin this card as Canonical Character DNA across the flow"
+                                title="Pin this card as Canonical Character DNA"
                                 aria-label="Pin Canonical DNA"
                               >
                                 <IconDna size={14} strokeWidth={1.7} />
@@ -2044,7 +2715,7 @@ export default function InteractiveStudio({
                         )}
                       </div>
 
-                      {/* 1-Line Prompt Footer (Click to open read-only Inspector Modal for this image card) */}
+                      {/* 1-Line Prompt Footer (Click to open read-only Inspector Modal) */}
                       <button
                         type="button"
                         className="ref-flow-node-footer-btn"
@@ -2054,7 +2725,7 @@ export default function InteractiveStudio({
                           setSelectedCanvasNodeId(cardId);
                           setIsStepModalOpen(true);
                         }}
-                        title="Click to inspect this card's immutable prompt & parameters"
+                        title="Click to inspect this card's prompt & parameters"
                       >
                         <span className="ref-flow-node-prompt-single">
                           {slot?.prompt || round.chosenPrompt}
@@ -2068,7 +2739,7 @@ export default function InteractiveStudio({
                 });
               })}
 
-              {/* 3. LIVE GENERATING 4 IMAGE CARDS OR EMPTY-PROJECT STARTER CARD */}
+              {/* 3. LIVE GENERATING 1..8 IMAGE CARDS */}
               {isGenerating &&
                 draftStep &&
                 draftStep.positions.map((pos, draftIdx) => {
@@ -2115,7 +2786,7 @@ export default function InteractiveStudio({
                             <IconGripDots size={12} />
                           </span>
                           <span className="ref-flow-step-badge draft">
-                            ⚡ #{nextTurnNum}.{draftIdx + 1}
+                            #{nextTurnNum}.{draftIdx + 1}
                           </span>
                           <span className="ref-flow-step-ratio">
                             {selectedAspectRatio}
@@ -2141,7 +2812,7 @@ export default function InteractiveStudio({
                                   }...`}
                             </strong>
                             <span>
-                              {liveSlot?.label || activeMatrixConfig.label}
+                              {liveSlot?.label || `Frame #${draftIdx + 1}`}
                             </span>
                           </div>
                         )}
@@ -2156,964 +2827,1065 @@ export default function InteractiveStudio({
                   );
                 })}
 
-              {!isGenerating && interactions.length === 0 && draftStep && (
-                <article
-                  className="ref-flow-step-card is-draft selected"
+              {/* 4. MINIMALIST '+' STARTER FLOW ITEM WHEN PROJECT IS EMPTY */}
+              {!isGenerating && interactions.length === 0 && (
+                <div
+                  className="ref-flow-starter-plus-wrapper"
                   style={{
-                    left: `${draftStep.positions[0]?.x ?? 70}px`,
-                    top: `${draftStep.positions[0]?.y ?? 60}px`,
-                  }}
-                  onClick={() => {
-                    setSelectedCanvasNodeId("draft");
-                    setIsStepModalOpen(true);
+                    left: `${draftStep?.positions[0]?.x ?? 140}px`,
+                    top: `${draftStep?.positions[0]?.y ?? 140}px`,
                   }}
                 >
-                  <div className="ref-flow-node-header">
-                    <div className="ref-flow-node-title-group">
-                      <span className="ref-flow-step-badge draft">
-                        ✨ Start Step #1 (Creates 4 Image Cards)
-                      </span>
-                    </div>
-                  </div>
-                  <div className="ref-flow-starter-empty-body">
-                    <strong className="ref-quad-blueprint-title">
-                      Start Your Creation Flow
-                    </strong>
-                    <span className="ref-quad-blueprint-desc">
-                      Click below to configure Step #1 and generate your first 4
-                      image cards on the canvas.
-                    </span>
-                    <button
-                      type="button"
-                      className="ref-dark-pill-btn"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setSelectedCanvasNodeId("draft");
-                        setIsStepModalOpen(true);
-                      }}
-                    >
-                      <IconPlus size={12} strokeWidth={2.2} />
-                      <span>Create Step #1 (4 Cards)</span>
-                    </button>
-                  </div>
-                </article>
+                  <button
+                    type="button"
+                    id="flow-starter-plus-btn"
+                    className="ref-flow-starter-plus-btn"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      openCreationModalAsNewRoot();
+                    }}
+                    title="Start creation flow"
+                    aria-label="Start creation flow"
+                  >
+                    <IconPlus size={24} strokeWidth={2.4} />
+                  </button>
+                </div>
               )}
             </div>
           </div>
         </section>
       </div>
 
-      {/* ==================== MODAL FOR STEP CREATION & IMMUTABLE CARD INSPECTION ==================== */}
+      {/* ==================== UNIFIED 3-STEP CREATION MODAL & CARD INSPECTOR MODAL ==================== */}
       {isStepModalOpen && (
         <div
           className="ref-modal-backdrop"
           role="dialog"
           aria-modal="true"
-          aria-label="Step Configuration and Inspection Modal"
+          aria-label={
+            isInspectingLockedCard
+              ? "Card Inspector Modal"
+              : "Creation Flow Wizard Modal"
+          }
           onClick={(e) => {
             if (e.target === e.currentTarget) setIsStepModalOpen(false);
           }}
         >
-          <div className="ref-flow-step-modal-card">
-            <div className="ref-modal-header">
-              <strong className="ref-soft-card-title">
-                {selectedCanvasNodeId !== "draft" && selectedLockedRound
-                  ? `🔒 Inspect Card #${selectedLockedRound.turnNumber}.${
-                      selectedLockedVariantIdx + 1
-                    }`
-                  : `✨ Configure New Step #${interactions.length + 1} (Creates 4 Cards)${
-                      draftParentRound
-                        ? ` • From Card #${draftParentRound.turnNumber}.${
-                            (draftStep?.parentVariantIndex ?? 0) + 1
-                          }`
-                        : ""
-                    }`}
-              </strong>
-              <button
-                type="button"
-                aria-label="Close modal"
-                className="ref-circle-icon-btn sm"
-                onClick={() => setIsStepModalOpen(false)}
+          <div className="ref-wizard-modal-stack">
+            {/* STEPPER CONTROL ABOVE THE MODAL SCREEN (Shown during Creation Mode) */}
+            {!isInspectingLockedCard && (
+              <nav
+                className="ref-wizard-stepper-bar"
+                aria-label="Creation Wizard Steps"
               >
-                <IconClose size={12} />
-              </button>
-            </div>
-
-            <div className="ref-flow-step-modal-body">
-          {selectedCanvasNodeId !== "draft" && selectedLockedRound ? (
-            <div className="ref-params-card ref-params-deck">
-              <div className="ref-params-card-header">
-                <div
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: "8px",
-                    flexWrap: "wrap",
-                  }}
-                >
-                  <span className="ref-flow-step-badge locked">
-                    🔒 Card #{selectedLockedRound.turnNumber}.
-                    {selectedLockedVariantIdx + 1} (Immutable)
-                  </span>
-                  {selectedLockedRound.parentTurnNumber && (
-                    <span className="ref-pill-chip">
-                      Branched from Card #{selectedLockedRound.parentTurnNumber}.
-                      {(parentVariantByTurn[selectedLockedRound.turnNumber] ??
-                        0) + 1}
-                    </span>
-                  )}
-                </div>
-                <span className="ref-studio-ratio-readout">
-                  {selectedLockedRound.aspectRatio}
-                </span>
-              </div>
-
-              <div className="ref-flow-inspector-body">
-                {selectedLockedSlot?.imageUrl && (
-                  <div
-                    className="ref-flow-hero-frame"
-                    style={{ maxHeight: "260px", borderRadius: "10px" }}
-                  >
-                    <img
-                      src={selectedLockedSlot.imageUrl}
-                      alt={selectedLockedSlot.label}
-                      className="ref-flow-hero-img"
-                    />
-                    <span className="ref-flow-slot-num-badge">
-                      {selectedLockedSlot.label}
-                    </span>
-                  </div>
-                )}
-
-                <div className="ref-params-field-group">
-                  <span className="ref-field-label">
-                    Recorded Prompt (Card #{selectedLockedRound.turnNumber}.
-                    {selectedLockedVariantIdx + 1} • Read-Only):
-                  </span>
-                  <div className="ref-flow-readonly-box">
-                    {selectedLockedSlot?.prompt ||
-                      selectedLockedRound.chosenPrompt}
-                  </div>
-                </div>
-
-                <div className="ref-params-field-group">
-                  <span className="ref-field-label">
-                    Locked Card Parameters:
-                  </span>
-                  <div className="ref-params-pills-wrap">
-                    {selectedLockedRound.editInstruction && (
-                      <span className="ref-pill-chip active">
-                        {selectedLockedRound.editInstruction}
-                      </span>
-                    )}
-                    <span className="ref-pill-chip">
-                      Ratio: {selectedLockedRound.aspectRatio}
-                    </span>
-                    {(() => {
-                      const snap =
-                        snapshotsByTurn[selectedLockedRound.turnNumber];
-                      if (!snap) return null;
-                      const styleObj = bootstrapData.style_presets.find(
-                        (s) => s.id === snap.styleId
-                      );
-                      const allMods =
-                        bootstrapData.modifier_categories.flatMap(
-                          (c) => c.options
-                        );
-                      return (
-                        <>
-                          {styleObj && (
-                            <span className="ref-pill-chip">
-                              🎨 {styleObj.title.split(" (")[0]}
-                            </span>
-                          )}
-                          {snap.modifierIds.map((mId) => {
-                            const found = allMods.find((o) => o.id === mId);
-                            return found ? (
-                              <span key={mId} className="ref-pill-chip">
-                                🎛️ {found.label.split(" (")[0]}
-                              </span>
-                            ) : null;
-                          })}
-                        </>
-                      );
-                    })()}
-                  </div>
-                </div>
-
-                <div className="ref-flow-inspector-cta-box">
-                  <span className="ref-field-label">
-                    Branch 4 New Image Cards from Card #
-                    {selectedLockedRound.turnNumber}.
-                    {selectedLockedVariantIdx + 1}:
-                  </span>
-                  <div
-                    style={{
-                      display: "flex",
-                      gap: "8px",
-                      flexWrap: "wrap",
-                    }}
-                  >
-                    <button
-                      type="button"
-                      className="ref-dark-pill-btn"
-                      onClick={() =>
-                        handleStartBranchFromNode(
-                          selectedLockedRound,
-                          selectedLockedVariantIdx,
-                          "compose"
-                        )
-                      }
-                    >
-                      <IconAtelierStar size={13} />
-                      <span>Branch 4 New Cards (Compose)</span>
-                    </button>
-                    <button
-                      type="button"
-                      className="ref-mura-btn-outline lg"
-                      onClick={() =>
-                        handleStartBranchFromNode(
-                          selectedLockedRound,
-                          selectedLockedVariantIdx,
-                          "surgical-delta"
-                        )
-                      }
-                    >
-                      <span>⚡ Branch Surgical Delta</span>
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </div>
-          ) : (
-            <form
-              className="ref-flow-create-modal-form"
-              onSubmit={handleGenerateInteraction}
-            >
-              <div className="ref-flow-create-modal-columns">
-                {/* LEFT COLUMN: Parent Frame Anchor + Prompt/Surgical Delta Editor */}
-                <div className="ref-params-card">
-            <input
-              ref={fileUploadInputRef}
-              type="file"
-              accept="image/png,image/jpeg,image/webp"
-              style={{ display: "none" }}
-              onChange={handleUploadReferenceFile}
-            />
-
-            <div className="ref-params-card-header">
-              <div className="ref-studio-flow-mode-switch" role="tablist">
+                {/* Step 01 */}
                 <button
                   type="button"
-                  role="tab"
-                  aria-selected={flowMode === "compose"}
-                  className={`ref-studio-flow-mode-btn ${
-                    flowMode === "compose" ? "active" : ""
+                  className={`ref-wizard-step-pill ${
+                    wizardStep === 1
+                      ? "is-active"
+                      : wizardStep > 1
+                      ? "is-completed"
+                      : ""
                   }`}
-                  onClick={() => setFlowMode("compose")}
+                  onClick={() => setWizardStep(1)}
                 >
-                  <IconAtelierStar size={12} />
-                  <span>Compose</span>
-                </button>
-                <button
-                  type="button"
-                  role="tab"
-                  aria-selected={flowMode === "surgical-delta"}
-                  className={`ref-studio-flow-mode-btn ${
-                    flowMode === "surgical-delta" ? "active" : ""
-                  }`}
-                  onClick={() => setFlowMode("surgical-delta")}
-                  title="Edit only targeted details while locking Character, Pose, or Background"
-                >
-                  <span>⚡ Surgical Delta</span>
-                </button>
-              </div>
-
-              <div className="ref-studio-toolbar-actions">
-                <button
-                  type="button"
-                  className="ref-studio-ghost-action"
-                  onClick={() => fileUploadInputRef.current?.click()}
-                  title="Upload an external reference image or sketch (PNG, JPG, WebP)"
-                >
-                  📤 Upload Ref
-                </button>
-                {preEnhancePrompt && (
-                  <button
-                    type="button"
-                    className="ref-studio-ghost-action"
-                    onClick={handleUndoEnhance}
-                    title="Revert to your original prompt before Enhance Narrative"
-                  >
-                    ↺ Undo
-                  </button>
-                )}
-                <button
-                  type="button"
-                  className="ref-studio-ghost-action accent"
-                  disabled={
-                    !promptInput.trim() || isEnhancingNarrative || isGenerating
-                  }
-                  onClick={() => void handleEnhanceNarrative()}
-                  title="Expand your short idea into a rich cinematic paragraph optimized for Gemini Nano Banana"
-                >
-                  <IconAtelierStar size={12} />
-                  <span>{isEnhancingNarrative ? "Enhancing..." : "Enhance"}</span>
-                </button>
-              </div>
-            </div>
-
-            {!apiKey.trim() && (
-              <div className="ref-studio-apikey-banner" role="status">
-                <span className="ref-studio-apikey-banner-text">
-                  🔑 <strong>Blueprint Mode:</strong> Add a Gemini API key to render live PNGs.
-                </span>
-                <button
-                  type="button"
-                  className="ref-studio-inline-link-btn"
-                  onClick={openSettingsModal}
-                >
-                  Add Key →
-                </button>
-              </div>
-            )}
-
-            {/* Active Reference / Canonical DNA Strip + Preservation Locks */}
-            {(canonicalDnaRef?.imageUrl ||
-              activeInteraction?.chosenImageUrl) && (
-              <div className="ref-studio-dna-anchor-bar">
-                <div className="ref-studio-dna-top-row">
-                  <div className="ref-studio-dna-thumb-group">
-                    {canonicalDnaRef?.imageUrl && (
-                      <img
-                        src={canonicalDnaRef.imageUrl}
-                        alt="Canonical Character DNA"
-                        className="ref-studio-dna-thumb"
-                        title={`Canonical DNA: ${canonicalDnaRef.label}`}
-                      />
-                    )}
-                    {activeInteraction?.chosenImageUrl &&
-                      activeInteraction.chosenImageUrl !==
-                        canonicalDnaRef?.imageUrl && (
-                        <img
-                          src={activeInteraction.chosenImageUrl}
-                          alt="Active Turn Scene Anchor"
-                          className="ref-studio-dna-thumb"
-                          title={`Turn #${activeInteraction.turnNumber} Scene Frame`}
-                        />
-                      )}
-                    <span className="ref-studio-dna-badge">
-                      {canonicalDnaRef &&
-                      activeInteraction?.chosenImageUrl &&
-                      activeInteraction.chosenImageUrl !==
-                        canonicalDnaRef.imageUrl
-                        ? `🧬+⚓ ${canonicalDnaRef.label} + Turn #${activeInteraction.turnNumber}`
-                        : canonicalDnaRef
-                        ? `🧬 ${canonicalDnaRef.label}`
-                        : `⚓ Turn #${activeInteraction?.turnNumber} Anchor`}
-                    </span>
-                  </div>
-
-                  <div className="ref-studio-dna-actions">
-                    <button
-                      type="button"
-                      aria-pressed={useReferenceImage}
-                      className={`ref-studio-lock-chip ${
-                        useReferenceImage ? "locked" : ""
-                      }`}
-                      onClick={() => setUseReferenceImage((prev) => !prev)}
-                      title="Toggle sending reference image inlineData to Gemini Nano Banana"
-                    >
-                      {useReferenceImage ? "Ref: ON" : "Ref: OFF"}
-                    </button>
-                    {canonicalDnaRef && (
-                      <button
-                        type="button"
-                        aria-label="Unpin Canonical DNA Reference"
-                        className="ref-modifier-remove-btn"
-                        onClick={() => void handleClearCanonicalDna()}
-                        title="Unpin Canonical DNA Reference"
-                      >
-                        <IconClose size={10} strokeWidth={2} />
-                      </button>
-                    )}
-                  </div>
-                </div>
-
-                <div className="ref-studio-locks-row">
-                  <span className="ref-studio-locks-label">Preserve:</span>
-                  <button
-                    type="button"
-                    aria-pressed={preservationLocks.keepCharacter}
-                    className={`ref-studio-lock-chip ${
-                      preservationLocks.keepCharacter ? "locked" : ""
-                    }`}
-                    onClick={() => handleToggleLock("keepCharacter")}
-                  >
-                    {preservationLocks.keepCharacter ? "🔒" : "🔓"} Character
-                  </button>
-                  <button
-                    type="button"
-                    aria-pressed={preservationLocks.keepPose}
-                    className={`ref-studio-lock-chip ${
-                      preservationLocks.keepPose ? "locked" : ""
-                    }`}
-                    onClick={() => handleToggleLock("keepPose")}
-                  >
-                    {preservationLocks.keepPose ? "🔒" : "🔓"} Pose
-                  </button>
-                  <button
-                    type="button"
-                    aria-pressed={preservationLocks.keepBackground}
-                    className={`ref-studio-lock-chip ${
-                      preservationLocks.keepBackground ? "locked" : ""
-                    }`}
-                    onClick={() => handleToggleLock("keepBackground")}
-                  >
-                    {preservationLocks.keepBackground ? "🔒" : "🔓"} Background
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {flowMode === "surgical-delta" ? (
-              activeInteraction || canonicalDnaRef?.imageUrl ? (
-                <div className="ref-studio-prompt-editor-group">
-                  <div className="ref-studio-anchor-prompt-preview">
-                    <span
-                      className="ref-studio-anchor-prompt-text"
-                      title={
-                        activeInteraction?.chosenPrompt ||
-                        canonicalDnaRef?.prompt ||
-                        promptInput
-                      }
-                    >
-                      <strong>Anchor:</strong>{" "}
-                      {activeInteraction?.chosenPrompt ||
-                        canonicalDnaRef?.prompt ||
-                        promptInput ||
-                        "Uploaded visual reference"}
-                    </span>
-                    <button
-                      type="button"
-                      className="ref-studio-inline-link-btn"
-                      onClick={() => setFlowMode("compose")}
-                      title="Switch to Compose Scene mode to edit the full scene prompt"
-                    >
-                      Full Scene ↗
-                    </button>
-                  </div>
-
-                  <div className="ref-studio-label-row">
-                    <label
-                      className="ref-field-label"
-                      htmlFor="studio-surgical-delta"
-                      style={{ marginBottom: 0 }}
-                    >
-                      Surgical Delta (Describe only what to change)
-                    </label>
-                    <button
-                      type="button"
-                      className="ref-studio-hints-toggle"
-                      aria-expanded={showPromptHints}
-                      onClick={() => setShowPromptHints((prev) => !prev)}
-                    >
-                      {showPromptHints ? "Hide Presets ▴" : "+ Quick Presets ▾"}
-                    </button>
-                  </div>
-
-                  <textarea
-                    id="studio-surgical-delta"
-                    className="ref-params-textarea"
-                    value={deltaInput}
-                    onChange={(e) => setDeltaInput(e.target.value)}
-                    onKeyDown={(e) => {
-                      if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
-                        e.preventDefault();
-                        void handleGenerateInteraction();
-                      }
-                    }}
-                    placeholder="E.g.: Change the jacket to crimson leather and add falling rain while keeping the exact same character and pose..."
-                  />
-
-                  {showPromptHints && (
-                    <div className="ref-studio-pillar-suggestions">
-                      {SURGICAL_DELTA_QUICK_CHIPS.map((chip) => (
-                        <button
-                          key={chip.label}
-                          type="button"
-                          className={`ref-studio-lock-chip ${
-                            deltaInput === chip.delta
-                              ? "locked"
-                              : "suggestion-chip"
-                          }`}
-                          onClick={() => {
-                            setDeltaInput(chip.delta);
-                            setShowPromptHints(false);
-                          }}
-                        >
-                          {chip.label}
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              ) : (
-                <div className="ref-studio-delta-empty-state">
-                  <strong className="ref-quad-blueprint-title">
-                    ⚡ Surgical Delta Requires an Anchor Frame
-                  </strong>
-                  <span className="ref-quad-blueprint-desc">
-                    Generate a 2×2 scene in Compose mode or upload a reference image first, then use Surgical Delta to modify targeted details.
+                  <span className="ref-wizard-step-index">
+                    {wizardStep > 1 ? <IconCheck size={11} /> : "01"}
                   </span>
-                  <div
-                    style={{
-                      display: "flex",
-                      gap: "10px",
-                      flexWrap: "wrap",
-                      justifyContent: "center",
-                    }}
-                  >
-                    <button
-                      type="button"
-                      className="ref-mura-btn-solid"
-                      onClick={() => setFlowMode("compose")}
-                    >
-                      <IconAtelierStar size={12} />
-                      <span>Compose Scene</span>
-                    </button>
-                    <button
-                      type="button"
-                      className="ref-mura-btn-outline"
-                      onClick={() => fileUploadInputRef.current?.click()}
-                    >
-                      📤 Upload Reference
-                    </button>
-                  </div>
-                </div>
-              )
-            ) : (
-              <div className="ref-studio-prompt-editor-group">
-                <div className="ref-studio-label-row">
-                  <label
-                    className="ref-field-label"
-                    htmlFor="studio-master-prompt"
-                    style={{ marginBottom: 0 }}
-                  >
-                    {activeInteraction
-                      ? `Scene Prompt (Turn #${activeInteraction.turnNumber})`
-                      : "Scene Prompt"}
-                  </label>
-                  <button
-                    type="button"
-                    className="ref-studio-hints-toggle"
-                    aria-expanded={showPromptHints}
-                    onClick={() => setShowPromptHints((prev) => !prev)}
-                  >
-                    {showPromptHints
-                      ? "Hide Scene Hints ▴"
-                      : `+ Scene Hints (${
-                          PROMPT_COMPLETENESS_PILLARS.filter((p) =>
-                            p.regex.test(promptInput)
-                          ).length
-                        }/5) ▾`}
-                  </button>
-                </div>
+                  <span className="ref-wizard-step-label">Configure</span>
+                </button>
 
-                <textarea
-                  id="studio-master-prompt"
-                  className="ref-params-textarea"
-                  value={promptInput}
-                  onChange={(e) => setPromptInput(e.target.value)}
-                  onKeyDown={(e) => {
-                    if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
-                      e.preventDefault();
-                      void handleGenerateInteraction();
-                    }
-                  }}
-                  placeholder="Describe your scene... Gemini will craft 4 variations along your selected 2x2 Matrix axis."
+                <span
+                  className={`ref-wizard-step-connector ${
+                    wizardStep > 1 ? "is-lit" : ""
+                  }`}
+                  aria-hidden="true"
                 />
 
-                {showPromptHints && (
-                  <div className="ref-studio-pillars-bar">
-                    <div className="ref-studio-delta-chips-row">
-                      {PROMPT_COMPLETENESS_PILLARS.map((pillar) => {
-                        const isDetected = pillar.regex.test(promptInput);
-                        const isOpen = activePillarId === pillar.id;
-                        return (
+                {/* Step 02 (AI Prompt Enhancement) */}
+                <button
+                  type="button"
+                  disabled={!isStep2Enabled || !canProceedFromStep1}
+                  className={`ref-wizard-step-pill ${
+                    !isStep2Enabled
+                      ? "is-skipped"
+                      : wizardStep === 2
+                      ? "is-active"
+                      : wizardStep === 3
+                      ? "is-completed"
+                      : ""
+                  }`}
+                  onClick={() => {
+                    if (!isStep2Enabled) return;
+                    if (wizardStep === 3) {
+                      setWizardStep(2);
+                    } else if (wizardStep === 1 && canProceedFromStep1) {
+                      void runEnhancePromptForStep2();
+                    }
+                  }}
+                >
+                  <span className="ref-wizard-step-index">
+                    {isStep2Enabled && wizardStep === 3 ? (
+                      <IconCheck size={11} />
+                    ) : (
+                      "02"
+                    )}
+                  </span>
+                  <span className="ref-wizard-step-label">Enhance Prompt</span>
+                  {!isStep2Enabled && (
+                    <span className="ref-wizard-step-skip-tag">Skipped</span>
+                  )}
+                </button>
+
+                <span
+                  className={`ref-wizard-step-connector ${
+                    wizardStep === 3 ? "is-lit" : ""
+                  }`}
+                  aria-hidden="true"
+                />
+
+                {/* Step 03 (Review AI Variations) */}
+                <button
+                  type="button"
+                  disabled={!isStep3Enabled || !canProceedFromStep1}
+                  className={`ref-wizard-step-pill ${
+                    !isStep3Enabled
+                      ? "is-skipped"
+                      : wizardStep === 3
+                      ? "is-active"
+                      : ""
+                  }`}
+                  onClick={() => {
+                    if (!isStep3Enabled || !canProceedFromStep1) return;
+                    if (wizardStep === 3) return;
+                    const src =
+                      isStep2Enabled && enhancedPromptDraft.trim()
+                        ? enhancedPromptDraft.trim()
+                        : promptInput.trim();
+                    void runGenerateVariationsForStep3(src);
+                  }}
+                >
+                  <span className="ref-wizard-step-index">03</span>
+                  <span className="ref-wizard-step-label">AI Variations</span>
+                  {!isStep3Enabled && (
+                    <span className="ref-wizard-step-skip-tag">Skipped</span>
+                  )}
+                </button>
+              </nav>
+            )}
+
+            {/* MAIN MODAL CARD */}
+            <div className="ref-flow-step-modal-card">
+              <div className="ref-modal-header">
+                <strong className="ref-soft-card-title">
+                  {isInspectingLockedCard && selectedLockedRound
+                    ? `Inspect Card #${selectedLockedRound.turnNumber}.${
+                        selectedLockedVariantIdx + 1
+                      }`
+                    : wizardStep === 1
+                    ? "Step 01 • Configure Creation"
+                    : wizardStep === 2
+                    ? "Step 02 • Review AI-Enhanced Prompt"
+                    : `Step 03 • Review ${imageCount} AI Prompt Variations`}
+                </strong>
+                <button
+                  type="button"
+                  aria-label="Close modal"
+                  className="ref-circle-icon-btn sm"
+                  onClick={() => setIsStepModalOpen(false)}
+                >
+                  <IconClose size={12} />
+                </button>
+              </div>
+
+              <div className="ref-flow-step-modal-body">
+                {isInspectingLockedCard && selectedLockedRound ? (
+                  /* ==================== READ-ONLY CARD INSPECTOR ==================== */
+                  <div className="ref-params-card ref-params-deck">
+                    <div className="ref-params-card-header">
+                      <div className="ref-inspector-badges-row">
+                        <span className="ref-flow-step-badge locked">
+                          Card #{selectedLockedRound.turnNumber}.
+                          {selectedLockedVariantIdx + 1} (Immutable)
+                        </span>
+                        {selectedLockedRound.parentTurnNumber && (
+                          <span className="ref-pill-chip">
+                            Branched from Card #
+                            {selectedLockedRound.parentTurnNumber}.
+                            {(parentVariantByTurn[
+                              selectedLockedRound.turnNumber
+                            ] ?? 0) + 1}
+                          </span>
+                        )}
+                      </div>
+                      <span className="ref-studio-ratio-readout">
+                        {selectedLockedRound.aspectRatio}
+                      </span>
+                    </div>
+
+                    <div className="ref-flow-inspector-body">
+                      {selectedLockedSlot?.imageUrl && (
+                        <div className="ref-flow-hero-frame ref-inspector-hero-preview">
+                          <img
+                            src={selectedLockedSlot.imageUrl}
+                            alt={selectedLockedSlot.label}
+                            className="ref-flow-hero-img"
+                          />
+                          <span className="ref-flow-slot-num-badge">
+                            {selectedLockedSlot.label}
+                          </span>
+                        </div>
+                      )}
+
+                      <div className="ref-params-field-group">
+                        <span className="ref-field-label">
+                          Recorded Prompt (Card #{selectedLockedRound.turnNumber}
+                          .{selectedLockedVariantIdx + 1}):
+                        </span>
+                        <div className="ref-flow-readonly-box">
+                          {selectedLockedSlot?.prompt ||
+                            selectedLockedRound.chosenPrompt}
+                        </div>
+                      </div>
+
+                      <div className="ref-params-field-group">
+                        <span className="ref-field-label">
+                          Locked Card Parameters:
+                        </span>
+                        <div className="ref-params-pills-wrap">
+                          {selectedLockedRound.editInstruction && (
+                            <span className="ref-pill-chip active">
+                              {selectedLockedRound.editInstruction}
+                            </span>
+                          )}
+                          <span className="ref-pill-chip">
+                            Ratio: {selectedLockedRound.aspectRatio}
+                          </span>
+                          {(() => {
+                            const snap =
+                              snapshotsByTurn[selectedLockedRound.turnNumber];
+                            if (!snap) return null;
+                            const styleObj =
+                              snap.styleId && snap.styleId !== "none"
+                                ? bootstrapData.style_presets.find(
+                                    (s) => s.id === snap.styleId
+                                  )
+                                : undefined;
+                            const allMods =
+                              bootstrapData.modifier_categories.flatMap(
+                                (c) => c.options
+                              );
+                            return (
+                              <>
+                                {snap.modelUsed && (
+                                  <span className="ref-pill-chip">
+                                    Model: {snap.modelUsed}
+                                  </span>
+                                )}
+                                {snap.modelParams && (
+                                  <span className="ref-pill-chip">
+                                    Temp {snap.modelParams.temperature.toFixed(2)} • Top-P {snap.modelParams.topP.toFixed(2)}
+                                    {snap.modelParams.seed !== undefined && snap.modelParams.seed !== null
+                                      ? ` • Seed ${snap.modelParams.seed}`
+                                      : ""}
+                                  </span>
+                                )}
+                                {styleObj && (
+                                  <span className="ref-pill-chip">
+                                    {styleObj.title.split(" (")[0]}
+                                  </span>
+                                )}
+                                {snap.modifierIds.map((mId) => {
+                                  const found = allMods.find(
+                                    (o) => o.id === mId
+                                  );
+                                  return found ? (
+                                    <span key={mId} className="ref-pill-chip">
+                                      {found.label.split(" (")[0]}
+                                    </span>
+                                  ) : null;
+                                })}
+                              </>
+                            );
+                          })()}
+                        </div>
+                      </div>
+
+                      <div className="ref-flow-inspector-cta-box">
+                        <span className="ref-field-label">
+                          Continue Flow from Card #
+                          {selectedLockedRound.turnNumber}.
+                          {selectedLockedVariantIdx + 1}:
+                        </span>
+                        <div className="ref-inspector-cta-actions">
                           <button
-                            key={pillar.id}
                             type="button"
-                            className={`ref-studio-lock-chip ${
-                              isDetected ? "locked" : ""
-                            } ${isOpen ? "pillar-open" : ""}`}
+                            className="ref-dark-pill-btn"
                             onClick={() =>
-                              setActivePillarId((prev) =>
-                                prev === pillar.id ? null : pillar.id
+                              handleStartBranchFromNode(
+                                selectedLockedRound,
+                                selectedLockedVariantIdx
                               )
                             }
                           >
-                            {isDetected ? "✓ " : "+ "}
-                            {pillar.label}
+                            <IconUploadImage size={14} />
+                            <span>Branch with Reference Image</span>
                           </button>
-                        );
-                      })}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ) : wizardStep === 1 ? (
+                  /* ==================== STEP 01: CONFIGURE CREATION (2 TABS + SLIDER 1..8 + 2 AI TOGGLES) ==================== */
+                  <form
+                    className="ref-flow-create-modal-form"
+                    onSubmit={handleStep1Submit}
+                  >
+                    {/* 2-Tab Mode Bar */}
+                    <div
+                      className="ref-creation-tabs-bar"
+                      role="tablist"
+                      aria-label="Creation Mode"
+                    >
+                      <button
+                        type="button"
+                        id="creation-tab-prompt"
+                        role="tab"
+                        aria-selected={creationTab === "prompt"}
+                        className={`ref-creation-tab-btn ${
+                          creationTab === "prompt" ? "active" : ""
+                        }`}
+                        onClick={() => setCreationTab("prompt")}
+                      >
+                        <IconPromptText size={15} />
+                        <span>From Prompt</span>
+                      </button>
+                      <button
+                        type="button"
+                        id="creation-tab-reference"
+                        role="tab"
+                        aria-selected={creationTab === "reference"}
+                        className={`ref-creation-tab-btn ${
+                          creationTab === "reference" ? "active" : ""
+                        }`}
+                        onClick={() => setCreationTab("reference")}
+                      >
+                        <IconUploadImage size={15} />
+                        <span>With Reference Image</span>
+                      </button>
                     </div>
 
-                    {activePillarId && (
-                      <div className="ref-studio-pillar-suggestions">
-                        {PROMPT_COMPLETENESS_PILLARS.find(
-                          (p) => p.id === activePillarId
-                        )?.suggestions.map((sug) => (
-                          <button
-                            key={sug.label}
-                            type="button"
-                            className="ref-studio-lock-chip suggestion-chip"
-                            onClick={() => {
-                              setPromptInput((prev) => {
-                                const trimmed = prev
-                                  .trim()
-                                  .replace(/[.,;]+$/, "");
-                                return trimmed
-                                  ? `${trimmed}, ${sug.snippet}`
-                                  : sug.snippet;
-                              });
-                              setActivePillarId(null);
-                            }}
-                          >
-                            + {sug.label}
-                          </button>
-                        ))}
+                    {!apiKey.trim() && (
+                      <div className="ref-studio-apikey-banner" role="status">
+                        <span className="ref-studio-apikey-banner-text">
+                          <strong>Blueprint Mode:</strong> Add a Gemini API key
+                          to render live PNG images.
+                        </span>
+                        <button
+                          type="button"
+                          className="ref-studio-inline-link-btn"
+                          onClick={openSettingsModal}
+                        >
+                          Add Key →
+                        </button>
                       </div>
                     )}
-                  </div>
-                )}
-              </div>
-            )}
 
-                </div>
+                    {creationTab === "prompt" ? (
+                      /* ---------- TAB 1: FROM PROMPT (LEFT = PROMPT + TOGGLE 1, RIGHT = MODIFIERS) ---------- */
+                      <div className="ref-creation-two-col">
+                        <div className="ref-params-card ref-creation-col-pane">
+                          <div className="ref-studio-prompt-editor-group">
+                            <div className="ref-studio-label-row">
+                              <label
+                                className="ref-field-label"
+                                htmlFor="studio-master-prompt"
+                              >
+                                What do you want to generate?
+                              </label>
+                              <button
+                                type="button"
+                                className="ref-studio-hints-toggle"
+                                aria-expanded={showPromptHints}
+                                onClick={() =>
+                                  setShowPromptHints((prev) => !prev)
+                                }
+                              >
+                                {showPromptHints
+                                  ? "Hide Scene Hints ▴"
+                                  : `+ Scene Hints (${
+                                      PROMPT_COMPLETENESS_PILLARS.filter((p) =>
+                                        p.regex.test(promptInput)
+                                      ).length
+                                    }/5) ▾`}
+                              </button>
+                            </div>
 
-                {/* RIGHT COLUMN: Aspect Ratio + 3-Tab Parameter Deck (2x2 Matrix | Visual Style | Modifiers) */}
-                <div className="ref-params-card ref-params-deck">
-            {/* 1. Unified 5-Segment Aspect Ratio Bar */}
-            <div className="ref-params-field-group">
-              <div className="ref-studio-label-row">
-                <span className="ref-field-label" style={{ marginBottom: 0 }}>
-                  Frame Aspect Ratio
-                </span>
-                <span className="ref-studio-ratio-readout">
-                  {selectedAspectRatio}
-                </span>
-              </div>
-              <div
-                className="ref-studio-segmented-bar"
-                role="radiogroup"
-                aria-label="Aspect Ratio"
-              >
-                {ASPECT_RATIO_OPTIONS.map((ratio) => (
-                  <button
-                    key={ratio}
-                    type="button"
-                    role="radio"
-                    aria-checked={selectedAspectRatio === ratio}
-                    className={`ref-studio-segment-btn ${
-                      selectedAspectRatio === ratio ? "active" : ""
-                    }`}
-                    onClick={() => setSelectedAspectRatio(ratio)}
-                  >
-                    {ratio}
-                  </button>
-                ))}
-              </div>
-            </div>
+                            <textarea
+                              id="studio-master-prompt"
+                              className="ref-params-textarea ref-creation-prompt-box"
+                              value={promptInput}
+                              onChange={(e) => setPromptInput(e.target.value)}
+                              onKeyDown={(e) => {
+                                if (
+                                  (e.ctrlKey || e.metaKey) &&
+                                  e.key === "Enter"
+                                ) {
+                                  e.preventDefault();
+                                  void handleStep1Submit();
+                                }
+                              }}
+                              placeholder="Describe your scene, subject, lighting, and atmosphere..."
+                            />
 
-            {/* 2. 3-Tab Parameter Deck (2x2 Matrix | Visual Style | Modifiers) */}
-            <div className="ref-studio-param-deck-container">
-              <div
-                className="ref-studio-param-tabs"
-                role="tablist"
-                aria-label="Studio Parameter Groups"
-              >
-                <button
-                  type="button"
-                  role="tab"
-                  aria-selected={activeParamTab === "matrix"}
-                  className={`ref-studio-param-tab ${
-                    activeParamTab === "matrix" ? "active" : ""
-                  }`}
-                  onClick={() => setActiveParamTab("matrix")}
-                >
-                  <span className="ref-studio-param-tab-title">2×2 Matrix</span>
-                  <span className="ref-studio-param-tab-value">
-                    {activeMatrixConfig.label.replace(/^[^\s]+\s/, "")}
-                  </span>
-                </button>
+                            {/* TOGGLE SWITCH #1: Directly below prompt textarea */}
+                            {renderEnhancePromptToggle(
+                              "toggle-enhance-prompt-ai"
+                            )}
 
-                <button
-                  type="button"
-                  role="tab"
-                  aria-selected={activeParamTab === "style"}
-                  className={`ref-studio-param-tab ${
-                    activeParamTab === "style" ? "active" : ""
-                  }`}
-                  onClick={() => setActiveParamTab("style")}
-                >
-                  <span className="ref-studio-param-tab-title">
-                    Visual Style
-                  </span>
-                  <span className="ref-studio-param-tab-value">
-                    {(
-                      bootstrapData.style_presets.find(
-                        (s) => s.id === selectedStyleId
-                      ) || bootstrapData.style_presets[0]
-                    )?.title.split(" (")[0] || "Default"}
-                  </span>
-                </button>
+                            {showPromptHints && (
+                              <div className="ref-studio-pillars-bar">
+                                <div className="ref-studio-delta-chips-row">
+                                  {PROMPT_COMPLETENESS_PILLARS.map((pillar) => {
+                                    const isDetected =
+                                      pillar.regex.test(promptInput);
+                                    const isOpen = activePillarId === pillar.id;
+                                    return (
+                                      <button
+                                        key={pillar.id}
+                                        type="button"
+                                        className={`ref-studio-lock-chip ${
+                                          isDetected ? "locked" : ""
+                                        } ${isOpen ? "pillar-open" : ""}`}
+                                        onClick={() =>
+                                          setActivePillarId((prev) =>
+                                            prev === pillar.id
+                                              ? null
+                                              : pillar.id
+                                          )
+                                        }
+                                      >
+                                        {isDetected ? "✓ " : "+ "}
+                                        {pillar.label}
+                                      </button>
+                                    );
+                                  })}
+                                </div>
 
-                <button
-                  type="button"
-                  role="tab"
-                  aria-selected={activeParamTab === "modifiers"}
-                  className={`ref-studio-param-tab ${
-                    activeParamTab === "modifiers" ? "active" : ""
-                  }`}
-                  onClick={() => setActiveParamTab("modifiers")}
-                >
-                  <span className="ref-studio-param-tab-title">Modifiers</span>
-                  <span className="ref-studio-param-tab-value">
-                    {selectedModifiers.length} active
-                  </span>
-                </button>
-              </div>
+                                {activePillarId && (
+                                  <div className="ref-studio-pillar-suggestions">
+                                    {PROMPT_COMPLETENESS_PILLARS.find(
+                                      (p) => p.id === activePillarId
+                                    )?.suggestions.map((sug) => (
+                                      <button
+                                        key={sug.label}
+                                        type="button"
+                                        className="ref-studio-lock-chip suggestion-chip"
+                                        onClick={() => {
+                                          setPromptInput((prev) => {
+                                            const trimmed = prev
+                                              .trim()
+                                              .replace(/[.,;]+$/, "");
+                                            return trimmed
+                                              ? `${trimmed}, ${sug.snippet}`
+                                              : sug.snippet;
+                                          });
+                                          setActivePillarId(null);
+                                        }}
+                                      >
+                                        + {sug.label}
+                                      </button>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        </div>
 
-              <div className="ref-studio-param-tab-panel" role="tabpanel">
-                {activeParamTab === "matrix" && (
-                  <div className="ref-studio-tab-section">
-                    <div className="ref-studio-option-grid">
-                      {EXPLORATION_MATRIX_OPTIONS.map((axis) => (
-                        <button
-                          key={axis.id}
-                          type="button"
-                          className={`ref-studio-grid-option ${
-                            matrixAxis === axis.id ? "active" : ""
-                          }`}
-                          onClick={() => setMatrixAxis(axis.id)}
-                        >
-                          <strong className="ref-studio-grid-option-title">
-                            {axis.label}
-                          </strong>
-                          <span className="ref-studio-grid-option-sub">
-                            {axis.shortTag}
-                          </span>
-                        </button>
-                      ))}
-                    </div>
+                        <div className="ref-params-card ref-params-deck ref-creation-col-pane">
+                          {renderStyleAndModifiersSection()}
+                        </div>
+                      </div>
+                    ) : (
+                      /* ---------- TAB 2: WITH REFERENCE IMAGE (LEFT = PHOTO UPLOAD, RIGHT = PROMPT + TOGGLE 1 + MODIFIERS) ---------- */
+                      <div className="ref-creation-two-col">
+                        {/* Left Division: Reference Image Dropzone / Preview + Preservation Locks */}
+                        <div className="ref-params-card ref-creation-col-pane">
+                          <div className="ref-studio-label-row">
+                            <span className="ref-field-label">
+                              Reference Image
+                            </span>
+                            {activeReferenceSourceLabel && (
+                              <span className="ref-studio-ratio-readout">
+                                {activeReferenceSourceLabel}
+                              </span>
+                            )}
+                          </div>
 
-                    {bootstrapData.modifier_categories.some(
-                      (cat) => cat.options.length > 0
-                    ) && (
-                      <div className="ref-studio-sweep-subgroup">
-                        <span className="ref-studio-subgroup-label">
-                          Or Sweep 4 Modifiers from a Category:
-                        </span>
-                        <div className="ref-params-pills-wrap">
-                          {bootstrapData.modifier_categories
-                            .filter((cat) => cat.options.length > 0)
-                            .map((cat) => {
-                              const catAxisId: ExplorationMatrixAxis = `cat:${cat.id}`;
-                              const shortCat = cat.title
-                                .split(" & ")[0]
-                                .split(" (")[0];
-                              return (
+                          {activeReferencePreviewUrl ? (
+                            <div className="ref-refimage-preview-stage">
+                              <img
+                                src={activeReferencePreviewUrl}
+                                alt={activeReferenceSourceLabel}
+                                className="ref-refimage-preview-img"
+                              />
+                              <div className="ref-refimage-preview-actions">
                                 <button
-                                  key={catAxisId}
                                   type="button"
-                                  className={`ref-pill-chip ${
-                                    matrixAxis === catAxisId ? "active" : ""
-                                  }`}
-                                  onClick={() => setMatrixAxis(catAxisId)}
-                                  title={`Sweep 4 modifiers from "${shortCat}" across the 2x2 grid`}
+                                  className="ref-studio-ghost-action"
+                                  onClick={() =>
+                                    fileUploadInputRef.current?.click()
+                                  }
                                 >
-                                  ⚡ 4 {shortCat}
+                                  <IconUploadImage size={13} />
+                                  <span>Replace Photo</span>
                                 </button>
-                              );
-                            })}
+                                <button
+                                  type="button"
+                                  className="ref-studio-ghost-action"
+                                  onClick={() => {
+                                    setUploadedReference(null);
+                                    setReferenceCardInfo(null);
+                                  }}
+                                >
+                                  <IconClose size={11} />
+                                  <span>Remove</span>
+                                </button>
+                              </div>
+                            </div>
+                          ) : referenceCardInfo ? (
+                            <div className="ref-refimage-preview-stage is-blueprint-ref">
+                              <div className="ref-flow-slot-blueprint">
+                                <strong>
+                                  {referenceCardInfo.label} Linked
+                                </strong>
+                                <span>
+                                  Blueprint reference card selected from canvas
+                                </span>
+                              </div>
+                              <div className="ref-refimage-preview-actions">
+                                <button
+                                  type="button"
+                                  className="ref-studio-ghost-action"
+                                  onClick={() =>
+                                    fileUploadInputRef.current?.click()
+                                  }
+                                >
+                                  <IconUploadImage size={13} />
+                                  <span>Upload Photo Instead</span>
+                                </button>
+                                <button
+                                  type="button"
+                                  className="ref-studio-ghost-action"
+                                  onClick={() => setReferenceCardInfo(null)}
+                                >
+                                  <IconClose size={11} />
+                                  <span>Remove</span>
+                                </button>
+                              </div>
+                            </div>
+                          ) : (
+                            <button
+                              type="button"
+                              id="refimage-dropzone-btn"
+                              className={`ref-refimage-dropzone ${
+                                isDraggingOverDropzone ? "is-dragover" : ""
+                              }`}
+                              onClick={() =>
+                                fileUploadInputRef.current?.click()
+                              }
+                              onDragOver={(e) => {
+                                e.preventDefault();
+                                setIsDraggingOverDropzone(true);
+                              }}
+                              onDragLeave={() =>
+                                setIsDraggingOverDropzone(false)
+                              }
+                              onDrop={(e) => {
+                                e.preventDefault();
+                                setIsDraggingOverDropzone(false);
+                                const file = e.dataTransfer.files?.[0];
+                                if (file) readImageFileIntoTab2(file);
+                              }}
+                            >
+                              <span className="ref-refimage-dropzone-icon">
+                                <IconUploadImage size={26} strokeWidth={1.8} />
+                              </span>
+                              <strong className="ref-refimage-dropzone-title">
+                                Add a reference photo
+                              </strong>
+                              <span className="ref-refimage-dropzone-sub">
+                                Click to browse, drag & drop, or paste with
+                                Ctrl+V (PNG, JPG, WebP)
+                              </span>
+                            </button>
+                          )}
+
+                          <div className="ref-studio-locks-row ref-refimage-locks-bar">
+                            <span className="ref-studio-locks-label">
+                              Preserve:
+                            </span>
+                            <button
+                              type="button"
+                              aria-pressed={preservationLocks.keepCharacter}
+                              className={`ref-studio-lock-chip ${
+                                preservationLocks.keepCharacter ? "locked" : ""
+                              }`}
+                              onClick={() => handleToggleLock("keepCharacter")}
+                            >
+                              {preservationLocks.keepCharacter ? "✓ " : ""}
+                              Character
+                            </button>
+                            <button
+                              type="button"
+                              aria-pressed={preservationLocks.keepPose}
+                              className={`ref-studio-lock-chip ${
+                                preservationLocks.keepPose ? "locked" : ""
+                              }`}
+                              onClick={() => handleToggleLock("keepPose")}
+                            >
+                              {preservationLocks.keepPose ? "✓ " : ""}
+                              Pose
+                            </button>
+                            <button
+                              type="button"
+                              aria-pressed={preservationLocks.keepBackground}
+                              className={`ref-studio-lock-chip ${
+                                preservationLocks.keepBackground ? "locked" : ""
+                              }`}
+                              onClick={() =>
+                                handleToggleLock("keepBackground")
+                              }
+                            >
+                              {preservationLocks.keepBackground ? "✓ " : ""}
+                              Background
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* Right Division: Prompt + Toggle 1 + Modifiers */}
+                        <div className="ref-params-card ref-params-deck ref-creation-col-pane ref-tab2-right-pane">
+                          <div className="ref-tab2-prompt-block">
+                            <div className="ref-studio-label-row">
+                              <label
+                                className="ref-field-label"
+                                htmlFor="studio-reference-prompt"
+                              >
+                                Prompt for Reference Generation
+                              </label>
+                              {referenceCardInfo?.prompt && (
+                                <button
+                                  type="button"
+                                  className="ref-studio-inline-link-btn"
+                                  onClick={() =>
+                                    setPromptInput(referenceCardInfo.prompt)
+                                  }
+                                >
+                                  Load card prompt ↗
+                                </button>
+                              )}
+                            </div>
+
+                            <textarea
+                              id="studio-reference-prompt"
+                              className="ref-params-textarea ref-tab2-prompt-textarea"
+                              value={promptInput}
+                              onChange={(e) => setPromptInput(e.target.value)}
+                              onKeyDown={(e) => {
+                                if (
+                                  (e.ctrlKey || e.metaKey) &&
+                                  e.key === "Enter"
+                                ) {
+                                  e.preventDefault();
+                                  void handleStep1Submit();
+                                }
+                              }}
+                              placeholder="Describe how to transform, stage, or restyle this reference image..."
+                            />
+
+                            {/* TOGGLE SWITCH #1: Directly below prompt textarea */}
+                            {renderEnhancePromptToggle(
+                              "toggle-enhance-prompt-ai-ref"
+                            )}
+                          </div>
+
+                          <div className="ref-tab2-modifiers-divider" />
+
+                          {renderStyleAndModifiersSection()}
                         </div>
                       </div>
                     )}
-                  </div>
-                )}
 
-                {activeParamTab === "style" && (
-                  <div className="ref-studio-tab-section">
-                    <div className="ref-studio-option-grid">
-                      {bootstrapData.style_presets.map((preset) => {
-                        const [mainTitle, subPart] = preset.title.split(" (");
-                        const cleanSub = subPart
-                          ? subPart.replace(")", "")
-                          : "Preset Aesthetic";
-                        return (
-                          <button
-                            key={preset.id}
-                            type="button"
-                            className={`ref-studio-grid-option ${
-                              selectedStyleId === preset.id ? "active" : ""
-                            }`}
-                            onClick={() => setSelectedStyleId(preset.id)}
+                    {/* SHARED FOOTER OF STEP 1: SLIDER (1..8) + TOGGLE SWITCH #2 BELOW SLIDER + PRIMARY ACTION */}
+                    <div className="ref-creation-step1-footer">
+                      <div className="ref-slider-footer-block">
+                        <div className="ref-slider-header-row">
+                          <label
+                            htmlFor="creation-image-count-slider"
+                            className="ref-slider-question-label"
                           >
-                            <strong className="ref-studio-grid-option-title">
-                              {mainTitle}
-                            </strong>
-                            <span className="ref-studio-grid-option-sub">
-                              {cleanSub}
-                            </span>
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-                )}
+                            How many images should be generated?
+                          </label>
+                          <span className="ref-slider-count-badge">
+                            {imageCount}{" "}
+                            {imageCount === 1 ? "image" : "images"}
+                          </span>
+                        </div>
 
-                {activeParamTab === "modifiers" && (
-                  <div className="ref-studio-tab-section">
-                    <div className="ref-studio-mod-header-row">
-                      <div
-                        className="ref-studio-mod-cat-tabs"
-                        role="tablist"
-                        aria-label="Modifier categories"
-                      >
-                        {bootstrapData.modifier_categories.map((cat) => {
-                          const isCurrentCat =
-                            (bootstrapData.modifier_categories.some(
-                              (c) => c.id === activeModCategoryId
-                            )
-                              ? activeModCategoryId
-                              : bootstrapData.modifier_categories[0]?.id) ===
-                            cat.id;
-                          const activeInCatCount = cat.options.filter((o) =>
-                            selectedModifiers.includes(o.id)
-                          ).length;
-                          const shortTitle = cat.title
-                            .split(" & ")[0]
-                            .split(" (")[0];
-                          return (
+                        <div className="ref-slider-track-wrap">
+                          <input
+                            id="creation-image-count-slider"
+                            type="range"
+                            min={1}
+                            max={8}
+                            step={1}
+                            value={imageCount}
+                            style={
+                              {
+                                "--slider-pct": `${Math.round(
+                                  ((imageCount - 1) / 7) * 100
+                                )}%`,
+                              } as React.CSSProperties
+                            }
+                            onChange={(e) =>
+                              setImageCount(Number(e.target.value))
+                            }
+                            className="ref-atelier-range-slider"
+                          />
+                          <div
+                            className="ref-slider-ticks-row"
+                            aria-hidden="true"
+                          >
+                            {IMAGE_COUNT_TICKS.map((n) => (
+                              <button
+                                key={n}
+                                type="button"
+                                tabIndex={-1}
+                                className={`ref-slider-tick-btn ${
+                                  imageCount === n ? "active" : ""
+                                }`}
+                                onClick={() => setImageCount(n)}
+                              >
+                                {n}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+
+                        {/* TOGGLE SWITCH #2: Directly below slider when imageCount > 1 */}
+                        {imageCount > 1 && (
+                          <div className="ref-toggle-switch-row ref-slider-vary-toggle">
+                            <div className="ref-toggle-switch-copy">
+                              <label
+                                htmlFor="toggle-vary-prompts-ai"
+                                className="ref-toggle-switch-title"
+                              >
+                                Vary prompt using AI
+                              </label>
+                              <span className="ref-toggle-switch-sub">
+                                Generate {imageCount} distinct AI prompt
+                                variations and review them in Step 3
+                              </span>
+                            </div>
                             <button
-                              key={cat.id}
+                              id="toggle-vary-prompts-ai"
                               type="button"
-                              role="tab"
-                              aria-selected={isCurrentCat}
-                              className={`ref-studio-mod-cat-tab ${
-                                isCurrentCat ? "active" : ""
+                              role="switch"
+                              aria-checked={varyPromptsWithAi}
+                              className={`ref-atelier-switch ${
+                                varyPromptsWithAi ? "is-on" : ""
                               }`}
-                              onClick={() => setActiveModCategoryId(cat.id)}
+                              onClick={() =>
+                                setVaryPromptsWithAi((prev) => !prev)
+                              }
                             >
-                              <span>{shortTitle}</span>
-                              {activeInCatCount > 0 && (
-                                <span className="ref-studio-mod-cat-badge">
-                                  {activeInCatCount}
-                                </span>
-                              )}
+                              <span className="ref-atelier-switch-thumb" />
                             </button>
-                          );
-                        })}
+                          </div>
+                        )}
                       </div>
 
-                      <Link
-                        href="/modifiers"
-                        className="ref-studio-inline-link-btn"
-                      >
-                        Manage ↗
-                      </Link>
+                      <div className="ref-wizard-footer-actions">
+                        <button
+                          type="button"
+                          className="ref-mura-btn-outline lg"
+                          onClick={() => setIsStepModalOpen(false)}
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          type="submit"
+                          id="generate-nanobanana-primary-btn"
+                          className="ref-dark-pill-btn"
+                          disabled={!canProceedFromStep1}
+                        >
+                          {!isPreparingStep2 &&
+                            !isPreparingStep3 &&
+                            !isStep2Enabled &&
+                            !isStep3Enabled && <IconPlay size={11} />}
+                          {(isPreparingStep2 || isPreparingStep3) && (
+                            <IconAtelierStar size={12} />
+                          )}
+                          <span>
+                            {isPreparingStep2
+                              ? "Enhancing Prompt..."
+                              : isPreparingStep3
+                              ? `Generating ${imageCount} Variations...`
+                              : isStep2Enabled
+                              ? "Next: Enhance Prompt →"
+                              : isStep3Enabled
+                              ? `Next: Review ${imageCount} Variations →`
+                              : `Generate ${imageCount} ${
+                                  imageCount === 1 ? "Image" : "Images"
+                                }`}
+                          </span>
+                          <span className="ref-lime-badge">{imageCount}</span>
+                        </button>
+                      </div>
+                    </div>
+                  </form>
+                ) : wizardStep === 2 ? (
+                  /* ==================== STEP 02: REVIEW AI-ENHANCED PROMPT ==================== */
+                  <form
+                    className="ref-wizard-review-form"
+                    onSubmit={handleStep2Submit}
+                  >
+                    <div className="ref-wizard-step2-canvas">
+                      <div className="ref-wizard-original-summary">
+                        <span className="ref-wizard-summary-tag">
+                          Original Input
+                        </span>
+                        <p className="ref-wizard-original-text">
+                          {promptInput}
+                        </p>
+                      </div>
+
+                      <div className="ref-wizard-enhanced-editor">
+                        <div className="ref-studio-label-row">
+                          <div className="ref-wizard-exact-label-group">
+                            <label
+                              htmlFor="wizard-enhanced-prompt-textarea"
+                              className="ref-field-label ref-no-margin"
+                            >
+                              {isStep3Enabled
+                                ? "Enhanced Prompt (Input for Step 03 Variations)"
+                                : "Exact Prompt Sent to Model"}
+                            </label>
+                            <span className="ref-wizard-model-payload-chip">
+                              {isStep3Enabled ? "→ Step 03" : model}
+                            </span>
+                            {!isStep3Enabled && creationTab === "reference" && (
+                              <span className="ref-wizard-model-payload-chip is-ref">
+                                + Reference Image
+                              </span>
+                            )}
+                          </div>
+                          <div className="ref-wizard-step-actions-inline">
+                            <button
+                              type="button"
+                              className="ref-studio-ghost-action"
+                              onClick={() => openSettingsModal()}
+                              title="Edit the Enhancement Prompt instruction in Studio Settings"
+                            >
+                              <span>Prompt Settings</span>
+                            </button>
+                            <button
+                              type="button"
+                              className="ref-studio-ghost-action accent"
+                              disabled={isPreparingStep2}
+                              onClick={() => void runEnhancePromptForStep2()}
+                            >
+                              <IconRefresh size={12} />
+                              <span>
+                                {isPreparingStep2
+                                  ? "Regenerating..."
+                                  : "Regenerate with AI"}
+                              </span>
+                            </button>
+                          </div>
+                        </div>
+
+                        <textarea
+                          id="wizard-enhanced-prompt-textarea"
+                          className="ref-params-textarea ref-wizard-enhanced-textarea"
+                          value={enhancedPromptDraft}
+                          onChange={(e) =>
+                            setEnhancedPromptDraft(e.target.value)
+                          }
+                          placeholder="Exact model prompt..."
+                        />
+
+                        <span className="ref-wizard-exact-footnote">
+                          {isStep3Enabled
+                            ? `Includes your selected style, modifiers, locks, and aspect ratio. Next, Step 03 will generate ${imageCount} exact model prompts for review.`
+                            : `Sent verbatim to ${model} without any hidden prefixes, modifiers, or suffixes added afterward.`}
+                        </span>
+                      </div>
                     </div>
 
-                    <div className="ref-params-pills-wrap">
-                      {(
-                        bootstrapData.modifier_categories.find(
-                          (c) => c.id === activeModCategoryId
-                        ) || bootstrapData.modifier_categories[0]
-                      )?.options.map((opt) => {
-                        const active = selectedModifiers.includes(opt.id);
-                        return (
-                          <button
-                            key={opt.id}
-                            type="button"
-                            className={`ref-pill-chip ${
-                              active ? "active" : ""
-                            }`}
-                            onClick={() => handleToggleModifier(opt.id)}
-                            title={opt.token}
-                          >
-                            {opt.label.split(" (")[0]}
-                          </button>
-                        );
-                      })}
+                    <div className="ref-flow-create-modal-footer">
+                      <button
+                        type="button"
+                        className="ref-mura-btn-outline lg"
+                        onClick={() => setWizardStep(1)}
+                      >
+                        ← Back to Configure
+                      </button>
+
+                      <button
+                        type="submit"
+                        id="wizard-step2-primary-btn"
+                        className="ref-dark-pill-btn"
+                        disabled={
+                          !enhancedPromptDraft.trim() ||
+                          isPreparingStep3 ||
+                          isGenerating
+                        }
+                      >
+                        {!isStep3Enabled && !isPreparingStep3 && (
+                          <IconPlay size={11} />
+                        )}
+                        <span>
+                          {isPreparingStep3
+                            ? `Generating ${imageCount} Variations...`
+                            : isStep3Enabled
+                            ? `Next: Review ${imageCount} Variations →`
+                            : `Generate ${imageCount} ${
+                                imageCount === 1 ? "Image" : "Images"
+                              }`}
+                        </span>
+                        <span className="ref-lime-badge">{imageCount}</span>
+                      </button>
                     </div>
-                  </div>
+                  </form>
+                ) : (
+                  /* ==================== STEP 03: REVIEW AI-GENERATED PROMPT VARIATIONS ==================== */
+                  <form
+                    className="ref-wizard-review-form"
+                    onSubmit={handleStep3Submit}
+                  >
+                    <div className="ref-wizard-step3-canvas">
+                      <div className="ref-wizard-step3-header">
+                        <div className="ref-wizard-step3-header-copy">
+                          <div className="ref-wizard-exact-label-group">
+                            <strong className="ref-wizard-step3-title">
+                              Exact Prompts Sent to Model (
+                              {variationDrafts.length})
+                            </strong>
+                            <span className="ref-wizard-model-payload-chip">
+                              {model}
+                            </span>
+                            {creationTab === "reference" && (
+                              <span className="ref-wizard-model-payload-chip is-ref">
+                                + Reference Image
+                              </span>
+                            )}
+                          </div>
+                          <span className="ref-wizard-step3-sub">
+                            Each box below shows the exact, complete prompt
+                            string sent verbatim to {model} — edit freely before
+                            generating.
+                          </span>
+                        </div>
+
+                        <div className="ref-wizard-step-actions-inline">
+                          <button
+                            type="button"
+                            className="ref-studio-ghost-action"
+                            onClick={() => openSettingsModal()}
+                            title="Edit the Variation Prompt instruction in Studio Settings"
+                          >
+                            <span>Prompt Settings</span>
+                          </button>
+                          <button
+                            type="button"
+                            className="ref-studio-ghost-action accent"
+                            disabled={isPreparingStep3}
+                            onClick={() => {
+                              const src =
+                                isStep2Enabled && enhancedPromptDraft.trim()
+                                  ? enhancedPromptDraft.trim()
+                                  : promptInput.trim();
+                              void runGenerateVariationsForStep3(src);
+                            }}
+                          >
+                            <IconRefresh size={12} />
+                            <span>
+                              {isPreparingStep3
+                                ? "Regenerating..."
+                                : "Regenerate Variations"}
+                            </span>
+                          </button>
+                        </div>
+                      </div>
+
+                      <div className="ref-variations-review-list">
+                        {variationDrafts.map((item, idx) => (
+                          <div
+                            key={`var-draft-${idx}`}
+                            className="ref-variation-review-row"
+                          >
+                            <div className="ref-variation-review-meta">
+                              <span className="ref-variation-index-num">
+                                {String(idx + 1).padStart(2, "0")}
+                              </span>
+                              <label
+                                htmlFor={`variation-prompt-input-${idx}`}
+                                className="ref-variation-title-text"
+                              >
+                                {item.label.replace(/^[0-9]+\s*•\s*/, "")}
+                              </label>
+                            </div>
+                            <textarea
+                              id={`variation-prompt-input-${idx}`}
+                              className="ref-params-textarea ref-variation-row-textarea"
+                              rows={Math.max(
+                                4,
+                                Math.ceil(item.prompt.length / 88)
+                              )}
+                              value={item.prompt}
+                              onChange={(e) => {
+                                const nextVal = e.target.value;
+                                setVariationDrafts((prev) =>
+                                  prev.map((v, vIdx) =>
+                                    vIdx === idx ? { ...v, prompt: nextVal } : v
+                                  )
+                                );
+                              }}
+                            />
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="ref-flow-create-modal-footer">
+                      <button
+                        type="button"
+                        className="ref-mura-btn-outline lg"
+                        onClick={() => setWizardStep(isStep2Enabled ? 2 : 1)}
+                      >
+                        ← Back to {isStep2Enabled ? "Step 02" : "Configure"}
+                      </button>
+
+                      <button
+                        type="submit"
+                        id="wizard-step3-generate-btn"
+                        className="ref-dark-pill-btn"
+                        disabled={
+                          isGenerating ||
+                          variationDrafts.some((v) => !v.prompt.trim())
+                        }
+                      >
+                        <IconPlay size={11} />
+                        <span>Generate {imageCount} Images</span>
+                        <span className="ref-lime-badge">{imageCount}</span>
+                      </button>
+                    </div>
+                  </form>
                 )}
               </div>
-            </div>
-          </div>
-              </div>
-
-              {/* UNIFIED BOTTOM FOOTER BAR */}
-              <div className="ref-flow-create-modal-footer">
-                <div className="ref-studio-feedback-slot" aria-live="polite">
-                  {statusNotice ? (
-                    <span className="ref-atelier-toast-pill">
-                      {statusNotice}
-                    </span>
-                  ) : (
-                    <span className="ref-atelier-shortcut-hint">
-                      <kbd>Ctrl</kbd>+<kbd>↵</kbd> • {activeMatrixConfig.shortTag}
-                    </span>
-                  )}
-                </div>
-
-                <div
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: "10px",
-                  }}
-                >
-                  <button
-                    type="button"
-                    className="ref-mura-btn-outline lg"
-                    onClick={() => setIsStepModalOpen(false)}
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    id="generate-nanobanana-primary-btn"
-                    className="ref-dark-pill-btn"
-                    disabled={
-                      isGenerating ||
-                      (flowMode === "surgical-delta"
-                        ? !(
-                            draftParentRound ||
-                            activeInteraction ||
-                            canonicalDnaRef?.imageUrl
-                          ) || !deltaInput.trim()
-                        : !promptInput.trim())
-                    }
-                  >
-                    {!isGenerating && <IconPlay size={11} />}
-                    <span>
-                      {isGenerating
-                        ? `Rendering Step #${interactions.length + 1}...`
-                        : `Generate Step #${
-                            interactions.length + 1
-                          } (4 Images)`}
-                    </span>
-                    <span className="ref-lime-badge">
-                      {interactions.length + 1}
-                    </span>
-                  </button>
-                </div>
-              </div>
-            </form>
-          )}
             </div>
           </div>
         </div>
@@ -3137,7 +3909,7 @@ export default function InteractiveStudio({
               : canonicalDnaRef?.imageUrl &&
                 canonicalDnaRef.imageUrl !== lightboxSlot.slot.imageUrl
               ? {
-                  label: `🧬 DNA: ${canonicalDnaRef.label}`,
+                  label: `DNA: ${canonicalDnaRef.label}`,
                   imageUrl: canonicalDnaRef.imageUrl,
                 }
               : null;
@@ -3153,26 +3925,13 @@ export default function InteractiveStudio({
             >
               <div className="ref-lightbox-card">
                 <div className="ref-modal-header">
-                  <div
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      gap: "10px",
-                      flexWrap: "wrap",
-                    }}
-                  >
+                  <div className="ref-lightbox-header-left">
                     <span className="ref-pill-chip active">
-                      Interaction #{lightboxSlot.turnNumber} •{" "}
+                      Step #{lightboxSlot.turnNumber} •{" "}
                       {lightboxSlot.slot.label}
                     </span>
                     {activeInteraction && (
-                      <div
-                        style={{
-                          display: "inline-flex",
-                          alignItems: "center",
-                          gap: "4px",
-                        }}
-                      >
+                      <div className="ref-lightbox-nav-pair">
                         <button
                           type="button"
                           className="ref-pill-chip"
@@ -3238,13 +3997,7 @@ export default function InteractiveStudio({
                       </button>
                     )}
                   </div>
-                  <div
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      gap: "8px",
-                    }}
-                  >
+                  <div className="ref-lightbox-header-right">
                     <button
                       type="button"
                       className="ref-dark-pill-btn"
@@ -3253,7 +4006,7 @@ export default function InteractiveStudio({
                         setLightboxSlot(null);
                       }}
                     >
-                      <span>✓ Select Image & Load Prompt</span>
+                      <span>Select Image & Load Prompt</span>
                     </button>
                     <button
                       type="button"
@@ -3295,7 +4048,7 @@ export default function InteractiveStudio({
                     </div>
                     <div className="ref-lightbox-compare-pane">
                       <span className="ref-lightbox-compare-label">
-                        After • Interaction #{lightboxSlot.turnNumber} (
+                        After • Step #{lightboxSlot.turnNumber} (
                         {lightboxSlot.slot.label})
                       </span>
                       <img
@@ -3337,8 +4090,7 @@ export default function InteractiveStudio({
           }}
         >
           <form
-            className="ref-modal-card"
-            style={{ maxWidth: "400px", padding: "20px 22px", gap: "14px" }}
+            className="ref-modal-card ref-project-rename-modal"
             onSubmit={handleSaveProjectTitleModal}
           >
             <div className="ref-modal-header">
@@ -3346,7 +4098,7 @@ export default function InteractiveStudio({
                 id="edit-project-title-modal-heading"
                 className="ref-soft-card-title"
               >
-                ✎ Edit Project Name
+                Edit Project Name
               </strong>
               <button
                 type="button"
@@ -3376,15 +4128,7 @@ export default function InteractiveStudio({
               />
             </div>
 
-            <div
-              style={{
-                display: "flex",
-                justifyContent: "flex-end",
-                alignItems: "center",
-                gap: "8px",
-                paddingTop: "2px",
-              }}
-            >
+            <div className="ref-project-rename-actions">
               <button
                 type="button"
                 className="ref-mura-btn-outline lg"

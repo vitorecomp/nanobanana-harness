@@ -615,9 +615,11 @@ export async function POST(req: NextRequest) {
         .get(conversationId) as { max_turn: number } | undefined;
       const nextTurnNumber = Number(maxRow?.max_turn ?? 0) + 1;
       const parentTurnNumber =
-        payload.parent_turn_number !== undefined &&
-        payload.parent_turn_number !== null
-          ? Number(payload.parent_turn_number)
+        "parent_turn_number" in payload
+          ? payload.parent_turn_number === null ||
+            payload.parent_turn_number === undefined
+            ? null
+            : Number(payload.parent_turn_number)
           : nextTurnNumber > 1
           ? nextTurnNumber - 1
           : null;
@@ -927,6 +929,67 @@ export async function POST(req: NextRequest) {
         ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at
       `).run(serialized, now);
       return NextResponse.json({ ok: true, data: categories });
+    }
+
+    if (action === "vault_get_ai_prompts") {
+      const enhRow = db
+        .prepare(
+          `SELECT value FROM app_vault WHERE key = 'enhance_system_prompt'`
+        )
+        .get() as { value: string } | undefined;
+      const varRow = db
+        .prepare(
+          `SELECT value FROM app_vault WHERE key = 'variation_system_prompt'`
+        )
+        .get() as { value: string } | undefined;
+      return NextResponse.json({
+        ok: true,
+        data: {
+          enhanceSystemPrompt: enhRow?.value || null,
+          variationSystemPrompt: varRow?.value || null,
+        },
+      });
+    }
+
+    if (action === "vault_set_ai_prompts") {
+      const enhanceSystemPrompt = String(
+        payload.enhanceSystemPrompt ?? ""
+      ).trim();
+      const variationSystemPrompt = String(
+        payload.variationSystemPrompt ?? ""
+      ).trim();
+
+      if (!enhanceSystemPrompt) {
+        db.prepare(
+          `DELETE FROM app_vault WHERE key = 'enhance_system_prompt'`
+        ).run();
+      } else {
+        db.prepare(`
+          INSERT INTO app_vault (key, value, updated_at)
+          VALUES ('enhance_system_prompt', ?, ?)
+          ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at
+        `).run(enhanceSystemPrompt, now);
+      }
+
+      if (!variationSystemPrompt) {
+        db.prepare(
+          `DELETE FROM app_vault WHERE key = 'variation_system_prompt'`
+        ).run();
+      } else {
+        db.prepare(`
+          INSERT INTO app_vault (key, value, updated_at)
+          VALUES ('variation_system_prompt', ?, ?)
+          ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at
+        `).run(variationSystemPrompt, now);
+      }
+
+      return NextResponse.json({
+        ok: true,
+        data: {
+          enhanceSystemPrompt: enhanceSystemPrompt || null,
+          variationSystemPrompt: variationSystemPrompt || null,
+        },
+      });
     }
 
     return NextResponse.json(
