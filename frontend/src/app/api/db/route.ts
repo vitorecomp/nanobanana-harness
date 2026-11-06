@@ -76,7 +76,14 @@ function saveBase64PngToDir(
   fileName: string,
   dataUrl: string
 ): string | null {
-  if (!dataUrl || !dataUrl.startsWith("data:image/")) return null;
+  if (
+    !dataUrl ||
+    !dataUrl.startsWith("data:image/") ||
+    dataUrl.startsWith("data:image/svg+xml") ||
+    !dataUrl.includes(";base64,")
+  ) {
+    return null;
+  }
   try {
     const commaIdx = dataUrl.indexOf(",");
     if (commaIdx <= 0) return null;
@@ -117,7 +124,7 @@ function getDb(): DatabaseSync {
       id TEXT PRIMARY KEY,
       user_id TEXT NOT NULL,
       title TEXT NOT NULL,
-      style_id TEXT NOT NULL DEFAULT 'editorial-anime',
+      style_id TEXT NOT NULL DEFAULT '',
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL,
       FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
@@ -133,7 +140,7 @@ function getDb(): DatabaseSync {
       raw_idea TEXT NOT NULL DEFAULT '',
       master_prompt TEXT NOT NULL DEFAULT '',
       edit_instruction TEXT,
-      style_id TEXT NOT NULL DEFAULT 'editorial-anime',
+      style_id TEXT NOT NULL DEFAULT '',
       modifiers_json TEXT NOT NULL DEFAULT '[]',
       completeness_score INTEGER NOT NULL DEFAULT 80,
       image_path TEXT,
@@ -150,6 +157,31 @@ function getDb(): DatabaseSync {
     CREATE TABLE IF NOT EXISTS app_vault (
       key TEXT PRIMARY KEY,
       value TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS harness_missions (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      title TEXT NOT NULL,
+      goal TEXT NOT NULL,
+      mission_mode TEXT NOT NULL DEFAULT 'SINGLE_ASSET',
+      pack_invariants TEXT NOT NULL DEFAULT '',
+      aspect_ratio TEXT NOT NULL DEFAULT '1:1',
+      model_used TEXT NOT NULL DEFAULT 'gemini-2.5-flash-image',
+      max_rounds INTEGER NOT NULL DEFAULT 3,
+      target_score INTEGER NOT NULL DEFAULT 85,
+      candidates_per_round INTEGER NOT NULL DEFAULT 2,
+      status TEXT NOT NULL DEFAULT 'IDLE',
+      best_overall_score INTEGER NOT NULL DEFAULT 0,
+      best_image_path TEXT,
+      best_prompt TEXT,
+      keystone_anchor_json TEXT,
+      deliverables_json TEXT NOT NULL DEFAULT '[]',
+      rubric_json TEXT NOT NULL DEFAULT '[]',
+      rounds_json TEXT NOT NULL DEFAULT '[]',
+      references_json TEXT NOT NULL DEFAULT '[]',
+      created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
     );
 
@@ -426,7 +458,7 @@ export async function POST(req: NextRequest) {
           edit_instruction: t.edit_instruction
             ? String(t.edit_instruction)
             : null,
-          style_id: String(t.style_id || "editorial-anime"),
+          style_id: String(t.style_id || ""),
           modifiers: (() => {
             try {
               return JSON.parse(String(t.modifiers_json || "[]"));
@@ -542,7 +574,7 @@ export async function POST(req: NextRequest) {
     if (action === "create_conversation") {
       const userId = String(payload.user_id || "usr_local_dev");
       const title = String(payload.title || "New Project");
-      const styleId = String(payload.style_id || "editorial-anime");
+      const styleId = String(payload.style_id || "");
       const convId = `conv_${crypto.randomUUID().replace(/-/g, "").slice(0, 12)}`;
 
       db.prepare(`
@@ -591,7 +623,7 @@ export async function POST(req: NextRequest) {
         conversationId,
         userId,
         projectTitle,
-        String(payload.style_id || "editorial-anime"),
+        String(payload.style_id || ""),
         now,
         now
       );
@@ -694,7 +726,7 @@ export async function POST(req: NextRequest) {
         String(payload.raw_idea || ""),
         String(payload.master_prompt || chosenVariant?.prompt || ""),
         payload.edit_instruction ? String(payload.edit_instruction) : null,
-        String(payload.style_id || "editorial-anime"),
+        String(payload.style_id || ""),
         modifiersJson,
         Number(payload.completeness_score ?? 85),
         imagePath,
@@ -734,7 +766,7 @@ export async function POST(req: NextRequest) {
           edit_instruction: payload.edit_instruction
             ? String(payload.edit_instruction)
             : null,
-          style_id: String(payload.style_id || "editorial-anime"),
+          style_id: String(payload.style_id || ""),
           modifiers: Array.isArray(payload.modifiers) ? payload.modifiers : [],
           completeness_score: Number(payload.completeness_score ?? 85),
           image_bucket_key: imagePath,
@@ -942,11 +974,29 @@ export async function POST(req: NextRequest) {
           `SELECT value FROM app_vault WHERE key = 'variation_system_prompt'`
         )
         .get() as { value: string } | undefined;
+      const planRow = db
+        .prepare(
+          `SELECT value FROM app_vault WHERE key = 'harness_planner_prompt'`
+        )
+        .get() as { value: string } | undefined;
+      const critRow = db
+        .prepare(
+          `SELECT value FROM app_vault WHERE key = 'harness_critic_prompt'`
+        )
+        .get() as { value: string } | undefined;
+      const refRow = db
+        .prepare(
+          `SELECT value FROM app_vault WHERE key = 'harness_refiner_prompt'`
+        )
+        .get() as { value: string } | undefined;
       return NextResponse.json({
         ok: true,
         data: {
           enhanceSystemPrompt: enhRow?.value || null,
           variationSystemPrompt: varRow?.value || null,
+          harnessPlannerPrompt: planRow?.value || null,
+          harnessCriticPrompt: critRow?.value || null,
+          harnessRefinerPrompt: refRow?.value || null,
         },
       });
     }
@@ -958,38 +1008,375 @@ export async function POST(req: NextRequest) {
       const variationSystemPrompt = String(
         payload.variationSystemPrompt ?? ""
       ).trim();
+      const harnessPlannerPrompt = String(
+        payload.harnessPlannerPrompt ?? ""
+      ).trim();
+      const harnessCriticPrompt = String(
+        payload.harnessCriticPrompt ?? ""
+      ).trim();
+      const harnessRefinerPrompt = String(
+        payload.harnessRefinerPrompt ?? ""
+      ).trim();
 
-      if (!enhanceSystemPrompt) {
-        db.prepare(
-          `DELETE FROM app_vault WHERE key = 'enhance_system_prompt'`
-        ).run();
-      } else {
-        db.prepare(`
-          INSERT INTO app_vault (key, value, updated_at)
-          VALUES ('enhance_system_prompt', ?, ?)
-          ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at
-        `).run(enhanceSystemPrompt, now);
-      }
+      const upsertOrClear = (key: string, val: string) => {
+        if (!val) {
+          db.prepare(`DELETE FROM app_vault WHERE key = ?`).run(key);
+        } else {
+          db.prepare(`
+            INSERT INTO app_vault (key, value, updated_at)
+            VALUES (?, ?, ?)
+            ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at
+          `).run(key, val, now);
+        }
+      };
 
-      if (!variationSystemPrompt) {
-        db.prepare(
-          `DELETE FROM app_vault WHERE key = 'variation_system_prompt'`
-        ).run();
-      } else {
-        db.prepare(`
-          INSERT INTO app_vault (key, value, updated_at)
-          VALUES ('variation_system_prompt', ?, ?)
-          ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at
-        `).run(variationSystemPrompt, now);
-      }
+      upsertOrClear("enhance_system_prompt", enhanceSystemPrompt);
+      upsertOrClear("variation_system_prompt", variationSystemPrompt);
+      upsertOrClear("harness_planner_prompt", harnessPlannerPrompt);
+      upsertOrClear("harness_critic_prompt", harnessCriticPrompt);
+      upsertOrClear("harness_refiner_prompt", harnessRefinerPrompt);
 
       return NextResponse.json({
         ok: true,
         data: {
           enhanceSystemPrompt: enhanceSystemPrompt || null,
           variationSystemPrompt: variationSystemPrompt || null,
+          harnessPlannerPrompt: harnessPlannerPrompt || null,
+          harnessCriticPrompt: harnessCriticPrompt || null,
+          harnessRefinerPrompt: harnessRefinerPrompt || null,
         },
       });
+    }
+
+    if (action === "list_harness_missions") {
+      const userId = String(payload.userId || "");
+      const stmt = db.prepare(`
+        SELECT id, user_id, title, goal, status,
+               best_overall_score, best_image_path, deliverables_json, rounds_json,
+               created_at, updated_at
+        FROM harness_missions
+        WHERE (? = '' OR user_id = ?)
+        ORDER BY updated_at DESC
+      `);
+      const rows = stmt.all(userId, userId) as Array<Record<string, unknown>>;
+      const summaries = rows.map((r) => {
+        let delivs: Array<{ status?: string }> = [];
+        let rounds: unknown[] = [];
+        try {
+          delivs = JSON.parse(String(r.deliverables_json || "[]"));
+        } catch {
+          delivs = [];
+        }
+        try {
+          rounds = JSON.parse(String(r.rounds_json || "[]"));
+        } catch {
+          rounds = [];
+        }
+        const solvedCount = delivs.filter((d) => d.status === "solved").length;
+        return {
+          id: String(r.id),
+          user_id: String(r.user_id),
+          title: String(r.title),
+          goal: String(r.goal),
+          deliverableCount: delivs.length || 1,
+          solvedCount,
+          roundCount: rounds.length,
+          status: String(r.status || "idle"),
+          bestScore: Number(r.best_overall_score ?? 0),
+          bestImageUrl: r.best_image_path
+            ? toFilesystemImageUrl(String(r.best_image_path))
+            : null,
+          created_at: String(r.created_at),
+          updated_at: String(r.updated_at),
+        };
+      });
+      return NextResponse.json({ ok: true, data: summaries });
+    }
+
+    if (action === "get_harness_mission") {
+      const missionId = String(payload.missionId || "");
+      const row = db
+        .prepare(`SELECT * FROM harness_missions WHERE id = ?`)
+        .get(missionId) as Record<string, unknown> | undefined;
+      if (!row) {
+        return NextResponse.json({ ok: true, data: null });
+      }
+      const parseSafe = <T,>(raw: unknown, fallback: T): T => {
+        if (!raw) return fallback;
+        try {
+          return JSON.parse(String(raw)) as T;
+        } catch {
+          return fallback;
+        }
+      };
+      const defaultConfig = {
+        model: String(row.model_used || "gemini-2.5-flash-image"),
+        modelParams: { temperature: 1.0, topP: 0.95, seed: null },
+        aspectRatio: String(row.aspect_ratio || "1:1"),
+        modifierIds: [],
+        maxRounds: Number(row.max_rounds ?? 3),
+        candidatesPerSlot: Number(row.candidates_per_round ?? 2),
+        targetScore: Number(row.target_score ?? 85),
+        checkpointMode: false,
+      };
+      return NextResponse.json({
+        ok: true,
+        data: {
+          id: String(row.id),
+          user_id: String(row.user_id),
+          title: String(row.title),
+          goal: String(row.goal),
+          globalPackInvariants: String(row.pack_invariants || ""),
+          referenceSlots: parseSafe(row.references_json, []),
+          deliverables: parseSafe(row.deliverables_json, []),
+          rubric: parseSafe(row.rubric_json, []),
+          config: parseSafe(row.keystone_anchor_json, defaultConfig),
+          rounds: parseSafe(row.rounds_json, []),
+          status: String(row.status || "idle"),
+          bestScore: Number(row.best_overall_score ?? 0),
+          bestImageUrl: row.best_image_path
+            ? toFilesystemImageUrl(String(row.best_image_path))
+            : null,
+          created_at: String(row.created_at),
+          updated_at: String(row.updated_at),
+        },
+      });
+    }
+
+    if (action === "save_harness_mission") {
+      const mission = (payload.mission || payload) as Record<string, unknown>;
+      const missionId = String(
+        mission.id ||
+          `hm_${crypto.randomUUID().replace(/-/g, "").slice(0, 12)}`
+      );
+      const userId = String(
+        mission.user_id || mission.userId || "usr_local_dev"
+      );
+      const title = String(mission.title || "Harness Mission").slice(0, 80);
+      const goal = String(mission.goal || "");
+      const globalPackInvariants = String(
+        mission.globalPackInvariants || mission.packInvariants || ""
+      );
+      const cfg = (mission.config || {}) as Record<string, unknown>;
+      const aspectRatio = String(
+        cfg.aspectRatio || mission.aspectRatio || "1:1"
+      );
+      const modelUsed = String(
+        cfg.model || mission.modelUsed || "gemini-2.5-flash-image"
+      );
+      const maxRounds = Number(cfg.maxRounds ?? mission.maxRounds ?? 3);
+      const targetScore = Number(cfg.targetScore ?? mission.targetScore ?? 85);
+      const candidatesPerRound = Number(
+        cfg.candidatesPerSlot ?? mission.candidatesPerRound ?? 2
+      );
+      const status = String(mission.status || "idle");
+      const bestScore = Number(
+        mission.bestScore ?? mission.bestOverallScore ?? 0
+      );
+      const createdAt = String(
+        mission.created_at || mission.createdAt || now
+      );
+
+      const baseOutputDir = getConfiguredImagesDir(db);
+      const missionOutputDir = path.join(
+        baseOutputDir,
+        sanitizeProjectFolderName(`Harness_${title}`, missionId)
+      );
+      fs.mkdirSync(missionOutputDir, { recursive: true });
+
+      const persistImageIfBase64 = (
+        urlOrData: string | null | undefined,
+        filePrefix: string
+      ): { url: string | null; diskPath: string | null } => {
+        if (!urlOrData) return { url: null, diskPath: null };
+        const str = String(urlOrData);
+        if (str.startsWith("data:image/")) {
+          const saved = saveBase64PngToDir(
+            missionOutputDir,
+            `${filePrefix}_${missionId}.png`,
+            str
+          );
+          if (saved) {
+            return { url: toFilesystemImageUrl(saved), diskPath: saved };
+          }
+          return { url: str, diskPath: null };
+        }
+        if (str.startsWith("/api/image?path=")) {
+          try {
+            const decoded = decodeURIComponent(
+              str.replace("/api/image?path=", "")
+            );
+            return { url: str, diskPath: decoded };
+          } catch {
+            return { url: str, diskPath: null };
+          }
+        }
+        return { url: str, diskPath: str };
+      };
+
+      const rawDeliverables = Array.isArray(mission.deliverables)
+        ? (mission.deliverables as Array<Record<string, unknown>>)
+        : [];
+      const persistedDeliverables = rawDeliverables.map((d, dIdx) => {
+        const persistedImg = persistImageIfBase64(
+          d.incumbentImageUrl ? String(d.incumbentImageUrl) : null,
+          `slot_${dIdx + 1}_incumbent`
+        );
+        return {
+          ...d,
+          incumbentImageUrl: persistedImg.url,
+        };
+      });
+
+      const rawRounds = Array.isArray(mission.rounds)
+        ? (mission.rounds as Array<Record<string, unknown>>)
+        : [];
+      const persistedRounds = rawRounds.map((r, rIdx) => {
+        const rNum = Number(r.roundNumber ?? rIdx + 1);
+        const kp = persistImageIfBase64(
+          r.keystoneImageUrl ? String(r.keystoneImageUrl) : null,
+          `r${rNum}_keystone`
+        );
+        const slotOutcomes = Array.isArray(r.slotOutcomes)
+          ? (r.slotOutcomes as Array<Record<string, unknown>>)
+          : [];
+        const nextOutcomes = slotOutcomes.map((so, sIdx) => {
+          const anchoredPersisted = persistImageIfBase64(
+            so.anchoredFromImageUrl ? String(so.anchoredFromImageUrl) : null,
+            `r${rNum}_s${sIdx + 1}_anchor`
+          );
+          const keystoneSlotPersisted = persistImageIfBase64(
+            so.keystoneAnchorImageUrl ? String(so.keystoneAnchorImageUrl) : null,
+            `r${rNum}_s${sIdx + 1}_keystone`
+          );
+          const cands = Array.isArray(so.candidates)
+            ? (so.candidates as Array<Record<string, unknown>>)
+            : [];
+          const nextCands = cands.map((c, cIdx) => {
+            const p = persistImageIfBase64(
+              c.imageUrl ? String(c.imageUrl) : null,
+              `r${rNum}_s${sIdx + 1}_c${cIdx + 1}`
+            );
+            return {
+              ...c,
+              imageUrl: p.url || "",
+            };
+          });
+          return {
+            ...so,
+            anchoredFromImageUrl: anchoredPersisted.url,
+            keystoneAnchorImageUrl: keystoneSlotPersisted.url,
+            candidates: nextCands,
+          };
+        });
+        return {
+          ...r,
+          keystoneImageUrl: kp.url,
+          slotOutcomes: nextOutcomes,
+        };
+      });
+
+      const rawRefs = Array.isArray(mission.referenceSlots)
+        ? (mission.referenceSlots as Array<Record<string, unknown>>)
+        : [];
+      const persistedRefs = rawRefs.map((ref, idx) => {
+        const rp = persistImageIfBase64(
+          ref.dataUrl ? String(ref.dataUrl) : null,
+          `user_ref_${idx + 1}`
+        );
+        return {
+          ...ref,
+          dataUrl: rp.url || String(ref.dataUrl || ""),
+        };
+      });
+
+      const bestPersisted = persistImageIfBase64(
+        mission.bestImageUrl ? String(mission.bestImageUrl) : null,
+        `best_overall`
+      );
+
+      const missionMode =
+        persistedDeliverables.length > 1 ? "ASSET_PACK" : "SINGLE_ASSET";
+
+      db.prepare(`
+        INSERT INTO harness_missions (
+          id, user_id, title, goal, mission_mode, pack_invariants,
+          aspect_ratio, model_used, max_rounds, target_score, candidates_per_round,
+          status, best_overall_score, best_image_path, best_prompt,
+          keystone_anchor_json, deliverables_json, rubric_json, rounds_json, references_json,
+          created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(id) DO UPDATE SET
+          title = excluded.title,
+          goal = excluded.goal,
+          mission_mode = excluded.mission_mode,
+          pack_invariants = excluded.pack_invariants,
+          aspect_ratio = excluded.aspect_ratio,
+          model_used = excluded.model_used,
+          max_rounds = excluded.max_rounds,
+          target_score = excluded.target_score,
+          candidates_per_round = excluded.candidates_per_round,
+          status = excluded.status,
+          best_overall_score = excluded.best_overall_score,
+          best_image_path = COALESCE(excluded.best_image_path, harness_missions.best_image_path),
+          best_prompt = COALESCE(excluded.best_prompt, harness_missions.best_prompt),
+          keystone_anchor_json = excluded.keystone_anchor_json,
+          deliverables_json = excluded.deliverables_json,
+          rubric_json = excluded.rubric_json,
+          rounds_json = excluded.rounds_json,
+          references_json = excluded.references_json,
+          updated_at = excluded.updated_at
+      `).run(
+        missionId,
+        userId,
+        title,
+        goal,
+        missionMode,
+        globalPackInvariants,
+        aspectRatio,
+        modelUsed,
+        maxRounds,
+        targetScore,
+        candidatesPerRound,
+        status,
+        bestScore,
+        bestPersisted.diskPath,
+        null,
+        JSON.stringify(cfg),
+        JSON.stringify(persistedDeliverables),
+        JSON.stringify(Array.isArray(mission.rubric) ? mission.rubric : []),
+        JSON.stringify(persistedRounds),
+        JSON.stringify(persistedRefs),
+        createdAt,
+        now
+      );
+
+      return NextResponse.json({
+        ok: true,
+        data: {
+          id: missionId,
+          user_id: userId,
+          title,
+          goal,
+          globalPackInvariants,
+          referenceSlots: persistedRefs,
+          deliverables: persistedDeliverables,
+          rubric: Array.isArray(mission.rubric) ? mission.rubric : [],
+          config: cfg,
+          rounds: persistedRounds,
+          status,
+          bestScore,
+          bestImageUrl: bestPersisted.url,
+          created_at: createdAt,
+          updated_at: now,
+        },
+      });
+    }
+
+    if (action === "delete_harness_mission") {
+      const missionId = String(payload.missionId || "");
+      db.prepare(`DELETE FROM harness_missions WHERE id = ?`).run(missionId);
+      return NextResponse.json({ ok: true, data: true });
     }
 
     return NextResponse.json(

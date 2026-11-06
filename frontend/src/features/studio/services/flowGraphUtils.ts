@@ -20,6 +20,7 @@ export interface PersistedProjectFlowMeta {
   positions: Record<string, FlowNodePosition>;
   parentVariantByTurn: Record<number, number>;
   snapshotsByTurn: Record<number, FlowStepParameterSnapshot>;
+  viewport?: { x: number; y: number; zoom: number };
 }
 
 const FLOW_META_STORAGE_PREFIX = "nanobanana_flow_meta_v2:";
@@ -65,6 +66,7 @@ export function loadProjectFlowMeta(
       positions: parsed.positions || {},
       parentVariantByTurn: parsed.parentVariantByTurn || {},
       snapshotsByTurn: parsed.snapshotsByTurn || {},
+      viewport: parsed.viewport,
     };
   } catch {
     return empty;
@@ -77,9 +79,15 @@ export function saveProjectFlowMeta(
 ): void {
   if (typeof window === "undefined" || !projectId) return;
   try {
+    const existing = loadProjectFlowMeta(projectId);
+    const merged: PersistedProjectFlowMeta = {
+      ...existing,
+      ...meta,
+      viewport: meta.viewport ?? existing.viewport,
+    };
     window.localStorage.setItem(
       `${FLOW_META_STORAGE_PREFIX}${projectId}`,
-      JSON.stringify(meta)
+      JSON.stringify(merged)
     );
   } catch {
     // Ignore storage quota errors

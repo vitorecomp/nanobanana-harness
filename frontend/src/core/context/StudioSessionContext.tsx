@@ -20,6 +20,11 @@ import {
   ModifierCategory,
   fetchBootstrap,
 } from "@/features/studio";
+import {
+  DEFAULT_HARNESS_CRITIC_PROMPT,
+  DEFAULT_HARNESS_PLANNER_PROMPT,
+  DEFAULT_HARNESS_REFINER_PROMPT,
+} from "@/features/harness";
 import { createConversation } from "@/features/history";
 import {
   vaultClearApiKey,
@@ -37,7 +42,6 @@ export interface RemixPresetRequest {
   idea: string;
   prompt?: string;
   imageUrl?: string;
-  styleId?: string;
   conversationId?: string;
   turn?: number;
   nonce: number;
@@ -65,15 +69,23 @@ interface StudioSessionContextValue {
   setActiveProjectId: (id: string | null) => void;
   activeProjectTitle: string;
   setActiveProjectTitle: (title: string) => void;
+  activeHarnessMissionId: string | null;
+  setActiveHarnessMissionId: (id: string | null) => void;
   newProjectNonce: number;
   triggerNewProject: (customTitle?: string) => Promise<string | null>;
   updateModifierCategories: (categories: ModifierCategory[]) => Promise<void>;
   resetModifierCategories: () => Promise<void>;
   enhanceSystemPrompt: string;
   variationSystemPrompt: string;
+  harnessPlannerPrompt: string;
+  harnessCriticPrompt: string;
+  harnessRefinerPrompt: string;
   saveAiSystemPrompts: (params: {
     enhanceSystemPrompt: string;
     variationSystemPrompt: string;
+    harnessPlannerPrompt?: string;
+    harnessCriticPrompt?: string;
+    harnessRefinerPrompt?: string;
   }) => Promise<void>;
   resetAiSystemPrompts: () => Promise<void>;
   isSettingsModalOpen: boolean;
@@ -106,12 +118,43 @@ export function StudioSessionProvider({ children }: { children: ReactNode }) {
   const [activeProjectId, setActiveProjectId] = useState<string | null>(null);
   const [activeProjectTitle, setActiveProjectTitle] =
     useState<string>("New Project");
+  const [activeHarnessMissionId, setActiveHarnessMissionIdState] = useState<
+    string | null
+  >(() => {
+    if (typeof window !== "undefined") {
+      return (
+        window.localStorage.getItem("nanobanana_active_harness_mission_id") ||
+        null
+      );
+    }
+    return null;
+  });
+
+  const setActiveHarnessMissionId = (id: string | null) => {
+    setActiveHarnessMissionIdState(id);
+    if (typeof window !== "undefined") {
+      if (id) {
+        window.localStorage.setItem("nanobanana_active_harness_mission_id", id);
+      } else {
+        window.localStorage.removeItem("nanobanana_active_harness_mission_id");
+      }
+    }
+  };
   const [newProjectNonce, setNewProjectNonce] = useState<number>(0);
   const [enhanceSystemPrompt, setEnhanceSystemPrompt] = useState<string>(
     DEFAULT_ENHANCE_SYSTEM_PROMPT
   );
   const [variationSystemPrompt, setVariationSystemPrompt] = useState<string>(
     DEFAULT_VARIATION_SYSTEM_PROMPT
+  );
+  const [harnessPlannerPrompt, setHarnessPlannerPrompt] = useState<string>(
+    DEFAULT_HARNESS_PLANNER_PROMPT
+  );
+  const [harnessCriticPrompt, setHarnessCriticPrompt] = useState<string>(
+    DEFAULT_HARNESS_CRITIC_PROMPT
+  );
+  const [harnessRefinerPrompt, setHarnessRefinerPrompt] = useState<string>(
+    DEFAULT_HARNESS_REFINER_PROMPT
   );
   const [isSettingsModalOpen, setSettingsModalOpen] = useState<boolean>(false);
 
@@ -127,7 +170,6 @@ export function StudioSessionProvider({ children }: { children: ReactNode }) {
     const created = await createConversation({
       user_id: currentUser.id,
       title: resolvedTitle,
-      style_id: "none",
     });
     const createdId = created?.id || null;
     setActiveProjectId(createdId);
@@ -189,29 +231,56 @@ export function StudioSessionProvider({ children }: { children: ReactNode }) {
   const saveAiSystemPrompts = async (params: {
     enhanceSystemPrompt: string;
     variationSystemPrompt: string;
+    harnessPlannerPrompt?: string;
+    harnessCriticPrompt?: string;
+    harnessRefinerPrompt?: string;
   }): Promise<void> => {
     const cleanEnh =
       params.enhanceSystemPrompt.trim() || DEFAULT_ENHANCE_SYSTEM_PROMPT;
     const cleanVar =
       params.variationSystemPrompt.trim() || DEFAULT_VARIATION_SYSTEM_PROMPT;
+    const cleanPlan =
+      (params.harnessPlannerPrompt ?? harnessPlannerPrompt).trim() ||
+      DEFAULT_HARNESS_PLANNER_PROMPT;
+    const cleanCrit =
+      (params.harnessCriticPrompt ?? harnessCriticPrompt).trim() ||
+      DEFAULT_HARNESS_CRITIC_PROMPT;
+    const cleanRef =
+      (params.harnessRefinerPrompt ?? harnessRefinerPrompt).trim() ||
+      DEFAULT_HARNESS_REFINER_PROMPT;
 
     setEnhanceSystemPrompt(cleanEnh);
     setVariationSystemPrompt(cleanVar);
+    setHarnessPlannerPrompt(cleanPlan);
+    setHarnessCriticPrompt(cleanCrit);
+    setHarnessRefinerPrompt(cleanRef);
 
     await vaultSetAiPrompts({
       enhanceSystemPrompt:
         cleanEnh === DEFAULT_ENHANCE_SYSTEM_PROMPT ? "" : cleanEnh,
       variationSystemPrompt:
         cleanVar === DEFAULT_VARIATION_SYSTEM_PROMPT ? "" : cleanVar,
+      harnessPlannerPrompt:
+        cleanPlan === DEFAULT_HARNESS_PLANNER_PROMPT ? "" : cleanPlan,
+      harnessCriticPrompt:
+        cleanCrit === DEFAULT_HARNESS_CRITIC_PROMPT ? "" : cleanCrit,
+      harnessRefinerPrompt:
+        cleanRef === DEFAULT_HARNESS_REFINER_PROMPT ? "" : cleanRef,
     });
   };
 
   const resetAiSystemPrompts = async (): Promise<void> => {
     setEnhanceSystemPrompt(DEFAULT_ENHANCE_SYSTEM_PROMPT);
     setVariationSystemPrompt(DEFAULT_VARIATION_SYSTEM_PROMPT);
+    setHarnessPlannerPrompt(DEFAULT_HARNESS_PLANNER_PROMPT);
+    setHarnessCriticPrompt(DEFAULT_HARNESS_CRITIC_PROMPT);
+    setHarnessRefinerPrompt(DEFAULT_HARNESS_REFINER_PROMPT);
     await vaultSetAiPrompts({
       enhanceSystemPrompt: "",
       variationSystemPrompt: "",
+      harnessPlannerPrompt: "",
+      harnessCriticPrompt: "",
+      harnessRefinerPrompt: "",
     });
   };
 
@@ -279,6 +348,18 @@ export function StudioSessionProvider({ children }: { children: ReactNode }) {
         savedPrompts.variationSystemPrompt?.trim() ||
           DEFAULT_VARIATION_SYSTEM_PROMPT
       );
+      setHarnessPlannerPrompt(
+        savedPrompts.harnessPlannerPrompt?.trim() ||
+          DEFAULT_HARNESS_PLANNER_PROMPT
+      );
+      setHarnessCriticPrompt(
+        savedPrompts.harnessCriticPrompt?.trim() ||
+          DEFAULT_HARNESS_CRITIC_PROMPT
+      );
+      setHarnessRefinerPrompt(
+        savedPrompts.harnessRefinerPrompt?.trim() ||
+          DEFAULT_HARNESS_REFINER_PROMPT
+      );
     });
     return () => {
       mounted = false;
@@ -318,12 +399,17 @@ export function StudioSessionProvider({ children }: { children: ReactNode }) {
         setActiveProjectId,
         activeProjectTitle,
         setActiveProjectTitle,
+        activeHarnessMissionId,
+        setActiveHarnessMissionId,
         newProjectNonce,
         triggerNewProject,
         updateModifierCategories,
         resetModifierCategories,
         enhanceSystemPrompt,
         variationSystemPrompt,
+        harnessPlannerPrompt,
+        harnessCriticPrompt,
+        harnessRefinerPrompt,
         saveAiSystemPrompts,
         resetAiSystemPrompts,
         isSettingsModalOpen,

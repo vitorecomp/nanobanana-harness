@@ -98,6 +98,7 @@ interface ReferenceCardAnchor {
 
 const ASPECT_RATIO_OPTIONS = ["1:1", "3:4", "4:3", "16:9", "9:16"] as const;
 const IMAGE_COUNT_TICKS = [1, 2, 3, 4, 5, 6, 7, 8] as const;
+const STUDIO_ZOOM_PRESETS = [25, 35, 50, 65, 75, 100, 125, 150] as const;
 
 const PROMPT_COMPLETENESS_PILLARS = [
   {
@@ -248,7 +249,6 @@ interface InteractiveStudioProps {
     idea: string;
     prompt?: string;
     imageUrl?: string;
-    styleId?: string;
     conversationId?: string;
     turn?: number;
     nonce: number;
@@ -325,7 +325,6 @@ export default function InteractiveStudio({
   const [lightboxCompareMode, setLightboxCompareMode] =
     useState<boolean>(false);
 
-  const [selectedStyleId, setSelectedStyleId] = useState<string>("none");
   const [selectedAspectRatio, setSelectedAspectRatio] =
     useState<string>("3:4");
   const [selectedModifiers, setSelectedModifiers] = useState<string[]>([]);
@@ -418,12 +417,8 @@ export default function InteractiveStudio({
     return () => window.clearTimeout(timer);
   }, [statusNotice]);
 
-  // Helper to resolve current style & modifier labels (only when explicitly selected)
-  const getActiveStyleAndModifierLabels = useCallback(() => {
-    const activeStyleObj =
-      selectedStyleId && selectedStyleId !== "none"
-        ? bootstrapData.style_presets.find((s) => s.id === selectedStyleId)
-        : undefined;
+  // Helper to resolve current modifier labels (only when explicitly selected)
+  const getActiveModifierLabels = useCallback(() => {
     const allModifierOpts = bootstrapData.modifier_categories.flatMap(
       (c) => c.options
     );
@@ -436,15 +431,9 @@ export default function InteractiveStudio({
       .filter((x): x is string => Boolean(x));
 
     return {
-      styleLabel: activeStyleObj?.title.split(" (")[0],
       modifierLabels: activeModifierLabels,
     };
-  }, [
-    bootstrapData.modifier_categories,
-    bootstrapData.style_presets,
-    selectedModifiers,
-    selectedStyleId,
-  ]);
+  }, [bootstrapData.modifier_categories, selectedModifiers]);
 
   const loadProjectById = useCallback(
     async (convId: string) => {
@@ -516,6 +505,32 @@ export default function InteractiveStudio({
       setParentVariantByTurn(persistedMeta.parentVariantByTurn);
       setSnapshotsByTurn(persistedMeta.snapshotsByTurn);
 
+      if (typeof window !== "undefined") {
+        const urlParams = new URLSearchParams(window.location.search);
+        const urlZoom = Number(urlParams.get("zoom"));
+        const urlPanX = Number(urlParams.get("panX"));
+        const urlPanY = Number(urlParams.get("panY"));
+        if (
+          urlParams.get("projectId") === convId &&
+          urlParams.has("zoom") &&
+          Number.isFinite(urlZoom) &&
+          urlZoom >= 14 &&
+          urlZoom <= 150
+        ) {
+          setCanvasViewport({
+            zoom: Number((urlZoom / 100).toFixed(2)),
+            x: Number.isFinite(urlPanX)
+              ? urlPanX
+              : persistedMeta.viewport?.x ?? 24,
+            y: Number.isFinite(urlPanY)
+              ? urlPanY
+              : persistedMeta.viewport?.y ?? 24,
+          });
+        } else if (persistedMeta.viewport) {
+          setCanvasViewport(persistedMeta.viewport);
+        }
+      }
+
       setInteractions(loadedRounds);
       if (loadedRounds.length > 0) {
         const lastIdx = loadedRounds.length - 1;
@@ -542,7 +557,6 @@ export default function InteractiveStudio({
         setPromptInput("");
         setEnhancedPromptDraft("");
         setVariationDrafts([]);
-        setSelectedStyleId("none");
         setSelectedModifiers([]);
       }
     },
@@ -556,9 +570,6 @@ export default function InteractiveStudio({
       return;
     }
     if (externalPresetRequest && !externalPresetRequest.conversationId) {
-      if (externalPresetRequest.styleId) {
-        setSelectedStyleId(externalPresetRequest.styleId);
-      }
       if (externalPresetRequest.prompt || externalPresetRequest.idea) {
         setPromptInput(
           externalPresetRequest.prompt || externalPresetRequest.idea
@@ -582,12 +593,47 @@ export default function InteractiveStudio({
     if (newProjectNonce > 0) {
       return;
     }
+    const urlProjectId =
+      typeof window !== "undefined"
+        ? new URLSearchParams(window.location.search).get("projectId")
+        : null;
+    if (urlProjectId) {
+      void loadProjectById(urlProjectId);
+      return;
+    }
     listUserConversations(activeUser.id).then((list) => {
       if (list.length > 0) {
         void loadProjectById(list[0].id);
       }
     });
   }, [externalPresetRequest, activeUser.id, loadProjectById, newProjectNonce]);
+
+  // Persist Studio viewport & sync route query params (?projectId=...&zoom=...&panX=...&panY=...) so F5 never resets positions or zoom
+  useEffect(() => {
+    if (typeof window === "undefined" || !activeProjectId) return;
+    saveProjectFlowMeta(activeProjectId, {
+      positions: nodePositions,
+      parentVariantByTurn,
+      snapshotsByTurn,
+      viewport: canvasViewport,
+    });
+    const params = new URLSearchParams(window.location.search);
+    params.set("projectId", activeProjectId);
+    params.set("zoom", String(Math.round(canvasViewport.zoom * 100)));
+    params.set("panX", String(Math.round(canvasViewport.x)));
+    params.set("panY", String(Math.round(canvasViewport.y)));
+    const nextUrl = `${window.location.pathname}?${params.toString()}`;
+    const currentUrl = `${window.location.pathname}${window.location.search}`;
+    if (currentUrl !== nextUrl) {
+      window.history.replaceState(null, "", nextUrl);
+    }
+  }, [
+    activeProjectId,
+    canvasViewport,
+    nodePositions,
+    parentVariantByTurn,
+    snapshotsByTurn,
+  ]);
 
   const activeInteraction =
     activeInteractionIndex >= 0 ? interactions[activeInteractionIndex] : null;
@@ -638,7 +684,6 @@ export default function InteractiveStudio({
     setUploadedReference(null);
     setActivePillarId(null);
     setCanonicalDnaRef(null);
-    setSelectedStyleId("none");
     setSelectedModifiers([]);
     setInteractions([]);
     setActiveInteractionIndex(-1);
@@ -1012,11 +1057,10 @@ export default function InteractiveStudio({
     if (!raw || isPreparingStep2) return;
     setIsPreparingStep2(true);
     try {
-      const { styleLabel, modifierLabels } = getActiveStyleAndModifierLabels();
+      const { modifierLabels } = getActiveModifierLabels();
       const enhanced = await enhanceNarrativeWithGemini({
         apiKey,
         rawIdea: raw,
-        styleLabel,
         modifierLabels,
         aspectRatio: selectedAspectRatio,
         hasReferenceImage: creationTab === "reference",
@@ -1033,7 +1077,7 @@ export default function InteractiveStudio({
     apiKey,
     creationTab,
     enhanceSystemPrompt,
-    getActiveStyleAndModifierLabels,
+    getActiveModifierLabels,
     isPreparingStep2,
     preservationLocks,
     promptInput,
@@ -1046,13 +1090,11 @@ export default function InteractiveStudio({
       if (!cleanSource || isPreparingStep3) return;
       setIsPreparingStep3(true);
       try {
-        const { styleLabel, modifierLabels } =
-          getActiveStyleAndModifierLabels();
+        const { modifierLabels } = getActiveModifierLabels();
         const generated = await generatePromptVariationsWithGemini({
           apiKey,
           count: imageCount,
           basePrompt: cleanSource,
-          styleLabel,
           modifierLabels,
           aspectRatio: selectedAspectRatio,
           hasReferenceImage: creationTab === "reference",
@@ -1069,7 +1111,7 @@ export default function InteractiveStudio({
     [
       apiKey,
       creationTab,
-      getActiveStyleAndModifierLabels,
+      getActiveModifierLabels,
       imageCount,
       isPreparingStep3,
       preservationLocks,
@@ -1087,7 +1129,7 @@ export default function InteractiveStudio({
     }) => {
       if (isGenerating) return;
       const safeCount = Math.max(1, Math.min(8, Math.round(imageCount || 4)));
-      const { styleLabel, modifierLabels } = getActiveStyleAndModifierLabels();
+      const { modifierLabels } = getActiveModifierLabels();
       const rawCore = (opts.basePromptOverride ?? promptInput).trim();
       if (!rawCore && (!opts.finalPrompts || opts.finalPrompts.length === 0)) {
         return;
@@ -1105,7 +1147,6 @@ export default function InteractiveStudio({
           : (() => {
               const consolidated = buildConsolidatedScenePrompt({
                 basePrompt: rawCore,
-                styleLabel,
                 modifierLabels,
                 aspectRatio: selectedAspectRatio,
                 preservationLocks:
@@ -1180,7 +1221,6 @@ export default function InteractiveStudio({
               const created = await createConversation({
                 user_id: activeUser.id,
                 title: projectTitle.trim() || "New Project",
-                style_id: selectedStyleId,
               });
               targetConvId = created?.id || `conv_${Date.now()}`;
               setActiveProjectId(targetConvId);
@@ -1205,7 +1245,6 @@ export default function InteractiveStudio({
               raw_idea: uploadedReference.name || "Reference Image",
               master_prompt: originPromptDesc,
               edit_instruction: "Reference Image",
-              style_id: selectedStyleId,
               modifiers: [],
               completeness_score: 100,
               image_data_url: uploadedReference.dataUrl,
@@ -1257,7 +1296,6 @@ export default function InteractiveStudio({
               [originTurnNumber]: {
                 flowMode: "reference",
                 aspectRatio: selectedAspectRatio,
-                styleId: selectedStyleId,
                 modifierIds: [],
                 preservationLocks: { ...preservationLocks },
                 imageCount: 1,
@@ -1346,7 +1384,6 @@ export default function InteractiveStudio({
           const created = await createConversation({
             user_id: activeUser.id,
             title: projectTitle.trim() || "New Project",
-            style_id: selectedStyleId,
           });
           targetConvId = created?.id || `conv_${Date.now()}`;
           setActiveProjectId(targetConvId);
@@ -1382,7 +1419,6 @@ export default function InteractiveStudio({
           raw_idea: promptInput.trim() || rawCore,
           master_prompt: defaultChosen.prompt,
           edit_instruction: computedEditInstruction,
-          style_id: selectedStyleId,
           modifiers: selectedModifiers,
           completeness_score: 95,
           image_data_url: defaultChosen.imageUrl || undefined,
@@ -1443,7 +1479,6 @@ export default function InteractiveStudio({
           [nextTurnNumber]: {
             flowMode: effectiveFlowMode,
             aspectRatio: selectedAspectRatio,
-            styleId: selectedStyleId,
             modifierIds: [...selectedModifiers],
             preservationLocks: { ...preservationLocks },
             imageCount: safeCount,
@@ -1501,7 +1536,7 @@ export default function InteractiveStudio({
       canvasViewport.zoom,
       creationTab,
       enhancePromptWithAi,
-      getActiveStyleAndModifierLabels,
+      getActiveModifierLabels,
       imageCount,
       interactions,
       isGenerating,
@@ -1517,7 +1552,6 @@ export default function InteractiveStudio({
       referenceCardInfo,
       selectedAspectRatio,
       selectedModifiers,
-      selectedStyleId,
       setActiveProjectId,
       showTransientNotice,
       snapshotsByTurn,
@@ -2249,16 +2283,65 @@ export default function InteractiveStudio({
                 >
                   <IconMinus size={12} strokeWidth={2.1} />
                 </button>
-                <button
-                  type="button"
+                <select
+                  id="studio-zoom-preset-select"
                   className="ref-flow-zoom-readout"
-                  onClick={() =>
-                    setCanvasViewport((prev) => ({ ...prev, zoom: 0.92 }))
-                  }
-                  title="Reset zoom"
+                  style={{
+                    padding: "0 8px",
+                    fontSize: "12px",
+                    fontWeight: 800,
+                    cursor: "pointer",
+                    outline: "none",
+                    appearance: "auto",
+                  }}
+                  value={String(Math.round(canvasViewport.zoom * 100))}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    if (val === "FIT") {
+                      handleFitFlowView();
+                      return;
+                    }
+                    const pct = Number(val);
+                    if (!Number.isFinite(pct) || pct <= 0) return;
+                    const targetZoom = Math.min(
+                      1.5,
+                      Math.max(0.18, Number((pct / 100).toFixed(2)))
+                    );
+                    const rect =
+                      canvasViewportRef.current?.getBoundingClientRect();
+                    const cx = (rect?.width || 920) / 2;
+                    const cy = (rect?.height || 760) / 2;
+                    setCanvasViewport((prev) => {
+                      const worldX = (cx - prev.x) / prev.zoom;
+                      const worldY = (cy - prev.y) / prev.zoom;
+                      return {
+                        zoom: targetZoom,
+                        x: Math.round(cx - worldX * targetZoom),
+                        y: Math.round(cy - worldY * targetZoom),
+                      };
+                    });
+                  }}
+                  aria-label="Select zoom preset"
+                  title="Select a zoom preset"
                 >
-                  {Math.round(canvasViewport.zoom * 100)}%
-                </button>
+                  {!STUDIO_ZOOM_PRESETS.includes(
+                    Math.round(
+                      canvasViewport.zoom * 100
+                    ) as (typeof STUDIO_ZOOM_PRESETS)[number]
+                  ) && (
+                    <option
+                      value={String(Math.round(canvasViewport.zoom * 100))}
+                    >
+                      {Math.round(canvasViewport.zoom * 100)}%
+                    </option>
+                  )}
+                  {STUDIO_ZOOM_PRESETS.map((pct) => (
+                    <option key={pct} value={String(pct)}>
+                      {pct}%
+                    </option>
+                  ))}
+                  <option value="FIT">Fit All</option>
+                </select>
                 <button
                   type="button"
                   className="ref-flow-zoom-btn"
@@ -2515,11 +2598,6 @@ export default function InteractiveStudio({
 
               {/* 2. COMPLETED IMMUTABLE IMAGE CARDS */}
               {interactions.flatMap((round, roundIdx) => {
-                const snap = snapshotsByTurn[round.turnNumber];
-                const styleTitle =
-                  bootstrapData.style_presets
-                    .find((s) => s.id === snap?.styleId)
-                    ?.title.split(" (")[0] || null;
                 const parentVarIdx =
                   parentVariantByTurn[round.turnNumber] ?? 0;
 
@@ -2620,7 +2698,7 @@ export default function InteractiveStudio({
                           >
                             {isReferenceOriginCard
                               ? "Reference"
-                              : styleTitle || cleanVariantTitle}
+                              : cleanVariantTitle}
                           </span>
                         </div>
                       </div>
@@ -3066,12 +3144,6 @@ export default function InteractiveStudio({
                             const snap =
                               snapshotsByTurn[selectedLockedRound.turnNumber];
                             if (!snap) return null;
-                            const styleObj =
-                              snap.styleId && snap.styleId !== "none"
-                                ? bootstrapData.style_presets.find(
-                                    (s) => s.id === snap.styleId
-                                  )
-                                : undefined;
                             const allMods =
                               bootstrapData.modifier_categories.flatMap(
                                 (c) => c.options
@@ -3089,11 +3161,6 @@ export default function InteractiveStudio({
                                     {snap.modelParams.seed !== undefined && snap.modelParams.seed !== null
                                       ? ` • Seed ${snap.modelParams.seed}`
                                       : ""}
-                                  </span>
-                                )}
-                                {styleObj && (
-                                  <span className="ref-pill-chip">
-                                    {styleObj.title.split(" (")[0]}
                                   </span>
                                 )}
                                 {snap.modifierIds.map((mId) => {
@@ -3719,7 +3786,7 @@ export default function InteractiveStudio({
 
                         <span className="ref-wizard-exact-footnote">
                           {isStep3Enabled
-                            ? `Includes your selected style, modifiers, locks, and aspect ratio. Next, Step 03 will generate ${imageCount} exact model prompts for review.`
+                            ? `Includes your selected modifiers, locks, and aspect ratio. Next, Step 03 will generate ${imageCount} exact model prompts for review.`
                             : `Sent verbatim to ${model} without any hidden prefixes, modifiers, or suffixes added afterward.`}
                         </span>
                       </div>

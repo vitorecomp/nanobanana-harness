@@ -159,15 +159,23 @@ export async function generateWithNanoBanana({
     generationConfig,
   };
 
-  const response = await fetch(endpoint, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "x-goog-api-key": trimmedKey,
-    },
-    body: JSON.stringify(payload),
-    cache: "no-store",
-  });
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 25000);
+  let response: Response;
+  try {
+    response = await fetch(endpoint, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-goog-api-key": trimmedKey,
+      },
+      body: JSON.stringify(payload),
+      cache: "no-store",
+      signal: controller.signal,
+    });
+  } finally {
+    clearTimeout(timeoutId);
+  }
 
   let data: GeminiGenerateContentResponse;
   try {
@@ -268,7 +276,6 @@ function interpolatePromptTemplate(
 export async function enhanceNarrativeWithGemini(params: {
   apiKey: string;
   rawIdea: string;
-  styleLabel?: string;
   modifierLabels?: string[];
   aspectRatio?: string;
   hasReferenceImage?: boolean;
@@ -281,15 +288,13 @@ export async function enhanceNarrativeWithGemini(params: {
   const lockLead = params.hasReferenceImage
     ? buildPreservationPrefix(params.preservationLocks, true, false)
     : "";
-  const styleHint = params.styleLabel ? ` in a ${params.styleLabel} aesthetic` : "";
   const modHint =
     params.modifierLabels && params.modifierLabels.length > 0
       ? `, featuring ${params.modifierLabels.join(", ")}`
       : "";
 
   const fallbackNarrative = finalizeExactImageModelPrompt({
-    prompt: `${lockLead}${cleanIdea}${styleHint} — composed with intentional foreground-to-background depth, tactile surface materiality, expressive subject posture, and directional cinematic illumination${modHint}.`,
-    styleLabel: params.styleLabel,
+    prompt: `${lockLead}${cleanIdea} — composed with intentional foreground-to-background depth, tactile surface materiality, expressive subject posture, and directional cinematic illumination${modHint}.`,
     modifierLabels: params.modifierLabels,
     aspectRatio: params.aspectRatio,
     preservationLocks: params.preservationLocks,
@@ -308,7 +313,6 @@ export async function enhanceNarrativeWithGemini(params: {
       params.customSystemPrompt?.trim() || DEFAULT_ENHANCE_SYSTEM_PROMPT,
       {
         prompt: cleanIdea,
-        style: params.styleLabel || "",
         modifiers: params.modifierLabels?.join(", ") || "",
         aspect_ratio: params.aspectRatio || "",
       }
@@ -319,7 +323,6 @@ export async function enhanceNarrativeWithGemini(params: {
         ? "A reference image will be supplied alongside this prompt. Frame the scene so it transforms or extends the reference seamlessly."
         : "",
       lockLead ? `Mandatory preservation instruction to include: "${lockLead.trim()}"` : "",
-      params.styleLabel ? `Target visual style: ${params.styleLabel}.` : "",
       params.modifierLabels?.length
         ? `Incorporate these optical/lighting modifiers naturally: ${params.modifierLabels.join(", ")}.`
         : "",
@@ -354,7 +357,6 @@ export async function enhanceNarrativeWithGemini(params: {
 
     return finalizeExactImageModelPrompt({
       prompt: cleaned,
-      styleLabel: params.styleLabel,
       modifierLabels: params.modifierLabels,
       aspectRatio: params.aspectRatio,
       preservationLocks: params.preservationLocks,
@@ -410,7 +412,6 @@ export interface CategorySweepItem {
 function buildMatrixFallbackVariations(params: {
   effectiveCorePrompt: string;
   matrixAxis: ExplorationMatrixAxis;
-  styleSuffix: string;
   modSuffix: string;
   ratioSuffix: string;
   isSurgicalDelta: boolean;
@@ -420,14 +421,13 @@ function buildMatrixFallbackVariations(params: {
   const {
     effectiveCorePrompt,
     matrixAxis,
-    styleSuffix,
     modSuffix,
     ratioSuffix,
     isSurgicalDelta,
     categorySweepTitle,
     categorySweepOptions,
   } = params;
-  const tail = `${styleSuffix}${modSuffix}${ratioSuffix}`;
+  const tail = `${modSuffix}${ratioSuffix}`;
 
   if (
     matrixAxis.startsWith("cat:") &&
@@ -578,7 +578,6 @@ function buildMatrixFallbackVariations(params: {
 export async function generateFourPromptVariations(params: {
   apiKey: string;
   basePrompt: string;
-  styleLabel?: string;
   modifierLabels?: string[];
   aspectRatio?: string;
   flowMode?: CreationFlowMode;
@@ -595,7 +594,6 @@ export async function generateFourPromptVariations(params: {
   const matrixAxis: ExplorationMatrixAxis = params.matrixAxis || "auto-director";
   const isSurgicalDelta = flowMode === "surgical-delta";
 
-  const styleSuffix = params.styleLabel ? ` [${params.styleLabel}]` : "";
   const ratioSuffix = params.aspectRatio
     ? ` (Aspect Ratio ${params.aspectRatio})`
     : "";
@@ -621,7 +619,6 @@ export async function generateFourPromptVariations(params: {
   const fallbackVariations = buildMatrixFallbackVariations({
     effectiveCorePrompt,
     matrixAxis,
-    styleSuffix,
     modSuffix,
     ratioSuffix,
     isSurgicalDelta,
@@ -676,7 +673,6 @@ export async function generateFourPromptVariations(params: {
       isSurgicalDelta && params.anchorScenePrompt
         ? `Original anchor scene context: "${params.anchorScenePrompt}"`
         : "",
-      params.styleLabel ? `Selected visual style: ${params.styleLabel}.` : "",
       params.aspectRatio ? `Image aspect ratio: ${params.aspectRatio}.` : "",
       params.modifierLabels?.length
         ? `Active optical/scene modifiers: ${params.modifierLabels.join(", ")}.`
@@ -748,7 +744,6 @@ export async function generateQuadWithNanoBanana(params: {
   apiKey: string;
   model: GenerateNanoBananaRequest["model"];
   basePrompt: string;
-  styleLabel?: string;
   modifierLabels?: string[];
   aspectRatio?: string;
   referenceImage?: InlineImagePart | null;
@@ -769,7 +764,6 @@ export async function generateQuadWithNanoBanana(params: {
   const variations = await generateFourPromptVariations({
     apiKey: params.apiKey,
     basePrompt: params.basePrompt,
-    styleLabel: params.styleLabel,
     modifierLabels: params.modifierLabels,
     aspectRatio: params.aspectRatio,
     flowMode: params.flowMode,
@@ -838,12 +832,11 @@ export async function generateQuadWithNanoBanana(params: {
 
 /**
  * Ensures a prompt string contains all active creation parameters (reference preservation
- * locks, visual style, selected modifiers, and target aspect ratio) idempotently without
+ * locks, selected modifiers, and target aspect ratio) idempotently without
  * duplicating clauses that are already present in the text.
  */
 export function finalizeExactImageModelPrompt(params: {
   prompt: string;
-  styleLabel?: string;
   modifierLabels?: string[];
   aspectRatio?: string;
   preservationLocks?: PreservationLocks;
@@ -872,13 +865,6 @@ export function finalizeExactImageModelPrompt(params: {
     }`;
   }
 
-  if (
-    params.styleLabel?.trim() &&
-    !result.toLowerCase().includes(params.styleLabel.trim().toLowerCase())
-  ) {
-    result = `${result} [${params.styleLabel.trim()}]`;
-  }
-
   if (params.aspectRatio?.trim()) {
     const escapedRatio = params.aspectRatio
       .trim()
@@ -903,11 +889,10 @@ function stripTrailingPromptTags(text: string): string {
 
 /**
  * Builds a single consolidated prompt combining optional preservation locks,
- * core prompt text, visual style, selected modifiers, and target aspect ratio.
+ * core prompt text, selected modifiers, and target aspect ratio.
  */
 export function buildConsolidatedScenePrompt(params: {
   basePrompt: string;
-  styleLabel?: string;
   modifierLabels?: string[];
   aspectRatio?: string;
   preservationLocks?: PreservationLocks;
@@ -915,7 +900,6 @@ export function buildConsolidatedScenePrompt(params: {
 }): string {
   return finalizeExactImageModelPrompt({
     prompt: params.basePrompt,
-    styleLabel: params.styleLabel,
     modifierLabels: params.modifierLabels,
     aspectRatio: params.aspectRatio,
     preservationLocks: params.preservationLocks,
@@ -976,7 +960,6 @@ export async function generatePromptVariationsWithGemini(params: {
   apiKey: string;
   count: number;
   basePrompt: string;
-  styleLabel?: string;
   modifierLabels?: string[];
   aspectRatio?: string;
   preservationLocks?: PreservationLocks;
@@ -1000,7 +983,6 @@ export async function generatePromptVariationsWithGemini(params: {
         label: `${idx + 1} • ${archetype.title}`,
         prompt: finalizeExactImageModelPrompt({
           prompt: candidate,
-          styleLabel: params.styleLabel,
           modifierLabels: params.modifierLabels,
           aspectRatio: params.aspectRatio,
           preservationLocks: params.preservationLocks,
@@ -1024,7 +1006,6 @@ export async function generatePromptVariationsWithGemini(params: {
       {
         count: String(safeCount),
         prompt: narrativeCore,
-        style: params.styleLabel || "",
         modifiers: params.modifierLabels?.join(", ") || "",
         aspect_ratio: params.aspectRatio || "",
       }
@@ -1036,7 +1017,6 @@ export async function generatePromptVariationsWithGemini(params: {
       lockPrefix
         ? `Mandatory reference preservation rule for ALL ${safeCount} prompts: "${lockPrefix.trim()}"`
         : "",
-      params.styleLabel ? `Target visual style: ${params.styleLabel}.` : "",
       params.aspectRatio ? `Target aspect ratio: ${params.aspectRatio}.` : "",
       params.modifierLabels?.length
         ? `Incorporate these active modifiers naturally: ${params.modifierLabels.join(", ")}.`
@@ -1097,7 +1077,6 @@ export async function generatePromptVariationsWithGemini(params: {
         prompt: rawCandidate
           ? finalizeExactImageModelPrompt({
               prompt: rawCandidate,
-              styleLabel: params.styleLabel,
               modifierLabels: params.modifierLabels,
               aspectRatio: params.aspectRatio,
               preservationLocks: params.preservationLocks,

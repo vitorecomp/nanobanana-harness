@@ -10,29 +10,53 @@ import {
   deleteConversation,
   listUserConversations,
 } from "@/features/history";
+import { HarnessMissionSummary } from "@/features/harness";
+import {
+  localDbDeleteHarnessMission,
+  localDbListHarnessMissions,
+} from "@/core/tauri/tauriBridge";
+
+type GalleryItemKind = "studio" | "harness";
+
+interface UnifiedGalleryItem {
+  kind: GalleryItemKind;
+  id: string;
+  title: string;
+  promptOrGoal: string;
+  previewImageUrl: string | null;
+  roundOrTurnCount: number;
+  updatedAt: string;
+  studioProject?: SavedConversationSummary;
+  harnessMission?: HarnessMissionSummary;
+}
 
 export default function ProjectsWorkspacePage() {
   const router = useRouter();
   const {
     user,
-    bootstrapData,
     setPendingRemix,
     activeProjectId,
     setActiveProjectId,
     setActiveProjectTitle,
+    activeHarnessMissionId,
+    setActiveHarnessMissionId,
     imagesOutputDir,
     newProjectNonce,
   } = useStudioSession();
   const activeUser = user || LOCAL_DEV_USER;
 
   const [projects, setProjects] = useState<SavedConversationSummary[]>([]);
+  const [harnessMissions, setHarnessMissions] = useState<
+    HarnessMissionSummary[]
+  >([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [searchQuery, setSearchQuery] = useState<string>("");
-  const [selectedCategory, setSelectedCategory] = useState<string>("all");
+  const [filterKind, setFilterKind] = useState<"all" | GalleryItemKind>("all");
   const [galleryNotice, setGalleryNotice] = useState<string | null>(null);
-  const [projectToDelete, setProjectToDelete] =
-    useState<SavedConversationSummary | null>(null);
-  const [isDeletingProject, setIsDeletingProject] = useState<boolean>(false);
+  const [itemToDelete, setItemToDelete] = useState<UnifiedGalleryItem | null>(
+    null
+  );
+  const [isDeletingItem, setIsDeletingItem] = useState<boolean>(false);
 
   useEffect(() => {
     if (!galleryNotice) return;
@@ -41,22 +65,25 @@ export default function ProjectsWorkspacePage() {
   }, [galleryNotice]);
 
   useEffect(() => {
-    if (!projectToDelete) return;
+    if (!itemToDelete) return;
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape" && !isDeletingProject) {
-        setProjectToDelete(null);
+      if (e.key === "Escape" && !isDeletingItem) {
+        setItemToDelete(null);
       }
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [projectToDelete, isDeletingProject]);
+  }, [itemToDelete, isDeletingItem]);
 
-  const loadProjectsFromDb = useCallback(async () => {
+  const loadGalleryFromDb = useCallback(async () => {
     setLoading(true);
     try {
-      const list = await listUserConversations(activeUser.id);
+      const [studioList, harnessList] = await Promise.all([
+        listUserConversations(activeUser.id),
+        localDbListHarnessMissions(activeUser.id),
+      ]);
       setProjects(
-        list.map((p) => ({
+        studioList.map((p) => ({
           ...p,
           title:
             !p.title ||
@@ -66,109 +93,164 @@ export default function ProjectsWorkspacePage() {
               : p.title,
         }))
       );
+      setHarnessMissions(harnessList || []);
     } finally {
       setLoading(false);
     }
   }, [activeUser.id]);
 
   useEffect(() => {
-    loadProjectsFromDb();
-  }, [loadProjectsFromDb, newProjectNonce]);
+    void loadGalleryFromDb();
+  }, [loadGalleryFromDb, newProjectNonce]);
 
-  const handleOpenProjectInStudio = (proj: SavedConversationSummary) => {
-    setPendingRemix({
-      idea: proj.title,
-      prompt: proj.latest_prompt || undefined,
-      imageUrl: proj.preview_image_url || undefined,
-      styleId: proj.style_id || "none",
-      conversationId: proj.id,
-      nonce: Date.now(),
-    });
-    router.push("/create");
-  };
+  const unifiedItems = useMemo<UnifiedGalleryItem[]>(() => {
+    const fromStudio: UnifiedGalleryItem[] = projects.map((p) => ({
+      kind: "studio",
+      id: p.id,
+      title: p.title,
+      promptOrGoal: p.latest_prompt || "",
+      previewImageUrl: p.preview_image_url || null,
+      roundOrTurnCount: Number(p.turn_count || 0),
+      updatedAt: p.updated_at || p.created_at || "",
+      studioProject: p,
+    }));
 
-  const handlePromptDeleteProject = (
-    e: React.MouseEvent,
-    proj: SavedConversationSummary
-  ) => {
-    e.stopPropagation();
-    setProjectToDelete(proj);
-  };
+    const fromHarness: UnifiedGalleryItem[] = harnessMissions.map((m) => ({
+      kind: "harness",
+      id: m.id,
+      title: m.title || "Goal Harness Mission",
+      promptOrGoal: m.goal || "",
+      previewImageUrl: m.bestImageUrl || null,
+      roundOrTurnCount: Number(m.roundCount || 0),
+      updatedAt: m.updated_at || m.created_at || "",
+      harnessMission: m,
+    }));
 
-  const handleConfirmDeleteProject = async () => {
-    if (!projectToDelete || isDeletingProject) return;
-    const target = projectToDelete;
-    setIsDeletingProject(true);
-    try {
-      const ok = await deleteConversation(target.id);
-      if (ok) {
-        setProjects((prev) => prev.filter((p) => p.id !== target.id));
-        if (activeProjectId === target.id) {
-          setActiveProjectId(null);
-          setActiveProjectTitle("New Project");
-          setPendingRemix(null);
-        }
-        if (typeof window !== "undefined") {
-          try {
-            window.localStorage.removeItem(
-              `nanobanana_flow_meta_v2:${target.id}`
-            );
-            window.localStorage.removeItem(
-              `nanobanana_flow_meta_v1:${target.id}`
-            );
-          } catch {
-            // Ignore storage access errors
-          }
-        }
-        setProjectToDelete(null);
-        setGalleryNotice(
-          `✓ "${target.title}" removed from Gallery • PNG files preserved in ${imagesOutputDir}`
-        );
-      }
-    } finally {
-      setIsDeletingProject(false);
+    return [...fromStudio, ...fromHarness].sort((a, b) =>
+      b.updatedAt.localeCompare(a.updatedAt)
+    );
+  }, [projects, harnessMissions]);
+
+  const handleOpenGalleryItem = (item: UnifiedGalleryItem) => {
+    if (item.kind === "harness") {
+      setActiveHarnessMissionId(item.id);
+      router.push(`/harness?missionId=${encodeURIComponent(item.id)}`);
+      return;
+    }
+    if (item.studioProject) {
+      setPendingRemix({
+        idea: item.studioProject.title,
+        prompt: item.studioProject.latest_prompt || undefined,
+        imageUrl: item.studioProject.preview_image_url || undefined,
+        conversationId: item.studioProject.id,
+        nonce: Date.now(),
+      });
+      router.push("/create");
     }
   };
 
-  // Latest worked-on project (ordered by updated_at DESC from SQLite)
-  const latestWorkedProject = projects.length > 0 ? projects[0] : null;
+  const handlePromptDeleteItem = (
+    e: React.MouseEvent,
+    item: UnifiedGalleryItem
+  ) => {
+    e.stopPropagation();
+    setItemToDelete(item);
+  };
 
-  // Filtered projects by search query and category (style_id)
-  const filteredProjects = useMemo(() => {
+  const handleConfirmDeleteItem = async () => {
+    if (!itemToDelete || isDeletingItem) return;
+    const target = itemToDelete;
+    setIsDeletingItem(true);
+    try {
+      if (target.kind === "harness") {
+        const ok = await localDbDeleteHarnessMission(target.id);
+        if (ok) {
+          setHarnessMissions((prev) => prev.filter((m) => m.id !== target.id));
+          if (activeHarnessMissionId === target.id) {
+            setActiveHarnessMissionId(null);
+          }
+          setItemToDelete(null);
+          setGalleryNotice(
+            `✓ "${target.title}" removed from Gallery • PNG files preserved in ${imagesOutputDir}`
+          );
+        }
+      } else {
+        const ok = await deleteConversation(target.id);
+        if (ok) {
+          setProjects((prev) => prev.filter((p) => p.id !== target.id));
+          if (activeProjectId === target.id) {
+            setActiveProjectId(null);
+            setActiveProjectTitle("New Project");
+            setPendingRemix(null);
+          }
+          if (typeof window !== "undefined") {
+            try {
+              window.localStorage.removeItem(
+                `nanobanana_flow_meta_v2:${target.id}`
+              );
+              window.localStorage.removeItem(
+                `nanobanana_flow_meta_v1:${target.id}`
+              );
+            } catch {
+              // Ignore storage access errors
+            }
+          }
+          setItemToDelete(null);
+          setGalleryNotice(
+            `✓ "${target.title}" removed from Gallery • PNG files preserved in ${imagesOutputDir}`
+          );
+        }
+      }
+    } finally {
+      setIsDeletingItem(false);
+    }
+  };
+
+  // Latest worked-on item (Studio or Goal Harness, ordered by updated_at DESC)
+  const latestWorkedItem = unifiedItems.length > 0 ? unifiedItems[0] : null;
+
+  // Filtered items by kind + search query
+  const filteredItems = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
-    return projects.filter((proj) => {
-      const matchesCategory =
-        selectedCategory === "all" || proj.style_id === selectedCategory;
-      if (!matchesCategory) return false;
+    return unifiedItems.filter((item) => {
+      if (filterKind !== "all" && item.kind !== filterKind) return false;
       if (!q) return true;
-      const inTitle = (proj.title || "").toLowerCase().includes(q);
-      const inPrompt = (proj.latest_prompt || "").toLowerCase().includes(q);
+      const inTitle = (item.title || "").toLowerCase().includes(q);
+      const inPrompt = (item.promptOrGoal || "").toLowerCase().includes(q);
       return inTitle || inPrompt;
     });
-  }, [projects, searchQuery, selectedCategory]);
+  }, [unifiedItems, filterKind, searchQuery]);
 
   return (
     <div className="ref-page-container">
       <div className="ref-studio-three-part-layout">
-        {/* ==================== TOP 15%: LAST WORKED PROJECT + SEARCH BAR + CATEGORY FILTERS ==================== */}
+        {/* ==================== TOP 15%: LAST WORKED ITEM + SEARCH & FILTER BAR ==================== */}
         <section
           className="ref-studio-top-interactions"
-          aria-label="Latest project, search, and category filters"
+          aria-label="Latest project and search"
         >
-          {/* Left: Last Worked Project */}
+          {/* Left: Last Worked Project / Mission */}
           <div className="ref-gallery-last-project-box">
-            <span className="ref-interactions-label">Latest Project</span>
-            {latestWorkedProject ? (
+            <span className="ref-interactions-label">
+              {latestWorkedItem?.kind === "harness"
+                ? "Latest Goal Harness"
+                : "Latest Project"}
+            </span>
+            {latestWorkedItem ? (
               <button
                 type="button"
                 className="ref-interaction-history-item active"
-                onClick={() => handleOpenProjectInStudio(latestWorkedProject)}
-                title="Continue working on this project"
+                onClick={() => handleOpenGalleryItem(latestWorkedItem)}
+                title={
+                  latestWorkedItem.kind === "harness"
+                    ? "Continue working on this Goal Harness mission"
+                    : "Continue working on this Studio project"
+                }
               >
-                {latestWorkedProject.preview_image_url ? (
+                {latestWorkedItem.previewImageUrl ? (
                   <img
-                    src={latestWorkedProject.preview_image_url}
-                    alt={latestWorkedProject.title}
+                    src={latestWorkedItem.previewImageUrl}
+                    alt={latestWorkedItem.title}
                     className="ref-interaction-thumb"
                   />
                 ) : (
@@ -176,11 +258,13 @@ export default function ProjectsWorkspacePage() {
                 )}
                 <div className="ref-interaction-meta">
                   <span className="ref-interaction-turn">
-                    {latestWorkedProject.title}
+                    {latestWorkedItem.title}
                   </span>
                   <span className="ref-interaction-prompt-snippet">
-                    {latestWorkedProject.latest_prompt ||
-                      "Click to open in Studio"}
+                    {latestWorkedItem.promptOrGoal ||
+                      (latestWorkedItem.kind === "harness"
+                        ? "Click to open in Goal Harness"
+                        : "Click to open in Studio")}
                   </span>
                 </div>
               </button>
@@ -191,111 +275,173 @@ export default function ProjectsWorkspacePage() {
             )}
           </div>
 
-          {/* Center: Search Bar + Live Status Toast */}
+          {/* Center: Search Bar + Type Filter Pills + Live Status Toast */}
           <div className="ref-gallery-search-box">
-            <input
-              type="search"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="ref-input ref-gallery-search-input"
-              placeholder="Search projects by title or prompt..."
-              aria-label="Search projects by title or prompt"
-            />
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: "8px",
+                width: "100%",
+                flexWrap: "wrap",
+              }}
+            >
+              <input
+                type="search"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="ref-input ref-gallery-search-input"
+                style={{ flex: "1 1 240px" }}
+                placeholder="Search Studio projects & Goal Harness missions..."
+                aria-label="Search Studio projects and Goal Harness missions"
+              />
+              <div
+                style={{ display: "flex", alignItems: "center", gap: "6px" }}
+                role="group"
+                aria-label="Filter gallery by workspace type"
+              >
+                <button
+                  type="button"
+                  id="gallery-filter-all"
+                  className={`ref-pill-chip ${
+                    filterKind === "all" ? "active" : ""
+                  }`}
+                  onClick={() => setFilterKind("all")}
+                >
+                  All ({unifiedItems.length})
+                </button>
+                <button
+                  type="button"
+                  id="gallery-filter-studio"
+                  className={`ref-pill-chip ${
+                    filterKind === "studio" ? "active" : ""
+                  }`}
+                  onClick={() => setFilterKind("studio")}
+                >
+                  Studio ({projects.length})
+                </button>
+                <button
+                  type="button"
+                  id="gallery-filter-harness"
+                  className={`ref-pill-chip ${
+                    filterKind === "harness" ? "active" : ""
+                  }`}
+                  onClick={() => setFilterKind("harness")}
+                >
+                  Goal Harness ({harnessMissions.length})
+                </button>
+              </div>
+            </div>
             {galleryNotice && (
               <div className="ref-gallery-toast-slot" aria-live="polite">
                 <span className="ref-atelier-toast-pill">{galleryNotice}</span>
               </div>
             )}
           </div>
-
-          {/* Right: Category Filter Pills */}
-          <div
-            className="ref-gallery-categories-strip"
-            role="group"
-            aria-label="Filter by category"
-          >
-            <button
-              type="button"
-              className={`ref-pill-chip ${
-                selectedCategory === "all" ? "active" : ""
-              }`}
-              onClick={() => setSelectedCategory("all")}
-            >
-              All
-            </button>
-            {bootstrapData.style_presets.map((preset) => (
-              <button
-                key={preset.id}
-                type="button"
-                className={`ref-pill-chip ${
-                  selectedCategory === preset.id ? "active" : ""
-                }`}
-                onClick={() => setSelectedCategory(preset.id)}
-              >
-                {preset.title.split(" (")[0]}
-              </button>
-            ))}
-          </div>
         </section>
 
-        {/* ==================== BOTTOM 85%: CARDS-ONLY PROJECTS GRID (SELECT FROM SQLITE) ==================== */}
+        {/* ==================== BOTTOM 85%: UNIFIED STUDIO & GOAL HARNESS CARDS GRID ==================== */}
         <div className="ref-projects-cards-grid">
           {!loading &&
-            filteredProjects.map((proj, projIdx) => {
-              const styleLabel =
-                !proj.style_id || proj.style_id === "none"
-                  ? "Custom"
-                  : bootstrapData.style_presets
-                      .find((s) => s.id === proj.style_id)
-                      ?.title.split(" (")[0] || proj.style_id;
-              const turnCount = Number(proj.turn_count || 0);
+            filteredItems.map((item, itemIdx) => {
+              const isHarnessItem = item.kind === "harness";
+              const count = item.roundOrTurnCount;
               const filledDots =
-                turnCount === 0 ? 0 : Math.min(6, Math.max(1, turnCount));
+                count === 0 ? 0 : Math.min(6, Math.max(1, count));
+              const hMission = item.harnessMission;
 
               return (
                 <article
-                  key={proj.id}
+                  key={`${item.kind}_${item.id}`}
                   className="ref-project-card"
-                  onClick={() => handleOpenProjectInStudio(proj)}
+                  onClick={() => handleOpenGalleryItem(item)}
                 >
                   {/* 1. TOP ROUNDED ARTWORK FRAME */}
-                  <div className="ref-project-card-image-frame">
-                    {proj.preview_image_url ? (
+                  <div
+                    className="ref-project-card-image-frame"
+                    style={{ position: "relative" }}
+                  >
+                    {item.previewImageUrl ? (
                       <img
-                        src={proj.preview_image_url}
-                        alt={proj.title}
+                        src={item.previewImageUrl}
+                        alt={item.title}
                         className="ref-project-card-img"
                       />
                     ) : (
                       <span className="ref-project-card-no-image">
-                        {turnCount === 0
+                        {isHarnessItem
+                          ? "Planned Goal Harness • Click to launch evolution"
+                          : count === 0
                           ? "New project • Click to start generating"
-                          : `No rendered preview • ${styleLabel}`}
+                          : "No rendered preview"}
+                      </span>
+                    )}
+
+                    <span
+                      style={{
+                        position: "absolute",
+                        top: "10px",
+                        left: "10px",
+                        padding: "4px 10px",
+                        borderRadius: "999px",
+                        fontSize: "12px",
+                        fontWeight: 700,
+                        letterSpacing: "0.02em",
+                        backgroundColor: isHarnessItem
+                          ? "#14213d"
+                          : "rgba(255, 255, 255, 0.92)",
+                        color: isHarnessItem ? "#fca311" : "#14213d",
+                        border: isHarnessItem
+                          ? "1px solid rgba(252, 163, 17, 0.45)"
+                          : "1px solid rgba(20, 33, 61, 0.14)",
+                        fontVariantNumeric: "tabular-nums",
+                      }}
+                    >
+                      {isHarnessItem
+                        ? `GOAL HARNESS • ${hMission?.solvedCount ?? 0}/${
+                            hMission?.deliverableCount ?? 1
+                          } SOLVED`
+                        : "STUDIO"}
+                    </span>
+
+                    {isHarnessItem && (hMission?.bestScore ?? 0) > 0 && (
+                      <span
+                        style={{
+                          position: "absolute",
+                          top: "10px",
+                          right: "10px",
+                          padding: "4px 10px",
+                          borderRadius: "999px",
+                          fontSize: "12px",
+                          fontWeight: 800,
+                          backgroundColor: "#fca311",
+                          color: "#14213d",
+                          fontVariantNumeric: "tabular-nums",
+                        }}
+                      >
+                        {hMission?.bestScore}/100
                       </span>
                     )}
                   </div>
 
-                  {/* 2. MIDDLE METADATA BLOCK (Matches reference card layout) */}
+                  {/* 2. MIDDLE METADATA BLOCK */}
                   <div className="ref-mura-card-body">
                     <div className="ref-mura-title-row">
                       <h2 className="ref-mura-card-title">
-                        {proj.title} #{String(projIdx + 1).padStart(2, "0")}
+                        {item.title} #{String(itemIdx + 1).padStart(2, "0")}
                       </h2>
                       <span className="ref-mura-card-price-tag">
-                        ({turnCount} {turnCount === 1 ? "round" : "rounds"})
+                        ({count} {count === 1 ? "round" : "rounds"})
                       </span>
                     </div>
 
                     <div className="ref-mura-kv-row">
-                      <span className="ref-mura-kv-label">Visual Style:</span>
-                      <span className="ref-mura-kv-value">{styleLabel}</span>
-                    </div>
-
-                    <div className="ref-mura-kv-row">
-                      <span className="ref-mura-kv-label">Interactions:</span>
+                      <span className="ref-mura-kv-label">
+                        {isHarnessItem ? "Evolution:" : "Interactions:"}
+                      </span>
                       <span
                         className="ref-mura-dots"
-                        aria-label={`${turnCount} interactions`}
+                        aria-label={`${count} rounds`}
                       >
                         {[0, 1, 2, 3, 4, 5].map((dotIdx) => (
                           <i
@@ -309,27 +455,27 @@ export default function ProjectsWorkspacePage() {
                     </div>
 
                     <p className="ref-project-card-prompt">
-                      {proj.latest_prompt || "No prompt recorded."}
+                      {item.promptOrGoal || "No prompt recorded."}
                     </p>
 
-                    {/* 3. BOTTOM ACTION PILLS ROW ([Solid Pill] [Outlined Pill]) */}
+                    {/* 3. BOTTOM ACTION PILLS ROW */}
                     <div className="ref-mura-actions-row">
                       <button
                         type="button"
                         className="ref-mura-btn-solid"
                         onClick={(e) => {
                           e.stopPropagation();
-                          handleOpenProjectInStudio(proj);
+                          handleOpenGalleryItem(item);
                         }}
                       >
-                        Open Studio
+                        {isHarnessItem ? "Open Harness" : "Open Studio"}
                       </button>
                       <button
                         type="button"
                         className="ref-mura-btn-outline danger"
-                        onClick={(e) => handlePromptDeleteProject(e, proj)}
-                        title="Remove project from Gallery"
-                        aria-label={`Remove project ${proj.title}`}
+                        onClick={(e) => handlePromptDeleteItem(e, item)}
+                        title="Remove from Gallery"
+                        aria-label={`Remove ${item.title}`}
                       >
                         <span>Remove</span>
                         <IconClose size={10} strokeWidth={2.1} />
@@ -340,37 +486,47 @@ export default function ProjectsWorkspacePage() {
               );
             })}
 
-          {!loading && filteredProjects.length === 0 && (
+          {!loading && filteredItems.length === 0 && (
             <div className="ref-gallery-empty-state">
               <strong className="ref-quad-blueprint-title">
-                {projects.length === 0
-                  ? "No projects in your Atelier yet"
-                  : "No projects match the current filter"}
+                {unifiedItems.length === 0
+                  ? "No projects or Goal Harness missions in your Atelier yet"
+                  : "No items match the current search or filter"}
               </strong>
               <span className="ref-quad-blueprint-desc">
-                {projects.length === 0
-                  ? "Create your first project in the Studio to explore variations with Gemini."
-                  : "Try searching for another term or clearing the category filter."}
+                {unifiedItems.length === 0
+                  ? "Create a project in the Studio or launch an autonomous Goal Harness mission."
+                  : "Try searching for another term or clearing the filter."}
               </span>
-              {projects.length === 0 ? (
-                <button
-                  type="button"
-                  className="ref-dark-pill-btn"
-                  onClick={() => router.push("/create")}
-                >
-                  <IconPlus size={12} strokeWidth={2.2} />
-                  <span>Open Studio & Create Project</span>
-                </button>
+              {unifiedItems.length === 0 ? (
+                <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+                  <button
+                    type="button"
+                    className="ref-dark-pill-btn"
+                    onClick={() => router.push("/create")}
+                  >
+                    <IconPlus size={12} strokeWidth={2.2} />
+                    <span>Open Studio</span>
+                  </button>
+                  <button
+                    type="button"
+                    className="ref-mura-btn-outline lg"
+                    onClick={() => router.push("/harness")}
+                  >
+                    <IconPlus size={12} strokeWidth={2.2} />
+                    <span>Open Goal Harness</span>
+                  </button>
+                </div>
               ) : (
                 <button
                   type="button"
                   className="ref-pill-chip active"
                   onClick={() => {
                     setSearchQuery("");
-                    setSelectedCategory("all");
+                    setFilterKind("all");
                   }}
                 >
-                  Clear Search & Categories
+                  Clear Filter
                 </button>
               )}
             </div>
@@ -378,16 +534,16 @@ export default function ProjectsWorkspacePage() {
         </div>
       </div>
 
-      {/* ==================== MODAL FOR PROJECT DELETION CONFIRMATION ==================== */}
-      {projectToDelete && (
+      {/* ==================== MODAL FOR DELETION CONFIRMATION ==================== */}
+      {itemToDelete && (
         <div
           className="ref-modal-backdrop"
           role="dialog"
           aria-modal="true"
           aria-labelledby="delete-project-modal-title"
           onClick={(e) => {
-            if (e.target === e.currentTarget && !isDeletingProject) {
-              setProjectToDelete(null);
+            if (e.target === e.currentTarget && !isDeletingItem) {
+              setItemToDelete(null);
             }
           }}
         >
@@ -397,24 +553,26 @@ export default function ProjectsWorkspacePage() {
                 id="delete-project-modal-title"
                 className="ref-soft-card-title"
               >
-                Remove Project
+                {itemToDelete.kind === "harness"
+                  ? "Remove Goal Harness Mission"
+                  : "Remove Project"}
               </strong>
               <button
                 type="button"
                 aria-label="Close modal"
                 className="ref-circle-icon-btn sm"
-                disabled={isDeletingProject}
-                onClick={() => setProjectToDelete(null)}
+                disabled={isDeletingItem}
+                onClick={() => setItemToDelete(null)}
               >
                 <IconClose size={12} />
               </button>
             </div>
 
             <div className="ref-delete-modal-project-row">
-              {projectToDelete.preview_image_url ? (
+              {itemToDelete.previewImageUrl ? (
                 <img
-                  src={projectToDelete.preview_image_url}
-                  alt={projectToDelete.title}
+                  src={itemToDelete.previewImageUrl}
+                  alt={itemToDelete.title}
                   className="ref-delete-modal-thumb"
                 />
               ) : (
@@ -422,24 +580,21 @@ export default function ProjectsWorkspacePage() {
               )}
               <div className="ref-delete-modal-meta">
                 <strong className="ref-delete-modal-project-name">
-                  {projectToDelete.title}
+                  {itemToDelete.title}
                 </strong>
                 <span className="ref-delete-modal-project-sub">
-                  {Number(projectToDelete.turn_count || 0)}{" "}
-                  {Number(projectToDelete.turn_count || 0) === 1
-                    ? "round"
-                    : "rounds"}{" "}
-                  •{" "}
-                  {bootstrapData.style_presets
-                    .find((s) => s.id === projectToDelete.style_id)
-                    ?.title.split(" (")[0] || projectToDelete.style_id}
+                  {itemToDelete.kind === "harness"
+                    ? "Goal Harness Mission"
+                    : "Studio Project"}{" "}
+                  • {itemToDelete.roundOrTurnCount}{" "}
+                  {itemToDelete.roundOrTurnCount === 1 ? "round" : "rounds"}
                 </span>
               </div>
             </div>
 
             <p className="ref-delete-modal-copy">
               Are you sure you want to remove{" "}
-              <strong>&ldquo;{projectToDelete.title}&rdquo;</strong> from your
+              <strong>&ldquo;{itemToDelete.title}&rdquo;</strong> from your
               Gallery? Exported PNG images inside{" "}
               <code>{imagesOutputDir}</code> will remain preserved on disk.
             </p>
@@ -448,8 +603,8 @@ export default function ProjectsWorkspacePage() {
               <button
                 type="button"
                 className="ref-mura-btn-outline lg"
-                disabled={isDeletingProject}
-                onClick={() => setProjectToDelete(null)}
+                disabled={isDeletingItem}
+                onClick={() => setItemToDelete(null)}
               >
                 Cancel
               </button>
@@ -457,12 +612,12 @@ export default function ProjectsWorkspacePage() {
                 type="button"
                 id="confirm-delete-project-btn"
                 className="ref-dark-pill-btn danger"
-                disabled={isDeletingProject}
-                onClick={() => void handleConfirmDeleteProject()}
+                disabled={isDeletingItem}
+                onClick={() => void handleConfirmDeleteItem()}
               >
                 <IconTrash size={14} />
                 <span>
-                  {isDeletingProject ? "Removing..." : "Remove Project"}
+                  {isDeletingItem ? "Removing..." : "Remove from Gallery"}
                 </span>
               </button>
             </div>

@@ -210,7 +210,7 @@ export async function toggleTurnPublish(
       role: "assistant",
       raw_idea: "",
       master_prompt: "",
-      style_id: "editorial-anime",
+      style_id: "",
       modifiers: [],
       is_published: Boolean(res.is_published),
     };
@@ -237,7 +237,7 @@ export async function fetchUserBucketGallery(
       edit_instruction: item.edit_instruction
         ? String(item.edit_instruction)
         : undefined,
-      style_id: String(item.style_id || "editorial-anime"),
+      style_id: String(item.style_id || ""),
       modifiers: Array.isArray(item.modifiers) ? (item.modifiers as string[]) : [],
       aspect_ratio: String(item.aspect_ratio || "3:4"),
       image_bucket_key: String(item.image_bucket_key || ""),
@@ -268,7 +268,7 @@ export async function fetchPublicGallery(): Promise<BucketGalleryItem[]> {
       edit_instruction: item.edit_instruction
         ? String(item.edit_instruction)
         : undefined,
-      style_id: String(item.style_id || "editorial-anime"),
+      style_id: String(item.style_id || ""),
       modifiers: Array.isArray(item.modifiers) ? (item.modifiers as string[]) : [],
       aspect_ratio: String(item.aspect_ratio || "3:4"),
       image_bucket_key: String(item.image_bucket_key || ""),

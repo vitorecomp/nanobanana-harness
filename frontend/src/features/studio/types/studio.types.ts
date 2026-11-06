@@ -63,14 +63,6 @@ export interface GenerateNanoBananaResult {
   mode: "direct-api" | "simulation";
 }
 
-export interface StylePreset {
-  id: string;
-  title: string;
-  description: string;
-  prompt_tokens: string;
-  aspect_ratio: string;
-}
-
 export interface ModifierOption {
   id: string;
   label: string;
@@ -97,7 +89,6 @@ export interface QuickIterationChip {
 }
 
 export interface BootstrapResponse {
-  style_presets: StylePreset[];
   modifier_categories: ModifierCategory[];
   interactive_workflow_steps: WorkflowStepInfo[];
   quick_iteration_chips: QuickIterationChip[];
@@ -165,7 +156,6 @@ export interface FlowStepParameterSnapshot {
   flowMode: CreationFlowMode;
   aspectRatio: string;
   matrixAxis?: ExplorationMatrixAxis;
-  styleId: string;
   modifierIds: string[];
   preservationLocks: PreservationLocks;
   imageCount?: number;

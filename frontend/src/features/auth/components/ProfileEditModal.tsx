@@ -8,6 +8,11 @@ import {
   DEFAULT_VARIATION_SYSTEM_PROMPT,
 } from "@/features/studio";
 import {
+  DEFAULT_HARNESS_CRITIC_PROMPT,
+  DEFAULT_HARNESS_PLANNER_PROMPT,
+  DEFAULT_HARNESS_REFINER_PROMPT,
+} from "@/features/harness";
+import {
   IconClose,
   IconRefresh,
 } from "@/shared/components/icons/AtelierIcons";
@@ -33,6 +38,9 @@ export default function ProfileEditModal({
     setImagesOutputDir,
     enhanceSystemPrompt,
     variationSystemPrompt,
+    harnessPlannerPrompt,
+    harnessCriticPrompt,
+    harnessRefinerPrompt,
     saveAiSystemPrompts,
   } = useStudioSession();
 
@@ -43,6 +51,12 @@ export default function ProfileEditModal({
   const [variationPromptInput, setVariationPromptInput] = useState<string>(
     variationSystemPrompt
   );
+  const [plannerPromptInput, setPlannerPromptInput] =
+    useState<string>(harnessPlannerPrompt);
+  const [criticPromptInput, setCriticPromptInput] =
+    useState<string>(harnessCriticPrompt);
+  const [refinerPromptInput, setRefinerPromptInput] =
+    useState<string>(harnessRefinerPrompt);
   const [isSaving, setIsSaving] = useState<boolean>(false);
 
   useEffect(() => {
@@ -50,11 +64,17 @@ export default function ProfileEditModal({
     setDirInput(imagesOutputDir);
     setEnhancePromptInput(enhanceSystemPrompt);
     setVariationPromptInput(variationSystemPrompt);
+    setPlannerPromptInput(harnessPlannerPrompt);
+    setCriticPromptInput(harnessCriticPrompt);
+    setRefinerPromptInput(harnessRefinerPrompt);
   }, [
     isOpen,
     imagesOutputDir,
     enhanceSystemPrompt,
     variationSystemPrompt,
+    harnessPlannerPrompt,
+    harnessCriticPrompt,
+    harnessRefinerPrompt,
   ]);
 
   useEffect(() => {
@@ -72,6 +92,12 @@ export default function ProfileEditModal({
     enhancePromptInput.trim() !== DEFAULT_ENHANCE_SYSTEM_PROMPT.trim();
   const isVariationCustom =
     variationPromptInput.trim() !== DEFAULT_VARIATION_SYSTEM_PROMPT.trim();
+  const isPlannerCustom =
+    plannerPromptInput.trim() !== DEFAULT_HARNESS_PLANNER_PROMPT.trim();
+  const isCriticCustom =
+    criticPromptInput.trim() !== DEFAULT_HARNESS_CRITIC_PROMPT.trim();
+  const isRefinerCustom =
+    refinerPromptInput.trim() !== DEFAULT_HARNESS_REFINER_PROMPT.trim();
 
   const handleSaveConfig = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -83,6 +109,9 @@ export default function ProfileEditModal({
         saveAiSystemPrompts({
           enhanceSystemPrompt: enhancePromptInput,
           variationSystemPrompt: variationPromptInput,
+          harnessPlannerPrompt: plannerPromptInput,
+          harnessCriticPrompt: criticPromptInput,
+          harnessRefinerPrompt: refinerPromptInput,
         }),
       ]);
       onClose();
@@ -233,7 +262,11 @@ export default function ProfileEditModal({
                 </span>
               </div>
 
-              {(isEnhanceCustom || isVariationCustom) && (
+              {(isEnhanceCustom ||
+                isVariationCustom ||
+                isPlannerCustom ||
+                isCriticCustom ||
+                isRefinerCustom) && (
                 <button
                   type="button"
                   id="settings-restore-all-prompts-btn"
@@ -241,6 +274,9 @@ export default function ProfileEditModal({
                   onClick={() => {
                     setEnhancePromptInput(DEFAULT_ENHANCE_SYSTEM_PROMPT);
                     setVariationPromptInput(DEFAULT_VARIATION_SYSTEM_PROMPT);
+                    setPlannerPromptInput(DEFAULT_HARNESS_PLANNER_PROMPT);
+                    setCriticPromptInput(DEFAULT_HARNESS_CRITIC_PROMPT);
+                    setRefinerPromptInput(DEFAULT_HARNESS_REFINER_PROMPT);
                   }}
                 >
                   <IconRefresh size={12} />
@@ -293,8 +329,8 @@ export default function ProfileEditModal({
                 <span className="ref-settings-helper-note">
                   Used in Step 02 when &ldquo;Enhance prompt with AI&rdquo; is
                   enabled. Supports optional{" "}
-                  <code>{"{{prompt}}"}</code>, <code>{"{{style}}"}</code>,{" "}
-                  <code>{"{{modifiers}}"}</code>.
+                  <code>{"{{prompt}}"}</code>, <code>{"{{modifiers}}"}</code>,{" "}
+                  <code>{"{{aspect_ratio}}"}</code>.
                 </span>
               </div>
 
@@ -342,6 +378,146 @@ export default function ProfileEditModal({
                   Used in Step 03 when &ldquo;Vary prompt using AI&rdquo; is
                   enabled for 2–8 images. Supports optional{" "}
                   <code>{"{{count}}"}</code>, <code>{"{{prompt}}"}</code>.
+                </span>
+              </div>
+            </div>
+
+            {/* HARNESS AGENT PROMPTS (PLANNER, CRITIC, TRACE REFINER) */}
+            <div className="ref-settings-three-col">
+              {/* PARAMETER 3: HARNESS PLANNER PROMPT */}
+              <div className="ref-settings-field-col">
+                <div className="ref-settings-prompt-label-bar">
+                  <div className="ref-settings-prompt-label-left">
+                    <label
+                      htmlFor="settings-harness-planner-textarea"
+                      className="ref-field-label ref-no-margin"
+                    >
+                      Harness Planner Prompt
+                    </label>
+                    <span
+                      className={`ref-settings-status-badge ${
+                        isPlannerCustom ? "is-custom" : ""
+                      }`}
+                    >
+                      {isPlannerCustom ? "Custom" : "Default"}
+                    </span>
+                  </div>
+
+                  <button
+                    type="button"
+                    className="ref-settings-reset-link"
+                    disabled={!isPlannerCustom}
+                    onClick={() =>
+                      setPlannerPromptInput(DEFAULT_HARNESS_PLANNER_PROMPT)
+                    }
+                  >
+                    Reset
+                  </button>
+                </div>
+
+                <textarea
+                  id="settings-harness-planner-textarea"
+                  className="ref-params-textarea ref-settings-prompt-textarea"
+                  rows={5}
+                  value={plannerPromptInput}
+                  onChange={(e) => setPlannerPromptInput(e.target.value)}
+                  placeholder="System prompt for Goal Harness Planner agent..."
+                />
+
+                <span className="ref-settings-helper-note">
+                  Decomposes goals into deliverables, pack invariants & weighted
+                  rubric.
+                </span>
+              </div>
+
+              {/* PARAMETER 4: HARNESS CRITIC PROMPT */}
+              <div className="ref-settings-field-col">
+                <div className="ref-settings-prompt-label-bar">
+                  <div className="ref-settings-prompt-label-left">
+                    <label
+                      htmlFor="settings-harness-critic-textarea"
+                      className="ref-field-label ref-no-margin"
+                    >
+                      Harness Critic Prompt
+                    </label>
+                    <span
+                      className={`ref-settings-status-badge ${
+                        isCriticCustom ? "is-custom" : ""
+                      }`}
+                    >
+                      {isCriticCustom ? "Custom" : "Default"}
+                    </span>
+                  </div>
+
+                  <button
+                    type="button"
+                    className="ref-settings-reset-link"
+                    disabled={!isCriticCustom}
+                    onClick={() =>
+                      setCriticPromptInput(DEFAULT_HARNESS_CRITIC_PROMPT)
+                    }
+                  >
+                    Reset
+                  </button>
+                </div>
+
+                <textarea
+                  id="settings-harness-critic-textarea"
+                  className="ref-params-textarea ref-settings-prompt-textarea"
+                  rows={5}
+                  value={criticPromptInput}
+                  onChange={(e) => setCriticPromptInput(e.target.value)}
+                  placeholder="System prompt for Goal Harness Multimodal Critic..."
+                />
+
+                <span className="ref-settings-helper-note">
+                  Executes Hard-Failure Gate, rubric scoring (0–100) &
+                  complaints.
+                </span>
+              </div>
+
+              {/* PARAMETER 5: HARNESS REFINER PROMPT */}
+              <div className="ref-settings-field-col">
+                <div className="ref-settings-prompt-label-bar">
+                  <div className="ref-settings-prompt-label-left">
+                    <label
+                      htmlFor="settings-harness-refiner-textarea"
+                      className="ref-field-label ref-no-margin"
+                    >
+                      Harness Refiner Prompt
+                    </label>
+                    <span
+                      className={`ref-settings-status-badge ${
+                        isRefinerCustom ? "is-custom" : ""
+                      }`}
+                    >
+                      {isRefinerCustom ? "Custom" : "Default"}
+                    </span>
+                  </div>
+
+                  <button
+                    type="button"
+                    className="ref-settings-reset-link"
+                    disabled={!isRefinerCustom}
+                    onClick={() =>
+                      setRefinerPromptInput(DEFAULT_HARNESS_REFINER_PROMPT)
+                    }
+                  >
+                    Reset
+                  </button>
+                </div>
+
+                <textarea
+                  id="settings-harness-refiner-textarea"
+                  className="ref-params-textarea ref-settings-prompt-textarea"
+                  rows={5}
+                  value={refinerPromptInput}
+                  onChange={(e) => setRefinerPromptInput(e.target.value)}
+                  placeholder="System prompt for TRACE attribution & prompt refiner..."
+                />
+
+                <span className="ref-settings-helper-note">
+                  Diagnoses TRACE root causes & evolves next-round prompts.
                 </span>
               </div>
             </div>

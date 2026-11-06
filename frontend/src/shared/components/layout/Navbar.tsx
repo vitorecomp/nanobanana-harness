@@ -21,6 +21,7 @@ export default function Navbar() {
     hasKeyInRam,
     rememberKeyInVault,
     triggerNewProject,
+    activeHarnessMissionId,
     isSettingsModalOpen,
     setSettingsModalOpen,
   } = useStudioSession();
@@ -34,7 +35,8 @@ export default function Navbar() {
   const isProjects =
     pathname === "/gallery" || pathname?.startsWith("/projects");
   const isModifiers = pathname?.startsWith("/modifiers");
-  const isCreate = !isProjects && !isModifiers;
+  const isHarness = pathname?.startsWith("/harness");
+  const isCreate = !isProjects && !isModifiers && !isHarness;
 
   useEffect(() => {
     if (!isNewProjectModalOpen) return;
@@ -159,6 +161,38 @@ export default function Navbar() {
               />
             </svg>
             {!collapsed && <span>Studio</span>}
+          </Link>
+
+          <Link
+            href={
+              activeHarnessMissionId
+                ? `/harness?missionId=${encodeURIComponent(
+                    activeHarnessMissionId
+                  )}`
+                : "/harness"
+            }
+            id="nav-link-harness"
+            className={`ref-sidebar-nav-item ${isHarness ? "active" : ""}`}
+            title="Goal-Driven Agent Harness (Planner → Generator → Critic → TRACE Refiner)"
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+              <circle
+                cx="12"
+                cy="12"
+                r="8.5"
+                stroke="currentColor"
+                strokeWidth="2"
+              />
+              <circle
+                cx="12"
+                cy="12"
+                r="4.2"
+                stroke="#fca311"
+                strokeWidth="2"
+              />
+              <circle cx="12" cy="12" r="1.5" fill="currentColor" />
+            </svg>
+            {!collapsed && <span>Goal Harness</span>}
           </Link>
 
           <Link

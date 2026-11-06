@@ -185,7 +185,7 @@ export async function localDbCreateConversation(params: {
   }>("tauri_create_conversation", {
     userId: params.user_id,
     title: params.title,
-    styleId: params.style_id || "editorial-anime",
+    styleId: params.style_id || "",
   });
   if (tauriRes) return tauriRes;
 
@@ -208,7 +208,7 @@ export async function localDbCreateConversation(params: {
     id: `conv_${Date.now()}`,
     user_id: params.user_id,
     title: params.title || "Untitled Project",
-    style_id: params.style_id || "editorial-anime",
+    style_id: params.style_id || "",
     turn_count: 0,
     latest_prompt: null,
     preview_image_url: null,
@@ -362,7 +362,7 @@ export async function localDbSaveConversationTurn(
       rawIdea: payload.raw_idea,
       masterPrompt: payload.master_prompt,
       editInstruction: payload.edit_instruction || null,
-      styleId: payload.style_id || "editorial-anime",
+      styleId: payload.style_id || "",
       modifiers: payload.modifiers || [],
       completenessScore: payload.completeness_score ?? 85,
       imageDataUrl: payload.image_data_url || null,
@@ -389,7 +389,7 @@ export async function localDbSaveConversationTurn(
     raw_idea: payload.raw_idea,
     master_prompt: payload.master_prompt,
     edit_instruction: payload.edit_instruction,
-    style_id: payload.style_id || "editorial-anime",
+    style_id: payload.style_id || "",
     modifiers: payload.modifiers || [],
     completeness_score: payload.completeness_score ?? 85,
     image_bucket_key: null,
@@ -527,9 +527,17 @@ export async function vaultSetModifierCategories<T = unknown>(
   return res || categories;
 }
 
+import type {
+  HarnessMissionRecord,
+  HarnessMissionSummary,
+} from "@/features/harness/types/harness.types";
+
 export interface PersistedAiPromptSettings {
   enhanceSystemPrompt: string | null;
   variationSystemPrompt: string | null;
+  harnessPlannerPrompt: string | null;
+  harnessCriticPrompt: string | null;
+  harnessRefinerPrompt: string | null;
 }
 
 const AI_PROMPTS_LOCAL_KEY = "nanobanana_ai_prompts_v1";
@@ -540,9 +548,19 @@ export async function vaultGetAiPrompts(): Promise<PersistedAiPromptSettings> {
   );
   if (
     dbRes &&
-    (dbRes.enhanceSystemPrompt !== null || dbRes.variationSystemPrompt !== null)
+    (dbRes.enhanceSystemPrompt !== null ||
+      dbRes.variationSystemPrompt !== null ||
+      dbRes.harnessPlannerPrompt !== null ||
+      dbRes.harnessCriticPrompt !== null ||
+      dbRes.harnessRefinerPrompt !== null)
   ) {
-    return dbRes;
+    return {
+      enhanceSystemPrompt: dbRes.enhanceSystemPrompt || null,
+      variationSystemPrompt: dbRes.variationSystemPrompt || null,
+      harnessPlannerPrompt: dbRes.harnessPlannerPrompt || null,
+      harnessCriticPrompt: dbRes.harnessCriticPrompt || null,
+      harnessRefinerPrompt: dbRes.harnessRefinerPrompt || null,
+    };
   }
   if (typeof window !== "undefined") {
     try {
@@ -552,6 +570,9 @@ export async function vaultGetAiPrompts(): Promise<PersistedAiPromptSettings> {
         return {
           enhanceSystemPrompt: parsed.enhanceSystemPrompt || null,
           variationSystemPrompt: parsed.variationSystemPrompt || null,
+          harnessPlannerPrompt: parsed.harnessPlannerPrompt || null,
+          harnessCriticPrompt: parsed.harnessCriticPrompt || null,
+          harnessRefinerPrompt: parsed.harnessRefinerPrompt || null,
         };
       }
     } catch {
@@ -561,18 +582,28 @@ export async function vaultGetAiPrompts(): Promise<PersistedAiPromptSettings> {
   return {
     enhanceSystemPrompt: null,
     variationSystemPrompt: null,
+    harnessPlannerPrompt: null,
+    harnessCriticPrompt: null,
+    harnessRefinerPrompt: null,
   };
 }
 
 export async function vaultSetAiPrompts(params: {
   enhanceSystemPrompt: string;
   variationSystemPrompt: string;
+  harnessPlannerPrompt?: string;
+  harnessCriticPrompt?: string;
+  harnessRefinerPrompt?: string;
 }): Promise<PersistedAiPromptSettings> {
+  const cleanEnh = params.enhanceSystemPrompt.trim();
+  const cleanVar = params.variationSystemPrompt.trim();
+  const cleanPlan = (params.harnessPlannerPrompt ?? "").trim();
+  const cleanCrit = (params.harnessCriticPrompt ?? "").trim();
+  const cleanRef = (params.harnessRefinerPrompt ?? "").trim();
+
   if (typeof window !== "undefined") {
     try {
-      const cleanEnh = params.enhanceSystemPrompt.trim();
-      const cleanVar = params.variationSystemPrompt.trim();
-      if (!cleanEnh && !cleanVar) {
+      if (!cleanEnh && !cleanVar && !cleanPlan && !cleanCrit && !cleanRef) {
         window.localStorage.removeItem(AI_PROMPTS_LOCAL_KEY);
       } else {
         window.localStorage.setItem(
@@ -580,6 +611,9 @@ export async function vaultSetAiPrompts(params: {
           JSON.stringify({
             enhanceSystemPrompt: cleanEnh || null,
             variationSystemPrompt: cleanVar || null,
+            harnessPlannerPrompt: cleanPlan || null,
+            harnessCriticPrompt: cleanCrit || null,
+            harnessRefinerPrompt: cleanRef || null,
           })
         );
       }
@@ -590,14 +624,61 @@ export async function vaultSetAiPrompts(params: {
 
   const dbRes = await querySqliteApi<PersistedAiPromptSettings>(
     "vault_set_ai_prompts",
-    params
+    {
+      enhanceSystemPrompt: cleanEnh,
+      variationSystemPrompt: cleanVar,
+      harnessPlannerPrompt: cleanPlan,
+      harnessCriticPrompt: cleanCrit,
+      harnessRefinerPrompt: cleanRef,
+    }
   );
   return (
     dbRes || {
-      enhanceSystemPrompt: params.enhanceSystemPrompt.trim() || null,
-      variationSystemPrompt: params.variationSystemPrompt.trim() || null,
+      enhanceSystemPrompt: cleanEnh || null,
+      variationSystemPrompt: cleanVar || null,
+      harnessPlannerPrompt: cleanPlan || null,
+      harnessCriticPrompt: cleanCrit || null,
+      harnessRefinerPrompt: cleanRef || null,
     }
   );
+}
+
+export async function localDbListHarnessMissions(
+  userId: string
+): Promise<HarnessMissionSummary[]> {
+  const res = await querySqliteApi<HarnessMissionSummary[]>(
+    "list_harness_missions",
+    { userId }
+  );
+  return res || [];
+}
+
+export async function localDbGetHarnessMission(
+  missionId: string
+): Promise<HarnessMissionRecord | null> {
+  return await querySqliteApi<HarnessMissionRecord | null>(
+    "get_harness_mission",
+    { missionId }
+  );
+}
+
+export async function localDbSaveHarnessMission(
+  mission: HarnessMissionRecord
+): Promise<HarnessMissionRecord> {
+  const res = await querySqliteApi<HarnessMissionRecord>(
+    "save_harness_mission",
+    { mission }
+  );
+  return res || mission;
+}
+
+export async function localDbDeleteHarnessMission(
+  missionId: string
+): Promise<boolean> {
+  const res = await querySqliteApi<boolean>("delete_harness_mission", {
+    missionId,
+  });
+  return Boolean(res);
 }
 
 export async function minimizeAppWindow(): Promise<void> {

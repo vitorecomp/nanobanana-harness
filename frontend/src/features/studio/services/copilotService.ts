@@ -13,53 +13,6 @@ import {
 } from "../types/studio.types";
 
 export const DEFAULT_BOOTSTRAP_DATA: BootstrapResponse = {
-  style_presets: [
-    {
-      id: "editorial-anime",
-      title: "Editorial Anime (Crypko)",
-      description:
-        "High-precision cel-shaded linework with Japanese editorial art direction, crisp ink contours, and high-contrast color blocks.",
-      prompt_tokens:
-        "high-craft editorial anime illustration, crisp cel-shaded linework, graphic flat shadow blocks, warm cream paper texture, dynamic character design",
-      aspect_ratio: "3:4",
-    },
-    {
-      id: "analog-35mm",
-      title: "35mm Analog Photography",
-      description:
-        "Organic Kodak Portra 400 film grain, luminous 35mm f/1.4 optics, natural depth of field, and rich cinematic color grading.",
-      prompt_tokens:
-        "35mm analog film photography, Kodak Portra 400 color science, natural halation, shallow depth of field f/1.8, authentic street documentary framing",
-      aspect_ratio: "4:3",
-    },
-    {
-      id: "neo-brutalist",
-      title: "Neo-Brutalist Graphic Poster",
-      description:
-        "Bold Swiss grid geometry, high-contrast typography, flat ink planes, and acid-yellow (#F2FA3C) accents over warm cream.",
-      prompt_tokens:
-        "swiss neo-brutalist graphic illustration, bold carbon black ink outlines, acid yellow #F2FA3C accents on warm bone paper, architectural framing",
-      aspect_ratio: "1:1",
-    },
-    {
-      id: "cyberpunk-3d",
-      title: "Cyberpunk 3D Concept Render",
-      description:
-        "Dense futuristic atmosphere with volumetric lighting, wet surface reflections, and industrial techwear design.",
-      prompt_tokens:
-        "cinematic sci-fi concept art, volumetric atmospheric lighting, utilitarian techwear details, anamorphic lens flare, high dynamic range",
-      aspect_ratio: "16:9",
-    },
-    {
-      id: "botanical-watercolor",
-      title: "Botanical Watercolor & Ink",
-      description:
-        "Translucent mineral pigment washes paired with fine technical dip-pen ink linework on cold-pressed cotton paper.",
-      prompt_tokens:
-        "botanical architectural watercolor with fine technical pen ink linework, cold-press cotton paper texture, translucent mineral pigments",
-      aspect_ratio: "3:4",
-    },
-  ],
   modifier_categories: [
     {
       id: "camera",
@@ -252,15 +205,11 @@ export const DEFAULT_BOOTSTRAP_DATA: BootstrapResponse = {
 
 export function buildLocalFallbackAnalysis(
   idea: string,
-  styleId: string,
   modifiers: string[]
 ): AnalyzePromptResponse {
   const cleanIdea =
     idea.trim() ||
     "A futuristic urban explorer with aviator goggles walking down a sunlit street";
-  const style =
-    DEFAULT_BOOTSTRAP_DATA.style_presets.find((s) => s.id === styleId) ||
-    DEFAULT_BOOTSTRAP_DATA.style_presets[0];
 
   const allOptions = DEFAULT_BOOTSTRAP_DATA.modifier_categories.flatMap(
     (c) => c.options
@@ -270,7 +219,7 @@ export function buildLocalFallbackAnalysis(
     return found ? found.token : m;
   });
 
-  const detected = ["subject", "style"];
+  const detected = ["subject"];
   const missing: string[] = [];
 
   const lower = (cleanIdea + " " + resolvedTokens.join(" ")).toLowerCase();
@@ -316,7 +265,7 @@ export function buildLocalFallbackAnalysis(
 
   const modifierSuffix =
     resolvedTokens.length > 0 ? `, ${resolvedTokens.join(", ")}` : "";
-  const masterPrompt = `${cleanIdea}. Style: ${style.prompt_tokens}${modifierSuffix}, sharp focus, cohesive color grading, masterpiece composition.`;
+  const masterPrompt = `${cleanIdea}${modifierSuffix}, sharp focus, cohesive color grading, masterpiece composition.`;
 
   return {
     completeness_score: score,
@@ -399,22 +348,22 @@ export function buildLocalFallbackAnalysis(
       {
         id: "var-editorial",
         title: "Flagship Editorial Cover",
-        focus: "Crypko-inspired graphic composition and crisp ink contrast",
-        full_prompt: `${cleanIdea}, ${style.prompt_tokens}${modifierSuffix}, bold ink linework, warm bone backdrop #E9E7DF, acid-yellow #F2FA3C graphic accents, magazine cover framing.`,
+        focus: "Graphic composition and crisp contrast",
+        full_prompt: `${cleanIdea}${modifierSuffix}, bold linework, warm bone backdrop #E9E7DF, acid-yellow #F2FA3C graphic accents, magazine cover framing.`,
         recommended_aspect_ratio: "3:4",
       },
       {
         id: "var-cinematic",
         title: "Cinematic Street Narrative",
         focus: "Sunlit urban avenue depth and atmospheric perspective",
-        full_prompt: `${cleanIdea}, wide 35mm street perspective, ${style.prompt_tokens}${modifierSuffix}, pastel teal sky, sunlit architectural facades, dynamic walking pose, rich cel-shaded shadows.`,
+        full_prompt: `${cleanIdea}, wide 35mm street perspective${modifierSuffix}, pastel teal sky, sunlit architectural facades, dynamic walking pose, rich shadows.`,
         recommended_aspect_ratio: "16:9",
       },
       {
         id: "var-closeup",
         title: "Intimate Character Close-Up (85mm)",
         focus: "Expressive gaze, protective eyewear, and garment textures",
-        full_prompt: `Intimate 85mm close-up portrait of ${cleanIdea}, ${style.prompt_tokens}${modifierSuffix}, detailed expressive eyes, utility collar and goggles, crisp ink contours.`,
+        full_prompt: `Intimate 85mm close-up portrait of ${cleanIdea}${modifierSuffix}, detailed expressive eyes, utility collar and goggles, crisp contours.`,
         recommended_aspect_ratio: "1:1",
       },
     ],
@@ -434,7 +383,6 @@ export async function fetchBootstrap(): Promise<{
 
 export async function analyzeWithCopilot(params: {
   idea: string;
-  style_id: string;
   modifiers: string[];
   step?: number;
 }): Promise<{ data: AnalyzePromptResponse; online: boolean }> {
@@ -443,7 +391,6 @@ export async function analyzeWithCopilot(params: {
       "tauri_analyze_prompt",
       {
         idea: params.idea,
-        styleId: params.style_id,
         modifiers: params.modifiers,
       }
     );
@@ -455,11 +402,7 @@ export async function analyzeWithCopilot(params: {
   }
 
   return {
-    data: buildLocalFallbackAnalysis(
-      params.idea,
-      params.style_id,
-      params.modifiers
-    ),
+    data: buildLocalFallbackAnalysis(params.idea, params.modifiers),
     online: true,
   };
 }
@@ -467,7 +410,6 @@ export async function analyzeWithCopilot(params: {
 export async function refineWithCopilot(params: {
   current_prompt: string;
   instruction: string;
-  style_id?: string;
   modifiers?: string[];
 }): Promise<{ data: RefinePromptResponse; online: boolean }> {
   try {
