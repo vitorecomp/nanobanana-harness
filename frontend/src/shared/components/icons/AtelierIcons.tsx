@@ -333,3 +333,28 @@ export function IconDna({
     </svg>
   );
 }
+
+export function IconTrash({
+  size = 14,
+  strokeWidth = 1.75,
+  className,
+}: AtelierIconProps) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 16 16"
+      fill="none"
+      aria-hidden="true"
+      className={className}
+    >
+      <path
+        d="M2.75 4.25H13.25M6.25 4.25V2.75C6.25 2.34 6.59 2 7 2H9C9.41 2 9.75 2.34 9.75 2.75V4.25M4 4.25L4.65 12.85C4.71 13.5 5.25 14 5.9 14H10.1C10.75 14 11.29 13.5 11.35 12.85L12 4.25M6.75 7V11.25M9.25 7V11.25"
+        stroke="currentColor"
+        strokeWidth={strokeWidth}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}

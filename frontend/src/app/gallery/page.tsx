@@ -4,7 +4,7 @@ import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { useStudioSession } from "@/core/context/StudioSessionContext";
 import { LOCAL_DEV_USER } from "@/features/auth";
-import { IconClose, IconPlus } from "@/shared";
+import { IconClose, IconPlus, IconTrash } from "@/shared";
 import {
   SavedConversationSummary,
   deleteConversation,
@@ -13,7 +13,15 @@ import {
 
 export default function ProjectsWorkspacePage() {
   const router = useRouter();
-  const { user, bootstrapData, setPendingRemix } = useStudioSession();
+  const {
+    user,
+    bootstrapData,
+    setPendingRemix,
+    activeProjectId,
+    setActiveProjectId,
+    setActiveProjectTitle,
+    imagesOutputDir,
+  } = useStudioSession();
   const activeUser = user || LOCAL_DEV_USER;
 
   const [projects, setProjects] = useState<SavedConversationSummary[]>([]);
@@ -21,7 +29,9 @@ export default function ProjectsWorkspacePage() {
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [selectedCategory, setSelectedCategory] = useState<string>("all");
   const [galleryNotice, setGalleryNotice] = useState<string | null>(null);
-  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [projectToDelete, setProjectToDelete] =
+    useState<SavedConversationSummary | null>(null);
+  const [isDeletingProject, setIsDeletingProject] = useState<boolean>(false);
 
   useEffect(() => {
     if (!galleryNotice) return;
@@ -30,10 +40,15 @@ export default function ProjectsWorkspacePage() {
   }, [galleryNotice]);
 
   useEffect(() => {
-    if (!confirmDeleteId) return;
-    const timer = window.setTimeout(() => setConfirmDeleteId(null), 4000);
-    return () => window.clearTimeout(timer);
-  }, [confirmDeleteId]);
+    if (!projectToDelete) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && !isDeletingProject) {
+        setProjectToDelete(null);
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [projectToDelete, isDeletingProject]);
 
   const loadProjectsFromDb = useCallback(async () => {
     setLoading(true);
@@ -71,22 +86,46 @@ export default function ProjectsWorkspacePage() {
     router.push("/create");
   };
 
-  const handleDeleteProject = async (
+  const handlePromptDeleteProject = (
     e: React.MouseEvent,
     proj: SavedConversationSummary
   ) => {
     e.stopPropagation();
-    if (confirmDeleteId !== proj.id) {
-      setConfirmDeleteId(proj.id);
-      return;
-    }
-    setConfirmDeleteId(null);
-    const ok = await deleteConversation(proj.id);
-    if (ok) {
-      setProjects((prev) => prev.filter((p) => p.id !== proj.id));
-      setGalleryNotice(
-        `✓ "${proj.title}" removed from Gallery • PNG files preserved in ~/Pictures/nanobanana/`
-      );
+    setProjectToDelete(proj);
+  };
+
+  const handleConfirmDeleteProject = async () => {
+    if (!projectToDelete || isDeletingProject) return;
+    const target = projectToDelete;
+    setIsDeletingProject(true);
+    try {
+      const ok = await deleteConversation(target.id);
+      if (ok) {
+        setProjects((prev) => prev.filter((p) => p.id !== target.id));
+        if (activeProjectId === target.id) {
+          setActiveProjectId(null);
+          setActiveProjectTitle("New Project");
+          setPendingRemix(null);
+        }
+        if (typeof window !== "undefined") {
+          try {
+            window.localStorage.removeItem(
+              `nanobanana_flow_meta_v2:${target.id}`
+            );
+            window.localStorage.removeItem(
+              `nanobanana_flow_meta_v1:${target.id}`
+            );
+          } catch {
+            // Ignore storage access errors
+          }
+        }
+        setProjectToDelete(null);
+        setGalleryNotice(
+          `✓ "${target.title}" removed from Gallery • PNG files preserved in ${imagesOutputDir}`
+        );
+      }
+    } finally {
+      setIsDeletingProject(false);
     }
   };
 
@@ -281,40 +320,14 @@ export default function ProjectsWorkspacePage() {
                       </button>
                       <button
                         type="button"
-                        className={`ref-mura-btn-outline ${
-                          confirmDeleteId === proj.id
-                            ? "danger-confirm"
-                            : "danger"
-                        }`}
-                        onClick={(e) => handleDeleteProject(e, proj)}
-                        title="Remove project from Gallery (keeps PNG files in ~/Pictures/nanobanana)"
-                        aria-label={
-                          confirmDeleteId === proj.id
-                            ? `Confirm removing project ${proj.title}`
-                            : `Remove project ${proj.title}`
-                        }
+                        className="ref-mura-btn-outline danger"
+                        onClick={(e) => handlePromptDeleteProject(e, proj)}
+                        title="Remove project from Gallery"
+                        aria-label={`Remove project ${proj.title}`}
                       >
-                        {confirmDeleteId === proj.id ? (
-                          "Confirm Remove?"
-                        ) : (
-                          <>
-                            <span>Remove</span>
-                            <IconClose size={10} strokeWidth={2.1} />
-                          </>
-                        )}
+                        <span>Remove</span>
+                        <IconClose size={10} strokeWidth={2.1} />
                       </button>
-                      {confirmDeleteId === proj.id && (
-                        <button
-                          type="button"
-                          className="ref-mura-btn-outline"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setConfirmDeleteId(null);
-                          }}
-                        >
-                          Cancel
-                        </button>
-                      )}
                     </div>
                   </div>
                 </article>
@@ -330,7 +343,7 @@ export default function ProjectsWorkspacePage() {
               </strong>
               <span className="ref-quad-blueprint-desc">
                 {projects.length === 0
-                  ? "Create your first project in the Studio to explore 4 simultaneous variations with Gemini."
+                  ? "Create your first project in the Studio to explore variations with Gemini."
                   : "Try searching for another term or clearing the category filter."}
               </span>
               {projects.length === 0 ? (
@@ -358,6 +371,98 @@ export default function ProjectsWorkspacePage() {
           )}
         </div>
       </div>
+
+      {/* ==================== MODAL FOR PROJECT DELETION CONFIRMATION ==================== */}
+      {projectToDelete && (
+        <div
+          className="ref-modal-backdrop"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="delete-project-modal-title"
+          onClick={(e) => {
+            if (e.target === e.currentTarget && !isDeletingProject) {
+              setProjectToDelete(null);
+            }
+          }}
+        >
+          <div className="ref-modal-card ref-delete-modal-card">
+            <div className="ref-modal-header">
+              <strong
+                id="delete-project-modal-title"
+                className="ref-soft-card-title"
+              >
+                Remove Project
+              </strong>
+              <button
+                type="button"
+                aria-label="Close modal"
+                className="ref-circle-icon-btn sm"
+                disabled={isDeletingProject}
+                onClick={() => setProjectToDelete(null)}
+              >
+                <IconClose size={12} />
+              </button>
+            </div>
+
+            <div className="ref-delete-modal-project-row">
+              {projectToDelete.preview_image_url ? (
+                <img
+                  src={projectToDelete.preview_image_url}
+                  alt={projectToDelete.title}
+                  className="ref-delete-modal-thumb"
+                />
+              ) : (
+                <div className="ref-delete-modal-thumb-placeholder" />
+              )}
+              <div className="ref-delete-modal-meta">
+                <strong className="ref-delete-modal-project-name">
+                  {projectToDelete.title}
+                </strong>
+                <span className="ref-delete-modal-project-sub">
+                  {Number(projectToDelete.turn_count || 0)}{" "}
+                  {Number(projectToDelete.turn_count || 0) === 1
+                    ? "round"
+                    : "rounds"}{" "}
+                  •{" "}
+                  {bootstrapData.style_presets
+                    .find((s) => s.id === projectToDelete.style_id)
+                    ?.title.split(" (")[0] || projectToDelete.style_id}
+                </span>
+              </div>
+            </div>
+
+            <p className="ref-delete-modal-copy">
+              Are you sure you want to remove{" "}
+              <strong>&ldquo;{projectToDelete.title}&rdquo;</strong> from your
+              Gallery? Exported PNG images inside{" "}
+              <code>{imagesOutputDir}</code> will remain preserved on disk.
+            </p>
+
+            <div className="ref-delete-modal-actions">
+              <button
+                type="button"
+                className="ref-mura-btn-outline lg"
+                disabled={isDeletingProject}
+                onClick={() => setProjectToDelete(null)}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                id="confirm-delete-project-btn"
+                className="ref-dark-pill-btn danger"
+                disabled={isDeletingProject}
+                onClick={() => void handleConfirmDeleteProject()}
+              >
+                <IconTrash size={14} />
+                <span>
+                  {isDeletingProject ? "Removing..." : "Remove Project"}
+                </span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

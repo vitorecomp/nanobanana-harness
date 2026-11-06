@@ -29,6 +29,8 @@
   --ref-ink-primary: #000000;
   --ref-ink-secondary: #14213d;
   --ref-ink-muted: rgba(20, 33, 61, 0.76);
+  --ref-danger: #d62828;
+  --ref-danger-hover: #b71c1c;
 }
 
 *,
@@ -713,6 +715,87 @@ textarea {
 .ref-dark-pill-btn:disabled {
   opacity: 0.55;
   cursor: not-allowed;
+}
+
+.ref-dark-pill-btn.danger {
+  background-color: var(--ref-danger);
+  border-color: var(--ref-charcoal);
+  color: var(--ref-card-surface);
+}
+
+.ref-dark-pill-btn.danger:hover:not(:disabled) {
+  background-color: var(--ref-danger-hover);
+  border-color: var(--ref-charcoal);
+  color: var(--ref-card-surface);
+}
+
+.ref-delete-modal-card {
+  max-width: 440px;
+}
+
+.ref-delete-modal-project-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 0;
+  border-top: 1px solid rgba(20, 33, 61, 0.16);
+  border-bottom: 1px solid rgba(20, 33, 61, 0.16);
+}
+
+.ref-delete-modal-thumb {
+  width: 48px;
+  height: 48px;
+  border-radius: 12px;
+  object-fit: cover;
+  border: 1.5px solid var(--ref-moss-outer);
+  background-color: var(--ref-card-surface);
+  flex-shrink: 0;
+}
+
+.ref-delete-modal-thumb-placeholder {
+  width: 48px;
+  height: 48px;
+  border-radius: 12px;
+  border: 1.5px dashed rgba(20, 33, 61, 0.32);
+  background-color: var(--ref-card-surface);
+  flex-shrink: 0;
+}
+
+.ref-delete-modal-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.ref-delete-modal-project-name {
+  font-size: 0.88rem;
+  font-weight: 800;
+  color: var(--ref-ink-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ref-delete-modal-project-sub {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--ref-ink-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.ref-delete-modal-copy {
+  font-size: 0.82rem;
+  line-height: 1.5;
+  color: var(--ref-ink-secondary);
+}
+
+.ref-delete-modal-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  padding-top: 4px;
 }
 
 .ref-lime-badge {
