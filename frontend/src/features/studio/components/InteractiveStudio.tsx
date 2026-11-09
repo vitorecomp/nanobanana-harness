@@ -1814,14 +1814,22 @@ export default function InteractiveStudio({
     }, 30);
   };
 
-  const handleSaveProjectTitleModal = (e: React.FormEvent) => {
+  const handleSaveProjectTitleModal = async (e: React.FormEvent) => {
     e.preventDefault();
     const nextTitle = projectTitleDraft.trim() || "Untitled Project";
     setProjectTitle(nextTitle);
-    if (activeProjectId) {
-      void updateConversationTitle(activeProjectId, nextTitle);
-    }
     setIsProjectTitleModalOpen(false);
+    if (activeProjectId) {
+      await updateConversationTitle(activeProjectId, nextTitle);
+    } else {
+      const created = await createConversation({
+        user_id: activeUser.id,
+        title: nextTitle,
+      });
+      if (created?.id) {
+        setActiveProjectId(created.id);
+      }
+    }
     showTransientNotice(`✦ Project renamed to "${nextTitle}"`);
   };
 
@@ -2191,12 +2199,6 @@ export default function InteractiveStudio({
           <div className="ref-flow-toolbar">
             <div className="ref-flow-toolbar-left">
               <div className="ref-flow-project-title-group">
-                <span
-                  className="ref-flow-project-title-text"
-                  title={projectTitle || "New Project"}
-                >
-                  {projectTitle || "New Project"}
-                </span>
                 <button
                   type="button"
                   className="ref-flow-project-edit-btn"
@@ -2227,6 +2229,12 @@ export default function InteractiveStudio({
                     />
                   </svg>
                 </button>
+                <span
+                  className="ref-flow-project-title-text"
+                  title={projectTitle || "New Project"}
+                >
+                  {projectTitle || "New Project"}
+                </span>
               </div>
               <span className="ref-flow-toolbar-divider" aria-hidden="true" />
               <span className="ref-flow-toolbar-badge">
@@ -2425,37 +2433,6 @@ export default function InteractiveStudio({
                 height="3600"
                 aria-hidden="true"
               >
-                <defs>
-                  <marker
-                    id="flow-arrow-locked"
-                    markerWidth="7"
-                    markerHeight="7"
-                    refX="6"
-                    refY="3.5"
-                    markerUnits="userSpaceOnUse"
-                    orient="auto"
-                  >
-                    <path
-                      d="M0,1 L6.5,3.5 L0,6 Z"
-                      fill="var(--ref-moss-outer)"
-                    />
-                  </marker>
-                  <marker
-                    id="flow-arrow-draft"
-                    markerWidth="7"
-                    markerHeight="7"
-                    refX="6"
-                    refY="3.5"
-                    markerUnits="userSpaceOnUse"
-                    orient="auto"
-                  >
-                    <path
-                      d="M0,1 L6.5,3.5 L0,6 Z"
-                      fill="var(--ref-lime-accent)"
-                    />
-                  </marker>
-                </defs>
-
                 {(() => {
                   const byParent = new Map<
                     string,
@@ -2539,11 +2516,6 @@ export default function InteractiveStudio({
                               strokeWidth={isHighlighted ? "3" : "2.2"}
                               strokeLinecap="round"
                               strokeLinejoin="round"
-                              markerEnd={
-                                isHighlighted
-                                  ? "url(#flow-arrow-draft)"
-                                  : "url(#flow-arrow-locked)"
-                              }
                             />
                           );
                         })}
@@ -2586,7 +2558,6 @@ export default function InteractiveStudio({
                         strokeLinecap="round"
                         strokeLinejoin="round"
                         strokeDasharray="7 5"
-                        markerEnd="url(#flow-arrow-draft)"
                       />
                     ))}
                     <circle

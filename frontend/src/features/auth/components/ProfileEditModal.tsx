@@ -41,11 +41,15 @@ export default function ProfileEditModal({
     harnessPlannerPrompt,
     harnessCriticPrompt,
     harnessRefinerPrompt,
+    harnessDefaultSteps,
     saveAiSystemPrompts,
   } = useStudioSession();
 
   const [showKey, setShowKey] = useState<boolean>(false);
   const [dirInput, setDirInput] = useState<string>(imagesOutputDir);
+  const [harnessStepsInput, setHarnessStepsInput] = useState<number>(
+    harnessDefaultSteps || 4
+  );
   const [enhancePromptInput, setEnhancePromptInput] =
     useState<string>(enhanceSystemPrompt);
   const [variationPromptInput, setVariationPromptInput] = useState<string>(
@@ -62,6 +66,7 @@ export default function ProfileEditModal({
   useEffect(() => {
     if (!isOpen) return;
     setDirInput(imagesOutputDir);
+    setHarnessStepsInput(harnessDefaultSteps || 4);
     setEnhancePromptInput(enhanceSystemPrompt);
     setVariationPromptInput(variationSystemPrompt);
     setPlannerPromptInput(harnessPlannerPrompt);
@@ -70,6 +75,7 @@ export default function ProfileEditModal({
   }, [
     isOpen,
     imagesOutputDir,
+    harnessDefaultSteps,
     enhanceSystemPrompt,
     variationSystemPrompt,
     harnessPlannerPrompt,
@@ -98,6 +104,7 @@ export default function ProfileEditModal({
     criticPromptInput.trim() !== DEFAULT_HARNESS_CRITIC_PROMPT.trim();
   const isRefinerCustom =
     refinerPromptInput.trim() !== DEFAULT_HARNESS_REFINER_PROMPT.trim();
+  const isHarnessStepsCustom = harnessStepsInput !== 4;
 
   const handleSaveConfig = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -112,6 +119,7 @@ export default function ProfileEditModal({
           harnessPlannerPrompt: plannerPromptInput,
           harnessCriticPrompt: criticPromptInput,
           harnessRefinerPrompt: refinerPromptInput,
+          harnessDefaultSteps: harnessStepsInput,
         }),
       ]);
       onClose();
@@ -239,6 +247,52 @@ export default function ProfileEditModal({
                   All generated frames are automatically saved as PNG files in
                   this local folder, organized per project.
                 </span>
+
+                <div className="ref-settings-prompt-label-bar">
+                  <div className="ref-settings-prompt-label-left">
+                    <label
+                      htmlFor="modal-harness-default-steps-select"
+                      className="ref-field-label ref-no-margin"
+                    >
+                      Goal Harness Default Steps (3–10)
+                    </label>
+                    <span
+                      className={`ref-settings-status-badge ${
+                        isHarnessStepsCustom ? "is-custom" : ""
+                      }`}
+                    >
+                      {isHarnessStepsCustom
+                        ? `Custom (${harnessStepsInput})`
+                        : "Default (4)"}
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    className="ref-settings-reset-link"
+                    disabled={!isHarnessStepsCustom}
+                    onClick={() => setHarnessStepsInput(4)}
+                  >
+                    Reset
+                  </button>
+                </div>
+
+                <select
+                  id="modal-harness-default-steps-select"
+                  className="ref-harness-select full"
+                  value={harnessStepsInput}
+                  onChange={(e) =>
+                    setHarnessStepsInput(
+                      Math.min(10, Math.max(3, Number(e.target.value) || 4))
+                    )
+                  }
+                >
+                  {[3, 4, 5, 6, 7, 8, 9, 10].map((stepCount) => (
+                    <option key={stepCount} value={stepCount}>
+                      {stepCount} Steps / Rounds
+                      {stepCount === 4 ? " (System Default)" : ""}
+                    </option>
+                  ))}
+                </select>
               </div>
             </div>
           </section>
@@ -266,7 +320,8 @@ export default function ProfileEditModal({
                 isVariationCustom ||
                 isPlannerCustom ||
                 isCriticCustom ||
-                isRefinerCustom) && (
+                isRefinerCustom ||
+                isHarnessStepsCustom) && (
                 <button
                   type="button"
                   id="settings-restore-all-prompts-btn"
@@ -277,6 +332,7 @@ export default function ProfileEditModal({
                     setPlannerPromptInput(DEFAULT_HARNESS_PLANNER_PROMPT);
                     setCriticPromptInput(DEFAULT_HARNESS_CRITIC_PROMPT);
                     setRefinerPromptInput(DEFAULT_HARNESS_REFINER_PROMPT);
+                    setHarnessStepsInput(4);
                   }}
                 >
                   <IconRefresh size={12} />

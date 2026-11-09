@@ -57,8 +57,31 @@ erDiagram
     }
 
     APP_VAULT {
-        text key PK "'gemini_api_key' | 'images_output_dir'"
-        text value "Vault encrypted/raw configuration string"
+        text key PK "'gemini_api_key' | 'images_output_dir' | 'ai_system_prompts_json' | 'modifier_categories_json'"
+        text value "Vault configuration JSON or string"
+        text updated_at "ISO-8601 UTC timestamp"
+    }
+
+    HARNESS_MISSIONS {
+        text id PK "e.g. hm_mw9j35si_tf0h"
+        text user_id FK "Author user ID"
+        text title "Mission title"
+        text goal "Living visual goal specification"
+        text mission_mode "'SINGLE_ASSET' | 'ASSET_PACK'"
+        text pack_invariants "Global camera, lighting & isolation rules"
+        text aspect_ratio "'1:1' | '16:9' | '3:4' | '4:3' | '9:16'"
+        text model_used "Nano Banana model identifier"
+        integer max_rounds "Configured round budget (default 4, range 3..10)"
+        integer target_score "Convergence threshold (e.g. 85)"
+        integer candidates_per_round "Parallel drafts per slot (1..4)"
+        text status "'idle' | 'planning' | 'running' | 'completed' | 'stopped'"
+        integer best_overall_score "Pack average incumbent score (0-100)"
+        text best_image_path "Disk path to highest-scoring PNG"
+        text deliverables_json "Serialized HarnessDeliverableSpec[]"
+        text rubric_json "Serialized 100-pt HarnessRubricCriterion[]"
+        text rounds_json "Serialized HarnessRoundRecord[] trajectory"
+        text references_json "Role-allocated user reference slots"
+        text created_at "ISO-8601 UTC timestamp"
         text updated_at "ISO-8601 UTC timestamp"
     }
 ```

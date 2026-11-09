@@ -989,6 +989,15 @@ export async function POST(req: NextRequest) {
           `SELECT value FROM app_vault WHERE key = 'harness_refiner_prompt'`
         )
         .get() as { value: string } | undefined;
+      const stepsRow = db
+        .prepare(
+          `SELECT value FROM app_vault WHERE key = 'harness_default_steps'`
+        )
+        .get() as { value: string } | undefined;
+      const parsedSteps = stepsRow?.value ? Number(stepsRow.value) : 4;
+      const safeSteps = Number.isFinite(parsedSteps)
+        ? Math.min(10, Math.max(3, Math.round(parsedSteps)))
+        : 4;
       return NextResponse.json({
         ok: true,
         data: {
@@ -997,6 +1006,7 @@ export async function POST(req: NextRequest) {
           harnessPlannerPrompt: planRow?.value || null,
           harnessCriticPrompt: critRow?.value || null,
           harnessRefinerPrompt: refRow?.value || null,
+          harnessDefaultSteps: safeSteps,
         },
       });
     }
@@ -1017,6 +1027,10 @@ export async function POST(req: NextRequest) {
       const harnessRefinerPrompt = String(
         payload.harnessRefinerPrompt ?? ""
       ).trim();
+      const rawSteps = Number(payload.harnessDefaultSteps ?? 4);
+      const harnessDefaultSteps = Number.isFinite(rawSteps)
+        ? Math.min(10, Math.max(3, Math.round(rawSteps)))
+        : 4;
 
       const upsertOrClear = (key: string, val: string) => {
         if (!val) {
@@ -1035,6 +1049,7 @@ export async function POST(req: NextRequest) {
       upsertOrClear("harness_planner_prompt", harnessPlannerPrompt);
       upsertOrClear("harness_critic_prompt", harnessCriticPrompt);
       upsertOrClear("harness_refiner_prompt", harnessRefinerPrompt);
+      upsertOrClear("harness_default_steps", String(harnessDefaultSteps));
 
       return NextResponse.json({
         ok: true,
@@ -1044,6 +1059,7 @@ export async function POST(req: NextRequest) {
           harnessPlannerPrompt: harnessPlannerPrompt || null,
           harnessCriticPrompt: harnessCriticPrompt || null,
           harnessRefinerPrompt: harnessRefinerPrompt || null,
+          harnessDefaultSteps,
         },
       });
     }
@@ -1114,7 +1130,7 @@ export async function POST(req: NextRequest) {
         modelParams: { temperature: 1.0, topP: 0.95, seed: null },
         aspectRatio: String(row.aspect_ratio || "1:1"),
         modifierIds: [],
-        maxRounds: Number(row.max_rounds ?? 3),
+        maxRounds: Number(row.max_rounds ?? 4),
         candidatesPerSlot: Number(row.candidates_per_round ?? 2),
         targetScore: Number(row.target_score ?? 85),
         checkpointMode: false,
@@ -1164,7 +1180,7 @@ export async function POST(req: NextRequest) {
       const modelUsed = String(
         cfg.model || mission.modelUsed || "gemini-2.5-flash-image"
       );
-      const maxRounds = Number(cfg.maxRounds ?? mission.maxRounds ?? 3);
+      const maxRounds = Number(cfg.maxRounds ?? mission.maxRounds ?? 4);
       const targetScore = Number(cfg.targetScore ?? mission.targetScore ?? 85);
       const candidatesPerRound = Number(
         cfg.candidatesPerSlot ?? mission.candidatesPerRound ?? 2
@@ -1217,20 +1233,20 @@ export async function POST(req: NextRequest) {
       const rawDeliverables = Array.isArray(mission.deliverables)
         ? (mission.deliverables as Array<Record<string, unknown>>)
         : [];
+      const rawRounds = Array.isArray(mission.rounds)
+        ? (mission.rounds as Array<Record<string, unknown>>)
+        : [];
       const persistedDeliverables = rawDeliverables.map((d, dIdx) => {
+        const incRound = Number(d.incumbentRound ?? rawRounds.length ?? 1);
         const persistedImg = persistImageIfBase64(
           d.incumbentImageUrl ? String(d.incumbentImageUrl) : null,
-          `slot_${dIdx + 1}_incumbent`
+          `slot_${dIdx + 1}_r${incRound}_incumbent`
         );
         return {
           ...d,
           incumbentImageUrl: persistedImg.url,
         };
       });
-
-      const rawRounds = Array.isArray(mission.rounds)
-        ? (mission.rounds as Array<Record<string, unknown>>)
-        : [];
       const persistedRounds = rawRounds.map((r, rIdx) => {
         const rNum = Number(r.roundNumber ?? rIdx + 1);
         const kp = persistImageIfBase64(
@@ -1370,6 +1386,44 @@ export async function POST(req: NextRequest) {
           created_at: createdAt,
           updated_at: now,
         },
+      });
+    }
+
+    if (action === "update_harness_mission_title") {
+      const missionId = String(payload.missionId || "").trim();
+      const nextTitle =
+        String(payload.title || "").trim().slice(0, 80) ||
+        "Untitled Goal Mission";
+      if (!missionId) {
+        return NextResponse.json(
+          { ok: false, error: "Missing missionId" },
+          { status: 400 }
+        );
+      }
+      db.prepare(
+        `UPDATE harness_missions SET title = ?, updated_at = ? WHERE id = ?`
+      ).run(nextTitle, now, missionId);
+      return NextResponse.json({
+        ok: true,
+        data: { id: missionId, title: nextTitle, updated_at: now },
+      });
+    }
+
+    if (action === "update_harness_mission_status") {
+      const missionId = String(payload.missionId || "").trim();
+      const nextStatus = String(payload.status || "idle").trim();
+      if (!missionId) {
+        return NextResponse.json(
+          { ok: false, error: "Missing missionId" },
+          { status: 400 }
+        );
+      }
+      db.prepare(
+        `UPDATE harness_missions SET status = ?, updated_at = ? WHERE id = ?`
+      ).run(nextStatus, now, missionId);
+      return NextResponse.json({
+        ok: true,
+        data: { id: missionId, status: nextStatus, updated_at: now },
       });
     }
 

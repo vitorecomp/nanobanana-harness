@@ -104,8 +104,13 @@ All frontend components communicate through [`frontend/src/core/tauri/tauriBridg
 | `db_create_project` | `create_project()` | `POST /api/db?action=create_project` | Inserts new conversation container. |
 | `db_save_turn` | `save_turn()` | `POST /api/db?action=save_turn` | Saves turn record, variants JSON, and writes PNG to disk. |
 | `db_rename_project` | `rename_project()` | `POST /api/db?action=rename_project` | Renames conversation and syncs project folder on disk. |
-| `db_delete_project` | `delete_project()` | `POST /api/db?action=delete_project` | Removes SQLite records (preserves disk folder). |
-| `vault_get` / `set` | `get_vault()` / `set_vault()` | `/api/db?action=vault_*` | Reads and writes settings in the `app_vault` table. |
+| `db_delete_project` | `tauri_delete_conversation()` | `POST /api/db (delete_conversation)` | Removes SQLite records (preserves disk folder). |
+| `harness_list` | `tauri_list_harness_missions()` | `POST /api/db (list_harness_missions)` | Lists Goal Harness missions ordered by `updated_at DESC`. |
+| `harness_get` | `tauri_get_harness_mission()` | `POST /api/db (get_harness_mission)` | Loads full Goal Harness deliverables, rubric, and round trajectory. |
+| `harness_save` | `tauri_save_harness_mission()` | `POST /api/db (save_harness_mission)` | Writes candidate & round-versioned incumbent PNGs to disk and upserts `harness_missions`. |
+| `harness_rename` | `tauri_update_harness_mission_title()` | `POST /api/db (update_harness_mission_title)` | Atomically updates a Goal Harness mission's title in SQLite. |
+| `harness_status` | `tauri_update_harness_mission_status()` | `POST /api/db (update_harness_mission_status)` | Atomically updates mission status (e.g., `stopped`). |
+| `vault_get` / `set` | `tauri_vault_*()` | `POST /api/db (vault_*)` | Reads/writes API key, output dir, modifiers, and AI prompts + `harnessDefaultSteps` (`3..10`). |
 
 ---
 

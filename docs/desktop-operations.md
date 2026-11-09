@@ -91,27 +91,29 @@ npm run tauri:build
 1. **Frontend Static Bundle**: Executes `node frontend/scripts/build-tauri.mjs`, temporarily stashing dynamic API routes, running `npx next build`, and outputting static assets to `frontend/out`.
 2. **Cargo Release Compilation**: Compiles `src-tauri` with optimizations (`lto = true`, `opt-level = 3`, `strip = true`).
 3. **OS Bundle Packaging**: Bundles the executable with application icons and desktop files:
-   - **Linux**: `.deb` installer and `.AppImage` bundle in `src-tauri/target/release/bundle/deb/` and `src-tauri/target/release/bundle/appimage/`.
-   - **macOS**: `.dmg` disk image and `.app` bundle in `src-tauri/target/release/bundle/dmg/` and `src-tauri/target/release/bundle/macos/`.
-   - **Windows**: `.msi` and `.exe` (NSIS) installers in `src-tauri/target/release/bundle/msi/` and `src-tauri/target/release/bundle/nsis/`.
+### OS Bundle Packaging (`"targets": "all"`):
+- **Windows (`x64` & `x86` 32-bit)**: `.exe` (NSIS installer) and `.msi` (WiX installer) in `src-tauri/target/<triple>/release/bundle/nsis/` and `msi/`.
+- **Linux (`x86_64`)**: `.deb` (Debian/Ubuntu), `.AppImage` (Portable AppImage), and `.rpm` (Fedora/RHEL/openSUSE) in `src-tauri/target/<triple>/release/bundle/`.
+- **macOS (`aarch64` Apple Silicon & `x86_64` Intel)**: `.dmg` disk image and `.app` bundle in `src-tauri/target/<triple>/release/bundle/`.
+- **Dev / Debug Desktop Builds**: Run `npm run tauri:build:debug` locally (or trigger `build_profile: dev` in GitHub Actions) to produce unstripped debug bundles in `src-tauri/target/<triple>/debug/bundle/`.
 
 ---
 
 ## 5. Continuous Integration & Release Automation
 
-A GitHub Actions workflow (`.github/workflows/release.yml`) automatically builds and publishes cross-platform desktop releases on every git tag:
+Two GitHub Actions workflows automate verification and cross-platform installer builds:
 
-```yaml
-on:
-  push:
-    tags:
-      - "v*"
-```
-
-The workflow matrix builds across:
-- `ubuntu-22.04` (outputs `.deb` and `.AppImage`)
-- `macos-latest` (outputs `.dmg`)
-- `windows-latest` (outputs `.msi` and `.exe`)
+1. **Continuous Integration (`.github/workflows/ci.yml`)**:
+   - Runs on every `push` and `pull_request` to `main`/`master`/`develop`.
+   - Verifies TypeScript compilation (`npm run typecheck`), builds the Next.js static export (`npm run build:tauri-web`), uploads the `nanobanana-web-static-dev` artifact, and runs `cargo check --manifest-path src-tauri/Cargo.toml` against WebKit2GTK 4.1 headers.
+2. **Cross-Platform Release & Dev Installers (`.github/workflows/release.yml`)**:
+   - Triggers automatically on semantic version tags (`v*`, e.g., `v1.0.0`) to publish a full GitHub Release, **or** manually via `workflow_dispatch` (`build_profile: release | dev`) to produce downloadable installer/debug artifacts without creating a tag.
+   - Builds across **5 target architectures**:
+     - `ubuntu-22.04` (`x86_64-unknown-linux-gnu`) $\rightarrow$ **`.deb`**, **`.AppImage`**, **`.rpm`**, + `nanobanana-studio-web-<tag>.tar.gz`
+     - `windows-latest` (`x86_64-pc-windows-msvc`) $\rightarrow$ **Windows 64-bit `.exe` (NSIS) & `.msi` (WiX)**
+     - `windows-latest` (`i686-pc-windows-msvc`) $\rightarrow$ **Windows 32-bit x86 `.exe` (NSIS) & `.msi` (WiX)**
+     - `macos-latest` (`aarch64-apple-darwin`) $\rightarrow$ **macOS Apple Silicon `.dmg` & `.app.tar.gz`**
+     - `macos-latest` (`x86_64-apple-darwin`) $\rightarrow$ **macOS Intel `.dmg` & `.app.tar.gz`**
 
 ---
 

@@ -2,12 +2,18 @@
   "name": "nanobanana-studio",
   "version": "1.0.0",
   "private": true,
-  "description": "Nano Banana Interactive Studio — Installable Desktop & Web Application (Tauri v2 + React 19 + Local SQLite + Native Filesystem)",
+  "description": "Nano Banana Goal Harness & Atelier Studio — Autonomous Multi-Agent Image Evolution Harness & Desktop Studio (Tauri v2 + React 19 + Local SQLite)",
   "scripts": {
     "dev": "npm --prefix frontend run dev",
     "build": "npm --prefix frontend run build",
+    "build:tauri-web": "npm --prefix frontend run build:tauri",
+    "typecheck": "npm --prefix frontend exec -- tsc -p frontend/tsconfig.json --noEmit",
     "tauri:dev": "./node_modules/.bin/tauri dev",
-    "tauri:build": "./node_modules/.bin/tauri build"
+    "tauri:build": "./node_modules/.bin/tauri build",
+    "tauri:build:debug": "./node_modules/.bin/tauri build --debug",
+    "tauri:build:linux": "./node_modules/.bin/tauri build --bundles deb,appimage,rpm",
+    "tauri:build:win-x64": "./node_modules/.bin/tauri build --target x86_64-pc-windows-msvc",
+    "tauri:build:win-x86": "./node_modules/.bin/tauri build --target i686-pc-windows-msvc"
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2.7.1"

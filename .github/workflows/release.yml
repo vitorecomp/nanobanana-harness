@@ -1,23 +1,33 @@
-name: Release on Tag
+name: Cross-Platform Release & Installers
 
 on:
   push:
     tags:
-      - "*"
+      - "v*"
+      - "[0-9]+.[0-9]+.[0-9]*"
   workflow_dispatch:
+    inputs:
+      build_profile:
+        description: "Build profile for manual dispatch ('release' installers or 'dev' debug bundles)"
+        required: false
+        default: "release"
+        type: choice
+        options:
+          - release
+          - dev
 
 permissions:
   contents: write
 
 jobs:
   verify:
-    name: Typecheck Frontend
+    name: Verify TypeScript & Static Bundle
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Setup Node.js
+      - name: Setup Node.js 22
         uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -32,21 +42,52 @@ jobs:
           npm --prefix frontend ci
 
       - name: Verify TypeScript compilation
-        run: npm --prefix frontend exec -- tsc --noEmit
+        run: npm run typecheck
 
-  release:
-    name: Build & Release (${{ matrix.os }})
+      - name: Verify static Next.js Tauri export
+        run: npm run build:tauri-web
+
+  build-installers:
+    name: Build ${{ matrix.label }}
     needs: verify
     strategy:
       fail-fast: false
       matrix:
         include:
-          - os: ubuntu-22.04
-            args: ""
-          - os: macos-latest
-            args: ""
-          - os: windows-latest
-            args: ""
+          # Linux x64: .deb, .AppImage, .rpm
+          - label: "Linux x64 (.deb, .AppImage, .rpm)"
+            artifact_slug: "linux-x64"
+            os: ubuntu-22.04
+            target: x86_64-unknown-linux-gnu
+            args: "--target x86_64-unknown-linux-gnu"
+
+          # Windows 64-bit: x64 .exe (NSIS) & .msi (WiX)
+          - label: "Windows x64 (.exe & .msi)"
+            artifact_slug: "windows-x64"
+            os: windows-latest
+            target: x86_64-pc-windows-msvc
+            args: "--target x86_64-pc-windows-msvc"
+
+          # Windows 32-bit: x86 .exe (NSIS) & .msi (WiX)
+          - label: "Windows x86 32-bit (.exe & .msi)"
+            artifact_slug: "windows-x86"
+            os: windows-latest
+            target: i686-pc-windows-msvc
+            args: "--target i686-pc-windows-msvc"
+
+          # macOS Apple Silicon: arm64 .dmg & .app
+          - label: "macOS Apple Silicon (arm64 .dmg & .app)"
+            artifact_slug: "macos-arm64"
+            os: macos-latest
+            target: aarch64-apple-darwin
+            args: "--target aarch64-apple-darwin"
+
+          # macOS Intel: x64 .dmg & .app
+          - label: "macOS Intel (x64 .dmg & .app)"
+            artifact_slug: "macos-x64"
+            os: macos-latest
+            target: x86_64-apple-darwin
+            args: "--target x86_64-apple-darwin"
 
     runs-on: ${{ matrix.os }}
 
@@ -54,7 +95,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Install Linux system dependencies (WebKit2GTK 4.1)
+      - name: Install Linux packaging dependencies (WebKit2GTK 4.1, AppImage FUSE, RPM)
         if: matrix.os == 'ubuntu-22.04'
         run: |
           sudo apt-get update
@@ -68,9 +109,11 @@ jobs:
             libssl-dev \
             libayatana-appindicator3-dev \
             librsvg2-dev \
-            patchelf
+            patchelf \
+            libfuse2 \
+            rpm
 
-      - name: Setup Node.js
+      - name: Setup Node.js 22
         uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -79,15 +122,19 @@ jobs:
             package-lock.json
             frontend/package-lock.json
 
-      - name: Setup Rust stable toolchain
+      - name: Setup Rust stable toolchain (${{ matrix.target }})
         uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
 
       - name: Rust build cache
         uses: swatinem/rust-cache@v2
         with:
           workspaces: "./src-tauri -> target"
+          key: ${{ matrix.target }}
 
       - name: Sync version from Git tag
+        if: startsWith(github.ref, 'refs/tags/')
         shell: bash
         run: |
           RAW_TAG="${GITHUB_REF_NAME}"
@@ -118,27 +165,63 @@ jobs:
           npm ci
           npm --prefix frontend ci
 
-      - name: Build & Publish Tauri Desktop Release
+      # 1. Tag Push -> Build & Publish Official GitHub Release (Release + Optional Dev/Debug Linux & Windows Binaries)
+      - name: Build & Publish Tauri Release Installers (Tag Push)
+        if: startsWith(github.ref, 'refs/tags/')
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          APPIMAGE_EXTRACT_AND_RUN: "1"
+          NO_STRIP: "true"
         with:
           tagName: ${{ github.ref_name }}
-          releaseName: "Nano Banana Studio ${{ github.ref_name }}"
+          releaseName: "Nano Banana Goal Harness & Studio ${{ github.ref_name }}"
           releaseBody: |
-            ## Nano Banana Interactive Studio — `${{ github.ref_name }}`
+            ## Nano Banana Goal Harness & Atelier Studio — `${{ github.ref_name }}`
 
-            ### Desktop Installers
-            - **Linux (Debian / Ubuntu)**: `.deb` installer package
-            - **macOS (Apple Silicon / Intel)**: `.dmg` disk image & `.app.tar.gz`
-            - **Windows (x64)**: `.msi` and `.exe` (NSIS) installers
-            - **Static Web Bundle**: `nanobanana-studio-web-${{ github.ref_name }}.tar.gz`
+            Autonomous Multi-Agent Goal-Driven Image Evolution Harness (**AutoRef-Harness + EvoGen TRACE**) & 2×2 Interactive Studio for **Google Nano Banana (`gemini-2.5-flash-image` & `gemini-3-pro-image-preview`)**.
+
+            ### 📦 Native Desktop Installers
+            - **Windows 64-bit (`x64`)**: `*_x64-setup.exe` (NSIS) & `*_x64_en-US.msi` (WiX)
+            - **Windows 32-bit (`x86`)**: `*_x86-setup.exe` (NSIS) & `*_x86_en-US.msi` (WiX)
+            - **Linux (`x64`)**: `*.deb` (Debian / Ubuntu), `*.AppImage` (Portable AppImage), & `*.rpm` (Fedora / RHEL)
+            - **macOS (`Apple Silicon arm64` & `Intel x64`)**: `*_aarch64.dmg`, `*_x64.dmg`, & `.app.tar.gz`
+            - **Static Web Export**: `nanobanana-studio-web-${{ github.ref_name }}.tar.gz`
           releaseDraft: false
           prerelease: ${{ contains(github.ref_name, '-') }}
           args: ${{ matrix.args }}
 
-      - name: Package & Upload Static Web Bundle (Linux runner)
-        if: matrix.os == 'ubuntu-22.04'
+      # 2. Manual Dispatch -> Build Release or Dev/Debug Installers & Upload Workflow Artifacts
+      - name: Build Tauri Bundles (Manual Workflow Dispatch)
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          APPIMAGE_EXTRACT_AND_RUN: "1"
+          NO_STRIP: "true"
+        run: |
+          if [ "${{ inputs.build_profile }}" = "dev" ]; then
+            npx tauri build --debug ${{ matrix.args }}
+          else
+            npx tauri build ${{ matrix.args }}
+          fi
+
+      - name: Upload Built Installer Artifacts (Manual Workflow Dispatch)
+        if: github.event_name == 'workflow_dispatch'
+        uses: actions/upload-artifact@v4
+        with:
+          name: nanobanana-${{ inputs.build_profile || 'release' }}-${{ matrix.artifact_slug }}
+          path: |
+            src-tauri/target/${{ matrix.target }}/release/bundle/**/*.exe
+            src-tauri/target/${{ matrix.target }}/release/bundle/**/*.msi
+            src-tauri/target/${{ matrix.target }}/release/bundle/**/*.deb
+            src-tauri/target/${{ matrix.target }}/release/bundle/**/*.AppImage
+            src-tauri/target/${{ matrix.target }}/release/bundle/**/*.rpm
+            src-tauri/target/${{ matrix.target }}/release/bundle/**/*.dmg
+            src-tauri/target/${{ matrix.target }}/debug/bundle/**/*
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Package & Upload Static Web Bundle (Linux Tag Push)
+        if: startsWith(github.ref, 'refs/tags/') && matrix.os == 'ubuntu-22.04'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |

@@ -359,6 +359,8 @@ export async function localDbSaveConversationTurn(
     {
       conversationId,
       userId: payload.user_id,
+      title: payload.title || null,
+      parentTurnNumber: payload.parent_turn_number ?? null,
       rawIdea: payload.raw_idea,
       masterPrompt: payload.master_prompt,
       editInstruction: payload.edit_instruction || null,
@@ -369,6 +371,8 @@ export async function localDbSaveConversationTurn(
       aspectRatio: payload.aspect_ratio || "3:4",
       modelUsed: payload.model_used || "gemini-2.5-flash-image",
       isPublished: Boolean(payload.is_published),
+      variants: payload.variants || [],
+      selectedVariantIndex: payload.selected_variant_index ?? 0,
     }
   );
   if (tauriRes) return tauriRes;
@@ -413,6 +417,16 @@ export async function localDbUpdateTurnSelection(params: {
   masterPrompt: string;
   imageDataUrl?: string;
 }): Promise<boolean> {
+  const tauriRes = await invokeTauriCommand<boolean>(
+    "tauri_update_turn_selection",
+    {
+      turnId: params.turnId,
+      selectedVariantIndex: params.selectedVariantIndex,
+      masterPrompt: params.masterPrompt,
+    }
+  );
+  if (tauriRes !== null) return tauriRes;
+
   const dbRes = await querySqliteApi<boolean>("update_turn_selection", params);
   return Boolean(dbRes);
 }
@@ -421,6 +435,12 @@ export async function localDbUpdateConversationTitle(params: {
   conversationId: string;
   title: string;
 }): Promise<boolean> {
+  const tauriRes = await invokeTauriCommand<boolean>(
+    "tauri_update_conversation_title",
+    params
+  );
+  if (tauriRes !== null) return tauriRes;
+
   const dbRes = await querySqliteApi<{ id: string; title: string }>(
     "update_conversation_title",
     params
@@ -432,6 +452,12 @@ export async function localDbUpdateConversationDna(params: {
   conversationId: string;
   canonicalDna: LocalCanonicalDna | null;
 }): Promise<LocalCanonicalDna | null> {
+  const tauriRes = await invokeTauriCommand<LocalCanonicalDna | null>(
+    "tauri_update_conversation_dna",
+    params
+  );
+  if (tauriRes !== null) return tauriRes;
+
   return await querySqliteApi<LocalCanonicalDna | null>(
     "update_conversation_dna",
     params
@@ -499,6 +525,9 @@ export async function vaultClearApiKey(): Promise<void> {
 }
 
 export async function vaultGetImagesOutputDir(): Promise<string> {
+  const tauriRes = await invokeTauriCommand<string>("tauri_vault_get_images_dir");
+  if (tauriRes) return tauriRes;
+
   const res = await querySqliteApi<string>("vault_get_images_dir");
   return res || "~/Pictures/nanobanana";
 }
@@ -506,6 +535,12 @@ export async function vaultGetImagesOutputDir(): Promise<string> {
 export async function vaultSetImagesOutputDir(
   imagesOutputDir: string
 ): Promise<string> {
+  const tauriRes = await invokeTauriCommand<string>(
+    "tauri_vault_set_images_dir",
+    { imagesOutputDir }
+  );
+  if (tauriRes) return tauriRes;
+
   const res = await querySqliteApi<string>("vault_set_images_dir", {
     imagesOutputDir,
   });
@@ -515,12 +550,23 @@ export async function vaultSetImagesOutputDir(
 export async function vaultGetModifierCategories<T = unknown>(): Promise<
   T[] | null
 > {
+  const tauriRes = await invokeTauriCommand<T[] | null>(
+    "tauri_vault_get_modifiers"
+  );
+  if (tauriRes !== null) return tauriRes;
+
   return await querySqliteApi<T[] | null>("vault_get_modifiers");
 }
 
 export async function vaultSetModifierCategories<T = unknown>(
   categories: T[]
 ): Promise<T[]> {
+  const tauriRes = await invokeTauriCommand<boolean>(
+    "tauri_vault_set_modifiers",
+    { categories }
+  );
+  if (tauriRes !== null) return categories;
+
   const res = await querySqliteApi<T[]>("vault_set_modifiers", {
     categories,
   });
@@ -538,28 +584,43 @@ export interface PersistedAiPromptSettings {
   harnessPlannerPrompt: string | null;
   harnessCriticPrompt: string | null;
   harnessRefinerPrompt: string | null;
+  harnessDefaultSteps: number;
 }
 
 const AI_PROMPTS_LOCAL_KEY = "nanobanana_ai_prompts_v1";
 
+function clampHarnessSteps(val: unknown): number {
+  const n = Number(val);
+  if (!Number.isFinite(n)) return 4;
+  return Math.min(10, Math.max(3, Math.round(n)));
+}
+
 export async function vaultGetAiPrompts(): Promise<PersistedAiPromptSettings> {
+  const tauriRes = await invokeTauriCommand<Partial<PersistedAiPromptSettings> | null>(
+    "tauri_vault_get_ai_prompts"
+  );
+  if (tauriRes) {
+    return {
+      enhanceSystemPrompt: tauriRes.enhanceSystemPrompt || null,
+      variationSystemPrompt: tauriRes.variationSystemPrompt || null,
+      harnessPlannerPrompt: tauriRes.harnessPlannerPrompt || null,
+      harnessCriticPrompt: tauriRes.harnessCriticPrompt || null,
+      harnessRefinerPrompt: tauriRes.harnessRefinerPrompt || null,
+      harnessDefaultSteps: clampHarnessSteps(tauriRes.harnessDefaultSteps),
+    };
+  }
+
   const dbRes = await querySqliteApi<PersistedAiPromptSettings>(
     "vault_get_ai_prompts"
   );
-  if (
-    dbRes &&
-    (dbRes.enhanceSystemPrompt !== null ||
-      dbRes.variationSystemPrompt !== null ||
-      dbRes.harnessPlannerPrompt !== null ||
-      dbRes.harnessCriticPrompt !== null ||
-      dbRes.harnessRefinerPrompt !== null)
-  ) {
+  if (dbRes) {
     return {
       enhanceSystemPrompt: dbRes.enhanceSystemPrompt || null,
       variationSystemPrompt: dbRes.variationSystemPrompt || null,
       harnessPlannerPrompt: dbRes.harnessPlannerPrompt || null,
       harnessCriticPrompt: dbRes.harnessCriticPrompt || null,
       harnessRefinerPrompt: dbRes.harnessRefinerPrompt || null,
+      harnessDefaultSteps: clampHarnessSteps(dbRes.harnessDefaultSteps),
     };
   }
   if (typeof window !== "undefined") {
@@ -573,6 +634,7 @@ export async function vaultGetAiPrompts(): Promise<PersistedAiPromptSettings> {
           harnessPlannerPrompt: parsed.harnessPlannerPrompt || null,
           harnessCriticPrompt: parsed.harnessCriticPrompt || null,
           harnessRefinerPrompt: parsed.harnessRefinerPrompt || null,
+          harnessDefaultSteps: clampHarnessSteps(parsed.harnessDefaultSteps),
         };
       }
     } catch {
@@ -585,6 +647,7 @@ export async function vaultGetAiPrompts(): Promise<PersistedAiPromptSettings> {
     harnessPlannerPrompt: null,
     harnessCriticPrompt: null,
     harnessRefinerPrompt: null,
+    harnessDefaultSteps: 4,
   };
 }
 
@@ -594,33 +657,47 @@ export async function vaultSetAiPrompts(params: {
   harnessPlannerPrompt?: string;
   harnessCriticPrompt?: string;
   harnessRefinerPrompt?: string;
+  harnessDefaultSteps?: number;
 }): Promise<PersistedAiPromptSettings> {
   const cleanEnh = params.enhanceSystemPrompt.trim();
   const cleanVar = params.variationSystemPrompt.trim();
   const cleanPlan = (params.harnessPlannerPrompt ?? "").trim();
   const cleanCrit = (params.harnessCriticPrompt ?? "").trim();
   const cleanRef = (params.harnessRefinerPrompt ?? "").trim();
+  const safeSteps = clampHarnessSteps(params.harnessDefaultSteps ?? 4);
 
   if (typeof window !== "undefined") {
     try {
-      if (!cleanEnh && !cleanVar && !cleanPlan && !cleanCrit && !cleanRef) {
-        window.localStorage.removeItem(AI_PROMPTS_LOCAL_KEY);
-      } else {
-        window.localStorage.setItem(
-          AI_PROMPTS_LOCAL_KEY,
-          JSON.stringify({
-            enhanceSystemPrompt: cleanEnh || null,
-            variationSystemPrompt: cleanVar || null,
-            harnessPlannerPrompt: cleanPlan || null,
-            harnessCriticPrompt: cleanCrit || null,
-            harnessRefinerPrompt: cleanRef || null,
-          })
-        );
-      }
+      window.localStorage.setItem(
+        AI_PROMPTS_LOCAL_KEY,
+        JSON.stringify({
+          enhanceSystemPrompt: cleanEnh || null,
+          variationSystemPrompt: cleanVar || null,
+          harnessPlannerPrompt: cleanPlan || null,
+          harnessCriticPrompt: cleanCrit || null,
+          harnessRefinerPrompt: cleanRef || null,
+          harnessDefaultSteps: safeSteps,
+        })
+      );
     } catch {
       // Ignore storage access errors
     }
   }
+
+  const tauriSaved = await invokeTauriCommand<PersistedAiPromptSettings>(
+    "tauri_vault_set_ai_prompts",
+    {
+      prompts: {
+        enhanceSystemPrompt: cleanEnh || null,
+        variationSystemPrompt: cleanVar || null,
+        harnessPlannerPrompt: cleanPlan || null,
+        harnessCriticPrompt: cleanCrit || null,
+        harnessRefinerPrompt: cleanRef || null,
+        harnessDefaultSteps: safeSteps,
+      },
+    }
+  );
+  if (tauriSaved) return tauriSaved;
 
   const dbRes = await querySqliteApi<PersistedAiPromptSettings>(
     "vault_set_ai_prompts",
@@ -630,6 +707,7 @@ export async function vaultSetAiPrompts(params: {
       harnessPlannerPrompt: cleanPlan,
       harnessCriticPrompt: cleanCrit,
       harnessRefinerPrompt: cleanRef,
+      harnessDefaultSteps: safeSteps,
     }
   );
   return (
@@ -639,6 +717,7 @@ export async function vaultSetAiPrompts(params: {
       harnessPlannerPrompt: cleanPlan || null,
       harnessCriticPrompt: cleanCrit || null,
       harnessRefinerPrompt: cleanRef || null,
+      harnessDefaultSteps: safeSteps,
     }
   );
 }
@@ -646,6 +725,12 @@ export async function vaultSetAiPrompts(params: {
 export async function localDbListHarnessMissions(
   userId: string
 ): Promise<HarnessMissionSummary[]> {
+  const tauriRes = await invokeTauriCommand<HarnessMissionSummary[]>(
+    "tauri_list_harness_missions",
+    { userId }
+  );
+  if (tauriRes !== null) return tauriRes;
+
   const res = await querySqliteApi<HarnessMissionSummary[]>(
     "list_harness_missions",
     { userId }
@@ -656,6 +741,12 @@ export async function localDbListHarnessMissions(
 export async function localDbGetHarnessMission(
   missionId: string
 ): Promise<HarnessMissionRecord | null> {
+  const tauriRes = await invokeTauriCommand<HarnessMissionRecord | null>(
+    "tauri_get_harness_mission",
+    { missionId }
+  );
+  if (tauriRes !== null) return tauriRes;
+
   return await querySqliteApi<HarnessMissionRecord | null>(
     "get_harness_mission",
     { missionId }
@@ -665,6 +756,12 @@ export async function localDbGetHarnessMission(
 export async function localDbSaveHarnessMission(
   mission: HarnessMissionRecord
 ): Promise<HarnessMissionRecord> {
+  const tauriRes = await invokeTauriCommand<HarnessMissionRecord>(
+    "tauri_save_harness_mission",
+    { mission }
+  );
+  if (tauriRes !== null) return tauriRes;
+
   const res = await querySqliteApi<HarnessMissionRecord>(
     "save_harness_mission",
     { mission }
@@ -672,9 +769,49 @@ export async function localDbSaveHarnessMission(
   return res || mission;
 }
 
+export async function localDbUpdateHarnessMissionTitle(
+  missionId: string,
+  title: string
+): Promise<boolean> {
+  const tauriRes = await invokeTauriCommand<boolean>(
+    "tauri_update_harness_mission_title",
+    { missionId, title }
+  );
+  if (tauriRes !== null) return tauriRes;
+
+  const res = await querySqliteApi<{ id: string; title: string }>(
+    "update_harness_mission_title",
+    { missionId, title }
+  );
+  return Boolean(res?.id);
+}
+
+export async function localDbUpdateHarnessMissionStatus(
+  missionId: string,
+  status: string
+): Promise<boolean> {
+  const tauriRes = await invokeTauriCommand<boolean>(
+    "tauri_update_harness_mission_status",
+    { missionId, status }
+  );
+  if (tauriRes !== null) return tauriRes;
+
+  const res = await querySqliteApi<{ id: string; status: string }>(
+    "update_harness_mission_status",
+    { missionId, status }
+  );
+  return Boolean(res?.id);
+}
+
 export async function localDbDeleteHarnessMission(
   missionId: string
 ): Promise<boolean> {
+  const tauriRes = await invokeTauriCommand<boolean>(
+    "tauri_delete_harness_mission",
+    { missionId }
+  );
+  if (tauriRes !== null) return tauriRes;
+
   const res = await querySqliteApi<boolean>("delete_harness_mission", {
     missionId,
   });

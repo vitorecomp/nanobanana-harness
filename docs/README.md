@@ -28,11 +28,12 @@ The platform is designed around four core technical pillars:
 
 | Document | Description |
 | :--- | :--- |
+| **[0. Goal Harness & Thinking (`goal-harness.md`)](./goal-harness.md)** | Deep dive into the 4-stage Nano Banana Goal Harness (`01 Thinking` $\rightarrow$ `02 Drafts` $\rightarrow$ `03 Critic & TRACE` $\rightarrow$ `04 Champion`), Living Spec evolution, Keystone Pack Anchor, and stuck-mission auto-recovery. |
 | **[1. Documentation Index (`README.md`)](./README.md)** | Executive architecture summary, core pillars, and documentation directory. |
 | **[2. System Architecture (`architecture.md`)](./architecture.md)** | Component topology (Tauri v2 Rust Core, Next.js WebView, Universal IPC Bridge, SQLite, Filesystem, and Direct Browser Gemini API). |
-| **[3. Data Models (`data-models.md`)](./data-models.md)** | SQLite entity-relationship schema (`users`, `conversations`, `conversation_turns`, `app_vault`) and TypeScript interfaces. |
-| **[4. Processing Pipelines (`processing-pipelines.md`)](./processing-pipelines.md)** | Step-by-step sequence and flowcharts for Quad Generation (1+3), Surgical Delta, Branching Lineage, Filesystem Sync, and Modifiers AI. |
-| **[5. Desktop Operations & Packaging (`desktop-operations.md`)](./desktop-operations.md)** | Native desktop compilation, packaging (`.deb`, `.AppImage`, `.dmg`, `.msi`), system headers, and GitHub Actions CI/CD release workflow. |
+| **[3. Data Models (`data-models.md`)](./data-models.md)** | SQLite entity-relationship schema (`harness_missions`, `users`, `conversations`, `conversation_turns`, `app_vault`) and TypeScript interfaces. |
+| **[4. Processing Pipelines (`processing-pipelines.md`)](./processing-pipelines.md)** | Sequence and flowcharts for the Goal-Driven Agent Harness, 2×2 Studio Flow, Surgical Delta, Branching Lineage, and Modifiers AI. |
+| **[5. Desktop Operations & CI/CD (`desktop-operations.md`)](./desktop-operations.md)** | Native desktop compilation, packaging (Windows `x86` & `x64` `.exe`/`.msi`, Linux `.deb`, `.AppImage`, `.rpm`, macOS `.dmg`), and GitHub Actions CI/CD workflows. |
 | **[6. SQLite & Filesystem Storage (`sqlite-and-storage.md`)](./sqlite-and-storage.md)** | Embedded database lifecycle, WAL configuration, IPC command tables, and `~/Pictures/nanobanana` directory conventions. |
 | **[7. Security & API Key Policy (`security-and-auth.md`)](./security-and-auth.md)** | Volatile RAM API key isolation, Zero-Storage invariants, and optional Local App Vault persistence. |
 

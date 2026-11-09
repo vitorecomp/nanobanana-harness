@@ -5,6 +5,7 @@ import React, {
   useContext,
   useState,
   useEffect,
+  useCallback,
   ReactNode,
 } from "react";
 import {
@@ -27,6 +28,7 @@ import {
 } from "@/features/harness";
 import { createConversation } from "@/features/history";
 import {
+  localDbSaveHarnessMission,
   vaultClearApiKey,
   vaultGetAiPrompts,
   vaultGetImagesOutputDir,
@@ -73,6 +75,9 @@ interface StudioSessionContextValue {
   setActiveHarnessMissionId: (id: string | null) => void;
   newProjectNonce: number;
   triggerNewProject: (customTitle?: string) => Promise<string | null>;
+  newHarnessNonce: number;
+  pendingHarnessTitle: string | null;
+  triggerNewHarnessMission: (customTitle?: string) => Promise<string | null>;
   updateModifierCategories: (categories: ModifierCategory[]) => Promise<void>;
   resetModifierCategories: () => Promise<void>;
   enhanceSystemPrompt: string;
@@ -80,12 +85,14 @@ interface StudioSessionContextValue {
   harnessPlannerPrompt: string;
   harnessCriticPrompt: string;
   harnessRefinerPrompt: string;
+  harnessDefaultSteps: number;
   saveAiSystemPrompts: (params: {
     enhanceSystemPrompt: string;
     variationSystemPrompt: string;
     harnessPlannerPrompt?: string;
     harnessCriticPrompt?: string;
     harnessRefinerPrompt?: string;
+    harnessDefaultSteps?: number;
   }) => Promise<void>;
   resetAiSystemPrompts: () => Promise<void>;
   isSettingsModalOpen: boolean;
@@ -122,7 +129,7 @@ export function StudioSessionProvider({ children }: { children: ReactNode }) {
     string | null
   >(null);
 
-  const setActiveHarnessMissionId = (id: string | null) => {
+  const setActiveHarnessMissionId = useCallback((id: string | null) => {
     setActiveHarnessMissionIdState(id);
     if (typeof window !== "undefined") {
       if (id) {
@@ -131,8 +138,12 @@ export function StudioSessionProvider({ children }: { children: ReactNode }) {
         window.localStorage.removeItem("nanobanana_active_harness_mission_id");
       }
     }
-  };
+  }, []);
   const [newProjectNonce, setNewProjectNonce] = useState<number>(0);
+  const [newHarnessNonce, setNewHarnessNonce] = useState<number>(0);
+  const [pendingHarnessTitle, setPendingHarnessTitle] = useState<string | null>(
+    null
+  );
   const [enhanceSystemPrompt, setEnhanceSystemPrompt] = useState<string>(
     DEFAULT_ENHANCE_SYSTEM_PROMPT
   );
@@ -148,6 +159,7 @@ export function StudioSessionProvider({ children }: { children: ReactNode }) {
   const [harnessRefinerPrompt, setHarnessRefinerPrompt] = useState<string>(
     DEFAULT_HARNESS_REFINER_PROMPT
   );
+  const [harnessDefaultSteps, setHarnessDefaultSteps] = useState<number>(4);
   const [isSettingsModalOpen, setSettingsModalOpen] = useState<boolean>(false);
 
   const openSettingsModal = () => setSettingsModalOpen(true);
@@ -168,6 +180,49 @@ export function StudioSessionProvider({ children }: { children: ReactNode }) {
     setNewProjectNonce((n) => n + 1);
     return createdId;
   };
+
+  const triggerNewHarnessMission = useCallback(
+    async (customTitle?: string): Promise<string | null> => {
+      const resolvedTitle = customTitle?.trim() || "Untitled Goal Mission";
+      const currentUser = user || LOCAL_DEV_USER;
+      const nowIso = new Date().toISOString();
+      const newId = `hm_${Date.now().toString(36)}_${Math.random()
+        .toString(36)
+        .slice(2, 6)}`;
+      setPendingHarnessTitle(resolvedTitle);
+      const saved = await localDbSaveHarnessMission({
+        id: newId,
+        user_id: currentUser.id,
+        title: resolvedTitle,
+        goal: "",
+        globalPackInvariants: "",
+        referenceSlots: [],
+        deliverables: [],
+        rubric: [],
+        config: {
+          model: "gemini-2.5-flash-image",
+          modelParams: { temperature: 1.0, topP: 0.95, seed: null },
+          aspectRatio: "1:1",
+          modifierIds: [],
+          maxRounds: harnessDefaultSteps || 4,
+          candidatesPerSlot: 2,
+          targetScore: 85,
+          checkpointMode: false,
+        },
+        rounds: [],
+        status: "idle",
+        bestScore: 0,
+        bestImageUrl: null,
+        created_at: nowIso,
+        updated_at: nowIso,
+      });
+      const createdId = saved?.id || newId;
+      setActiveHarnessMissionId(createdId);
+      setNewHarnessNonce((n) => n + 1);
+      return createdId;
+    },
+    [harnessDefaultSteps, setActiveHarnessMissionId, user]
+  );
 
   const setUser = (nextUser: GoogleUserProfile | null) => {
     setUserState(nextUser);
@@ -226,6 +281,7 @@ export function StudioSessionProvider({ children }: { children: ReactNode }) {
     harnessPlannerPrompt?: string;
     harnessCriticPrompt?: string;
     harnessRefinerPrompt?: string;
+    harnessDefaultSteps?: number;
   }): Promise<void> => {
     const cleanEnh =
       params.enhanceSystemPrompt.trim() || DEFAULT_ENHANCE_SYSTEM_PROMPT;
@@ -240,12 +296,17 @@ export function StudioSessionProvider({ children }: { children: ReactNode }) {
     const cleanRef =
       (params.harnessRefinerPrompt ?? harnessRefinerPrompt).trim() ||
       DEFAULT_HARNESS_REFINER_PROMPT;
+    const rawSteps = Number(params.harnessDefaultSteps ?? harnessDefaultSteps);
+    const cleanSteps = Number.isFinite(rawSteps)
+      ? Math.min(10, Math.max(3, Math.round(rawSteps)))
+      : 4;
 
     setEnhanceSystemPrompt(cleanEnh);
     setVariationSystemPrompt(cleanVar);
     setHarnessPlannerPrompt(cleanPlan);
     setHarnessCriticPrompt(cleanCrit);
     setHarnessRefinerPrompt(cleanRef);
+    setHarnessDefaultSteps(cleanSteps);
 
     await vaultSetAiPrompts({
       enhanceSystemPrompt:
@@ -258,6 +319,7 @@ export function StudioSessionProvider({ children }: { children: ReactNode }) {
         cleanCrit === DEFAULT_HARNESS_CRITIC_PROMPT ? "" : cleanCrit,
       harnessRefinerPrompt:
         cleanRef === DEFAULT_HARNESS_REFINER_PROMPT ? "" : cleanRef,
+      harnessDefaultSteps: cleanSteps,
     });
   };
 
@@ -267,12 +329,14 @@ export function StudioSessionProvider({ children }: { children: ReactNode }) {
     setHarnessPlannerPrompt(DEFAULT_HARNESS_PLANNER_PROMPT);
     setHarnessCriticPrompt(DEFAULT_HARNESS_CRITIC_PROMPT);
     setHarnessRefinerPrompt(DEFAULT_HARNESS_REFINER_PROMPT);
+    setHarnessDefaultSteps(4);
     await vaultSetAiPrompts({
       enhanceSystemPrompt: "",
       variationSystemPrompt: "",
       harnessPlannerPrompt: "",
       harnessCriticPrompt: "",
       harnessRefinerPrompt: "",
+      harnessDefaultSteps: 4,
     });
   };
 
@@ -360,6 +424,7 @@ export function StudioSessionProvider({ children }: { children: ReactNode }) {
         savedPrompts.harnessRefinerPrompt?.trim() ||
           DEFAULT_HARNESS_REFINER_PROMPT
       );
+      setHarnessDefaultSteps(savedPrompts.harnessDefaultSteps || 4);
     });
     return () => {
       mounted = false;
@@ -403,6 +468,9 @@ export function StudioSessionProvider({ children }: { children: ReactNode }) {
         setActiveHarnessMissionId,
         newProjectNonce,
         triggerNewProject,
+        newHarnessNonce,
+        pendingHarnessTitle,
+        triggerNewHarnessMission,
         updateModifierCategories,
         resetModifierCategories,
         enhanceSystemPrompt,
@@ -410,6 +478,7 @@ export function StudioSessionProvider({ children }: { children: ReactNode }) {
         harnessPlannerPrompt,
         harnessCriticPrompt,
         harnessRefinerPrompt,
+        harnessDefaultSteps,
         saveAiSystemPrompts,
         resetAiSystemPrompts,
         isSettingsModalOpen,

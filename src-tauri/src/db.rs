@@ -1,6 +1,7 @@
 use chrono::Utc;
 use rusqlite::{params, Connection, Result as SqlResult};
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use std::path::PathBuf;
 use std::sync::Mutex;
 
@@ -35,11 +36,20 @@ pub struct ConversationSummary {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TurnVariantOutput {
+    pub label: String,
+    pub prompt: String,
+    #[serde(rename = "imageUrl")]
+    pub image_url: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TurnRecord {
     pub id: String,
     pub conversation_id: String,
     pub user_id: String,
     pub turn_number: i64,
+    pub parent_turn_number: Option<i64>,
     pub role: String,
     pub raw_idea: String,
     pub master_prompt: String,
@@ -52,6 +62,8 @@ pub struct TurnRecord {
     pub aspect_ratio: String,
     pub model_used: String,
     pub is_published: bool,
+    pub variants: Vec<TurnVariantOutput>,
+    pub selected_variant_index: i64,
     pub created_at: String,
 }
 
@@ -61,6 +73,7 @@ pub struct ConversationDetail {
     pub user_id: String,
     pub title: String,
     pub style_id: String,
+    pub canonical_dna: Option<Value>,
     pub turn_count: usize,
     pub latest_prompt: Option<String>,
     pub preview_image_url: Option<String>,
@@ -92,6 +105,31 @@ pub struct GalleryItem {
     pub created_at: String,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct HarnessMissionSummary {
+    pub id: String,
+    pub user_id: String,
+    pub title: String,
+    pub goal: String,
+    pub status: String,
+    #[serde(rename = "deliverableCount")]
+    pub deliverable_count: usize,
+    #[serde(rename = "solvedCount")]
+    pub solved_count: usize,
+    #[serde(rename = "roundCount")]
+    pub round_count: usize,
+    #[serde(rename = "bestScore")]
+    pub best_score: i64,
+    #[serde(rename = "bestImageUrl")]
+    pub best_image_url: Option<String>,
+    #[serde(rename = "aspectRatio")]
+    pub aspect_ratio: String,
+    #[serde(rename = "modelUsed")]
+    pub model_used: String,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
 pub fn init_database(db_path: &PathBuf) -> SqlResult<Connection> {
     if let Some(parent) = db_path.parent() {
         let _ = std::fs::create_dir_all(parent);
@@ -118,7 +156,8 @@ pub fn init_database(db_path: &PathBuf) -> SqlResult<Connection> {
             id TEXT PRIMARY KEY,
             user_id TEXT NOT NULL,
             title TEXT NOT NULL,
-            style_id TEXT NOT NULL DEFAULT 'editorial-anime',
+            style_id TEXT NOT NULL DEFAULT '',
+            canonical_dna_json TEXT,
             created_at TEXT NOT NULL,
             updated_at TEXT NOT NULL,
             FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
@@ -129,11 +168,12 @@ pub fn init_database(db_path: &PathBuf) -> SqlResult<Connection> {
             conversation_id TEXT NOT NULL,
             user_id TEXT NOT NULL,
             turn_number INTEGER NOT NULL DEFAULT 1,
+            parent_turn_number INTEGER,
             role TEXT NOT NULL DEFAULT 'assistant',
             raw_idea TEXT NOT NULL DEFAULT '',
             master_prompt TEXT NOT NULL DEFAULT '',
             edit_instruction TEXT,
-            style_id TEXT NOT NULL DEFAULT 'editorial-anime',
+            style_id TEXT NOT NULL DEFAULT '',
             modifiers_json TEXT NOT NULL DEFAULT '[]',
             completeness_score INTEGER NOT NULL DEFAULT 80,
             image_path TEXT,
@@ -141,6 +181,8 @@ pub fn init_database(db_path: &PathBuf) -> SqlResult<Connection> {
             aspect_ratio TEXT NOT NULL DEFAULT '3:4',
             model_used TEXT NOT NULL DEFAULT 'gemini-2.5-flash-image',
             is_published INTEGER NOT NULL DEFAULT 0,
+            variants_json TEXT NOT NULL DEFAULT '[]',
+            selected_variant_index INTEGER NOT NULL DEFAULT 0,
             created_at TEXT NOT NULL,
             FOREIGN KEY (conversation_id) REFERENCES conversations(id) ON DELETE CASCADE
         );
@@ -150,8 +192,51 @@ pub fn init_database(db_path: &PathBuf) -> SqlResult<Connection> {
             value TEXT NOT NULL,
             updated_at TEXT NOT NULL
         );
+
+        CREATE TABLE IF NOT EXISTS harness_missions (
+            id TEXT PRIMARY KEY,
+            user_id TEXT NOT NULL,
+            title TEXT NOT NULL,
+            goal TEXT NOT NULL,
+            mission_mode TEXT NOT NULL DEFAULT 'SINGLE_ASSET',
+            pack_invariants TEXT NOT NULL DEFAULT '',
+            aspect_ratio TEXT NOT NULL DEFAULT '1:1',
+            model_used TEXT NOT NULL DEFAULT 'gemini-2.5-flash-image',
+            max_rounds INTEGER NOT NULL DEFAULT 4,
+            target_score INTEGER NOT NULL DEFAULT 85,
+            candidates_per_round INTEGER NOT NULL DEFAULT 2,
+            status TEXT NOT NULL DEFAULT 'idle',
+            best_overall_score INTEGER NOT NULL DEFAULT 0,
+            best_image_path TEXT,
+            best_prompt TEXT,
+            keystone_anchor_json TEXT,
+            deliverables_json TEXT NOT NULL DEFAULT '[]',
+            rubric_json TEXT NOT NULL DEFAULT '[]',
+            rounds_json TEXT NOT NULL DEFAULT '[]',
+            references_json TEXT NOT NULL DEFAULT '[]',
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        );
         ",
     )?;
+
+    // Idempotent column migrations for pre-existing local databases
+    let _ = conn.execute(
+        "ALTER TABLE conversation_turns ADD COLUMN variants_json TEXT NOT NULL DEFAULT '[]';",
+        [],
+    );
+    let _ = conn.execute(
+        "ALTER TABLE conversation_turns ADD COLUMN selected_variant_index INTEGER NOT NULL DEFAULT 0;",
+        [],
+    );
+    let _ = conn.execute(
+        "ALTER TABLE conversation_turns ADD COLUMN parent_turn_number INTEGER;",
+        [],
+    );
+    let _ = conn.execute(
+        "ALTER TABLE conversations ADD COLUMN canonical_dna_json TEXT;",
+        [],
+    );
 
     let now = Utc::now().to_rfc3339();
     conn.execute(

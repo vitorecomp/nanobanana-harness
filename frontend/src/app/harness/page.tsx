@@ -27,6 +27,7 @@ import {
   HarnessSlotRoundOutcome,
   buildReiterationDraftsForDeliverable,
   buildRound1DraftPromptsForDeliverable,
+  evolveMissionSpecWithUserRefinement,
   imageUrlToInlinePartForHarness,
   runHarnessCriticAgent,
   runHarnessPlannerAgent,
@@ -36,6 +37,9 @@ import {
   localDbGetHarnessMission,
   localDbListHarnessMissions,
   localDbSaveHarnessMission,
+  localDbUpdateHarnessMissionStatus,
+  localDbUpdateHarnessMissionTitle,
+  vaultGetSavedApiKey,
 } from "@/core/tauri/tauriBridge";
 import {
   IconAtelierStar,
@@ -146,7 +150,7 @@ function buildLeftToRightFlowWire(
 ): { path: string; startX: number; startY: number } {
   const startX = Math.round(sourcePos.x + HARNESS_CARD_WIDTH);
   const startY = Math.round(sourcePos.y + HARNESS_PORT_OFFSET_Y);
-  const endX = Math.round(targetPos.x - 6);
+  const endX = Math.round(targetPos.x);
   const endY = Math.round(targetPos.y + HARNESS_PORT_OFFSET_Y);
   const midX = Math.round((startX + endX) / 2);
 
@@ -227,8 +231,11 @@ export default function GoalHarnessPage() {
     harnessPlannerPrompt,
     harnessCriticPrompt,
     harnessRefinerPrompt,
+    harnessDefaultSteps,
     activeHarnessMissionId,
     setActiveHarnessMissionId,
+    newHarnessNonce,
+    pendingHarnessTitle,
     setPendingRemix,
     openSettingsModal,
   } = useStudioSession();
@@ -237,6 +244,7 @@ export default function GoalHarnessPage() {
 
   // Mission persistence state
   const [activeMissionId, setActiveMissionId] = useState<string>("");
+  const [missionCreatedAt, setMissionCreatedAt] = useState<string>("");
   const [missionTitle, setMissionTitle] = useState<string>(
     "Untitled Goal Mission"
   );
@@ -248,7 +256,7 @@ export default function GoalHarnessPage() {
     "gemini-2.5-flash-image"
   );
   const [aspectRatio, setAspectRatio] = useState<string>("1:1");
-  const [maxRounds, setMaxRounds] = useState<number>(3);
+  const [maxRounds, setMaxRounds] = useState<number>(harnessDefaultSteps || 4);
   const [targetScore, setTargetScore] = useState<number>(85);
   const [candidatesPerSlot, setCandidatesPerSlot] = useState<number>(2);
   const [executionMode, setExecutionMode] = useState<"COPILOT" | "AUTONOMOUS">(
@@ -300,6 +308,10 @@ export default function GoalHarnessPage() {
   const [lightboxCard, setLightboxCard] = useState<HarnessFlowNodeItem | null>(
     null
   );
+  const [isRenameMissionModalOpen, setIsRenameMissionModalOpen] =
+    useState<boolean>(false);
+  const [missionTitleDraft, setMissionTitleDraft] = useState<string>("");
+  const missionTitleInputRef = useRef<HTMLInputElement | null>(null);
 
   // Flow Canvas Pan, Zoom & Node Positions (0.50 default zoom fits all 5 pipeline steps horizontally)
   const [canvasViewport, setCanvasViewport] = useState<{
@@ -348,7 +360,36 @@ export default function GoalHarnessPage() {
 
   const abortRef = useRef<boolean>(false);
   const hasRestoredViewportRef = useRef<boolean>(false);
+  const lastHandledHarnessNonceRef = useRef<number>(0);
+  const lastAutoResumedMissionRef = useRef<string>("");
+  const activeMissionIdRef = useRef<string>(activeMissionId);
+  const missionTitleRef = useRef<string>(missionTitle);
+  const apiKeyRef = useRef<string>(apiKey);
   const isRunning = status === "planning" || status === "running";
+  const isRunningRef = useRef<boolean>(isRunning);
+
+  useEffect(() => {
+    activeMissionIdRef.current = activeMissionId;
+  }, [activeMissionId]);
+
+  useEffect(() => {
+    missionTitleRef.current = missionTitle;
+  }, [missionTitle]);
+
+  useEffect(() => {
+    apiKeyRef.current = apiKey;
+  }, [apiKey]);
+
+  useEffect(() => {
+    isRunningRef.current = isRunning;
+  }, [isRunning]);
+
+  const resolveEffectiveApiKey = useCallback(async (): Promise<string> => {
+    const inMem = apiKeyRef.current.trim() || apiKey.trim();
+    if (inMem) return inMem;
+    const saved = (await vaultGetSavedApiKey())?.trim() || "";
+    return saved;
+  }, [apiKey]);
 
   const persistHarnessCanvasState = useCallback(
     (
@@ -459,28 +500,121 @@ export default function GoalHarnessPage() {
    *   Col 3: [04 • ROUND RESULT / CHAMPION 🏆] (vertically centered)
    * - Deliverable slots are stacked in horizontal swimlanes if a mission has multiple deliverables.
    */
-  const { flowNodes, rowHeaders } = useMemo(() => {
+  const flowNodes = useMemo(() => {
     const nodes: HarnessFlowNodeItem[] = [];
-    const headers: Array<{
-      key: string;
-      roundNumber: number;
-      deliverableTitle: string;
-      roundSummary: string;
-      isLatest: boolean;
-      colX: number;
-      rowY: number;
-    }> = [];
 
     if (chronologicalRounds.length === 0) {
-      return { flowNodes: nodes, rowHeaders: headers };
+      if (deliverables.length === 0) {
+        return nodes;
+      }
+
+      const filteredPlanned =
+        selectedSlotFilter === "ALL"
+          ? deliverables
+          : deliverables.filter((d) => d.id === selectedSlotFilter);
+
+      let plannedTopY = HARNESS_TOP_ROW_Y;
+      const draftCount = Math.max(1, candidatesPerSlot);
+
+      filteredPlanned.forEach((deliv, sIdx) => {
+        const swimlaneCenterY =
+          plannedTopY +
+          Math.round(((draftCount - 1) * HARNESS_DRAFT_ROW_SPACING) / 2);
+
+        const plannedDrafts = buildRound1DraftPromptsForDeliverable({
+          deliverable: deliv,
+          globalPackInvariants,
+          referenceSlots,
+          hasKeystoneAnchor: false,
+          candidatesPerSlot: draftCount,
+          modifierLabels: [],
+          aspectRatio,
+        });
+
+        const plannedCandidates: HarnessCandidateEvaluation[] =
+          plannedDrafts.map((d, cIdx) => ({
+            candidateIndex: cIdx,
+            deliverableId: deliv.id,
+            deliverableTitle: deliv.title,
+            label: d.label,
+            promptStrategy: d.promptStrategy,
+            prompt: d.prompt,
+            imageUrl: buildProceduralIsometricPreviewDataUrl({
+              slotTitle: deliv.title,
+              candidateLabel: d.label,
+              roundNumber: 1,
+              slotIndex: sIdx,
+              candidateIndex: cIdx,
+            }),
+            mimeType: "image/png",
+            hardFailures: [],
+            passedHardGate: true,
+            totalScore: 0,
+            criterionScores: rubric.map((r) => ({
+              criterionId: r.id,
+              score: 0,
+              rationale: "Planned deliverable slot — ready to launch Round 1.",
+            })),
+            strengths: [],
+            complaints: [],
+            isSlotRoundWinner: cIdx === 0,
+          }));
+
+        const plannedOutcome: HarnessSlotRoundOutcome = {
+          deliverableId: deliv.id,
+          deliverableTitle: deliv.title,
+          wasAlreadySolved: false,
+          anchoredFromImageUrl: referenceSlots[0]?.dataUrl || null,
+          keystoneAnchorImageUrl: referenceSlots[1]?.dataUrl || null,
+          candidates: plannedCandidates,
+          slotWinnerIndex: 0,
+          traceAttribution: {
+            failurePattern: "NONE",
+            primaryModule: "PROMPT_SPECIFICATION",
+            diagnosisSummary: `Planned deliverable specification: ${deliv.description}`,
+            noPatchTriggered: false,
+            pairwiseVerdict: "INITIAL_INCUMBENT",
+            pairwiseReasoning:
+              "Click Launch Evolution to generate Round 1 candidate drafts.",
+          },
+          refinerDecisionForNextRound: null,
+        };
+
+        nodes.push({
+          nodeId: `r1::${deliv.id}::thinking`,
+          stepKind: "thinking",
+          roundNumber: 1,
+          roundSummary: `${deliv.title} — ${deliv.description}`,
+          roundStatus: "planning",
+          deliverableId: deliv.id,
+          deliverableTitle: deliv.title,
+          outcome: plannedOutcome,
+          winnerCandidate: plannedCandidates[0],
+          candidateIndex: 0,
+          defaultPos: {
+            x: HARNESS_LEFT_X,
+            y: swimlaneCenterY,
+          },
+        });
+
+        plannedTopY += draftCount * HARNESS_DRAFT_ROW_SPACING + 96;
+      });
+
+      return nodes;
     }
 
-    const latestRoundNum =
-      chronologicalRounds[chronologicalRounds.length - 1]?.roundNumber ?? 1;
-
-    // Collect distinct deliverable IDs in order
+    // Collect distinct deliverable IDs in order (including any planned deliverables queued for Round 1)
     const deliverableIds: string[] = [];
     const seenDeliverables = new Set<string>();
+    for (const d of deliverables) {
+      if (selectedSlotFilter !== "ALL" && d.id !== selectedSlotFilter) {
+        continue;
+      }
+      if (!seenDeliverables.has(d.id)) {
+        seenDeliverables.add(d.id);
+        deliverableIds.push(d.id);
+      }
+    }
     for (const r of chronologicalRounds) {
       for (const so of r.slotOutcomes) {
         if (
@@ -498,9 +632,9 @@ export default function GoalHarnessPage() {
 
     let currentSwimlaneTopY = HARNESS_TOP_ROW_Y;
 
-    deliverableIds.forEach((delivId) => {
+    deliverableIds.forEach((delivId, delivIdx) => {
       // Find max candidate count across rounds for this deliverable to size the swimlane vertically
-      let maxDraftCount = 1;
+      let maxDraftCount = Math.max(1, candidatesPerSlot);
       for (const r of chronologicalRounds) {
         const so = r.slotOutcomes.find((x) => x.deliverableId === delivId);
         if (so) {
@@ -516,20 +650,83 @@ export default function GoalHarnessPage() {
         const outcome = round.slotOutcomes.find(
           (so) => so.deliverableId === delivId
         );
-        if (!outcome) return;
+        if (!outcome) {
+          // If Round 1 is in progress and this deliverable slot is queued next, keep its 01 THINKING card visible in its swimlane
+          const delivSpec = deliverables.find((d) => d.id === delivId);
+          if (roundChronIdx === 0 && delivSpec) {
+            const queuedDrafts = buildRound1DraftPromptsForDeliverable({
+              deliverable: delivSpec,
+              globalPackInvariants,
+              referenceSlots,
+              hasKeystoneAnchor: false,
+              candidatesPerSlot: maxDraftCount,
+              modifierLabels: [],
+              aspectRatio,
+            });
+            const queuedCandidates: HarnessCandidateEvaluation[] =
+              queuedDrafts.map((d, cIdx) => ({
+                candidateIndex: cIdx,
+                deliverableId: delivSpec.id,
+                deliverableTitle: delivSpec.title,
+                label: d.label,
+                promptStrategy: d.promptStrategy,
+                prompt: d.prompt,
+                imageUrl: buildProceduralIsometricPreviewDataUrl({
+                  slotTitle: delivSpec.title,
+                  candidateLabel: d.label,
+                  roundNumber: 1,
+                  slotIndex: delivIdx,
+                  candidateIndex: cIdx,
+                }),
+                mimeType: "image/png",
+                hardFailures: [],
+                passedHardGate: true,
+                totalScore: 0,
+                criterionScores: [],
+                strengths: [],
+                complaints: [],
+                isSlotRoundWinner: cIdx === 0,
+              }));
+            const queuedOutcome: HarnessSlotRoundOutcome = {
+              deliverableId: delivSpec.id,
+              deliverableTitle: delivSpec.title,
+              wasAlreadySolved: false,
+              anchoredFromImageUrl: null,
+              keystoneAnchorImageUrl: null,
+              candidates: queuedCandidates,
+              slotWinnerIndex: 0,
+              traceAttribution: {
+                failurePattern: "NONE",
+                primaryModule: "PROMPT_SPECIFICATION",
+                diagnosisSummary: `Queued for Round 1: ${delivSpec.description}`,
+                noPatchTriggered: false,
+                pairwiseVerdict: "INITIAL_INCUMBENT",
+                pairwiseReasoning: "Queued in current pack round.",
+              },
+              refinerDecisionForNextRound: null,
+            };
+            nodes.push({
+              nodeId: `r${round.roundNumber}::${delivSpec.id}::thinking`,
+              stepKind: "thinking",
+              roundNumber: round.roundNumber,
+              roundSummary: `${delivSpec.title} — ${delivSpec.description}`,
+              roundStatus: round.status,
+              deliverableId: delivSpec.id,
+              deliverableTitle: delivSpec.title,
+              outcome: queuedOutcome,
+              winnerCandidate: queuedCandidates[0],
+              candidateIndex: 0,
+              defaultPos: {
+                x: HARNESS_LEFT_X,
+                y: swimlaneCenterY,
+              },
+            });
+          }
+          return;
+        }
 
         const roundBaseX =
           HARNESS_LEFT_X + roundChronIdx * HARNESS_ROUND_STRIDE_X;
-
-        headers.push({
-          key: `row-hdr-r${round.roundNumber}-${outcome.deliverableId}`,
-          roundNumber: round.roundNumber,
-          deliverableTitle: outcome.deliverableTitle,
-          roundSummary: round.roundSummary,
-          isLatest: round.roundNumber === latestRoundNum,
-          colX: roundBaseX,
-          rowY: currentSwimlaneTopY,
-        });
 
         const winnerIdx = outcome.slotWinnerIndex ?? 0;
         const winnerCandidate =
@@ -622,8 +819,17 @@ export default function GoalHarnessPage() {
         maxDraftCount * HARNESS_DRAFT_ROW_SPACING + 96;
     });
 
-    return { flowNodes: nodes, rowHeaders: headers };
-  }, [chronologicalRounds, selectedSlotFilter]);
+    return nodes;
+  }, [
+    chronologicalRounds,
+    selectedSlotFilter,
+    deliverables,
+    candidatesPerSlot,
+    globalPackInvariants,
+    referenceSlots,
+    aspectRatio,
+    rubric,
+  ]);
 
   const getEffectivePos = useCallback(
     (node: HarnessFlowNodeItem): FlowNodePosition => {
@@ -971,42 +1177,115 @@ export default function GoalHarnessPage() {
     applyFitViewportToPositions(roundNodes.map((n) => getEffectivePos(n)));
   };
 
-  const handleResetNewMission = () => {
-    abortRef.current = true;
-    hasRestoredViewportRef.current = false;
-    setActiveMissionId("");
-    setActiveHarnessMissionId(null);
-    setMissionTitle("Untitled Goal Mission");
-    setGoalInput("");
-    setLastPlannedGoal("");
-    setGlobalPackInvariants("");
-    setDeliverables([]);
-    setRubric([]);
-    setKeystoneAnchor(null);
-    setRounds([]);
-    setReferenceSlots([]);
-    setCustomNodePositions({});
-    setSelectedNodeId("");
-    setInspectedNodeId(null);
-    setIsParamsModalOpen(false);
-    setStatus("idle");
-    setLiveStepNote("");
-    setActiveStageLabel("");
-    setSelectedSlotFilter("ALL");
-    setReiterateNote("");
-    if (typeof window !== "undefined") {
-      window.history.replaceState(null, "", "/harness?new=1");
+  const handleFocusLastGeneratedCard = useCallback(() => {
+    if (flowNodes.length === 0) return;
+    const lastGeneratedNode =
+      [...flowNodes]
+        .reverse()
+        .find((n) => n.stepKind === "result" || n.stepKind === "draft") ||
+      flowNodes[flowNodes.length - 1];
+    if (!lastGeneratedNode) return;
+
+    hasRestoredViewportRef.current = true;
+    setSelectedNodeId(lastGeneratedNode.nodeId);
+
+    const pos = getEffectivePos(lastGeneratedNode);
+    const viewportEl = canvasViewportRef.current;
+    const vw = viewportEl?.clientWidth || 920;
+    const vh = viewportEl?.clientHeight || 760;
+    const toolbarSafeTop = 86;
+    const usableH = Math.max(260, vh - toolbarSafeTop - 24);
+    const targetZoom = Math.max(0.75, Math.min(1, canvasViewport.zoom));
+    const cardCenterX = pos.x + HARNESS_CARD_WIDTH / 2;
+    const cardCenterY = pos.y + HARNESS_CARD_HEIGHT / 2;
+
+    triggerCameraGlide();
+    setCanvasViewport({
+      zoom: Number(targetZoom.toFixed(2)),
+      x: Math.round(vw / 2 - cardCenterX * targetZoom),
+      y: Math.round(toolbarSafeTop + usableH / 2 - cardCenterY * targetZoom),
+    });
+  }, [canvasViewport.zoom, flowNodes, getEffectivePos, triggerCameraGlide]);
+
+  const handleResetNewMission = useCallback(
+    (customTitle?: string, persistedMissionId?: string | null) => {
+      abortRef.current = true;
+      isRunningRef.current = false;
+      hasRestoredViewportRef.current = false;
+      const nextTitle = customTitle?.trim() || "Untitled Goal Mission";
+      const nextId = (persistedMissionId || "").trim();
+      activeMissionIdRef.current = nextId;
+      missionTitleRef.current = nextTitle;
+      setActiveMissionId(nextId);
+      setActiveHarnessMissionId(nextId || null);
+      setMissionCreatedAt(new Date().toISOString());
+      setMissionTitle(nextTitle);
+      setGoalInput("");
+      setLastPlannedGoal("");
+      setGlobalPackInvariants("");
+      setDeliverables([]);
+      setRubric([]);
+      setKeystoneAnchor(null);
+      setRounds([]);
+      setReferenceSlots([]);
+      setCustomNodePositions({});
+      setCanvasViewport({ x: 24, y: 36, zoom: 0.65 });
+      setSelectedNodeId("");
+      setInspectedNodeId(null);
+      setIsParamsModalOpen(false);
+      setStatus("idle");
+      setLiveStepNote("");
+      setActiveStageLabel("");
+      setSelectedSlotFilter("ALL");
+      setReiterateNote("");
+      setMaxRounds(harnessDefaultSteps || 4);
+      if (typeof window !== "undefined") {
+        window.history.replaceState(
+          null,
+          "",
+          nextId
+            ? `/harness?missionId=${encodeURIComponent(nextId)}`
+            : `/harness?new=1&title=${encodeURIComponent(nextTitle)}`
+        );
+      }
+    },
+    [harnessDefaultSteps, setActiveHarnessMissionId]
+  );
+
+  useEffect(() => {
+    if (!activeMissionId && rounds.length === 0) {
+      setMaxRounds(harnessDefaultSteps || 4);
     }
-  };
+  }, [harnessDefaultSteps, activeMissionId, rounds.length]);
+
+  useEffect(() => {
+    if (
+      newHarnessNonce > 0 &&
+      newHarnessNonce !== lastHandledHarnessNonceRef.current
+    ) {
+      lastHandledHarnessNonceRef.current = newHarnessNonce;
+      handleResetNewMission(
+        pendingHarnessTitle || undefined,
+        activeHarnessMissionId
+      );
+    }
+  }, [
+    newHarnessNonce,
+    pendingHarnessTitle,
+    activeHarnessMissionId,
+    handleResetNewMission,
+  ]);
 
   const handleLoadMission = async (
     missionId: string,
     opts?: { preserveUrlParams?: boolean }
   ) => {
-    if (!missionId) return;
+    if (!missionId || isRunningRef.current) return;
     const loaded = await localDbGetHarnessMission(missionId);
-    if (!loaded) return;
+    if (!loaded || isRunningRef.current) return;
     abortRef.current = true;
+    isRunningRef.current = false;
+    activeMissionIdRef.current = loaded.id;
 
     // Read URL params BEFORE setActiveMissionId triggers any URL sync effect
     const urlParams =
@@ -1074,27 +1353,108 @@ export default function GoalHarnessPage() {
       hasRestoredViewportRef.current = false;
     }
 
+    const isRealRasterImageUrl = (url?: string | null): boolean =>
+      Boolean(url && !url.startsWith("data:image/svg+xml"));
+
+    const rawDeliverables = loaded.deliverables || [];
+    const sanitizedDeliverables: HarnessDeliverableSpec[] = rawDeliverables.map(
+      (d) =>
+        isRealRasterImageUrl(d.incumbentImageUrl)
+          ? d
+          : {
+              ...d,
+              status: "pending",
+              incumbentScore: 0,
+              incumbentRound: null,
+              incumbentCandidateIndex: null,
+              incumbentImageUrl: null,
+            }
+    );
+    const loadedRubric = loaded.rubric || [];
+    const loadedRefSlots = loaded.referenceSlots || [];
+    const loadedAspectRatio = loaded.config?.aspectRatio || "1:1";
+    const loadedModel = (loaded.config?.model ||
+      "gemini-2.5-flash-image") as NanoBananaModel;
+    const loadedMaxRounds =
+      loaded.config?.maxRounds || harnessDefaultSteps || 4;
+    const loadedTargetScore = loaded.config?.targetScore || 85;
+    const loadedCandidatesPerSlot = loaded.config?.candidatesPerSlot || 2;
+
+    // Inspect rounds to purge any placeholder-only SVG rounds (e.g. if API key wasn't loaded yet)
+    // and detect any interrupted/incomplete trailing round
+    let hadCorruptedSvgRounds = false;
+    let sanitizedRounds: HarnessRoundRecord[] = (loaded.rounds || []).filter(
+      (r) => {
+        const hasAnyRealImg = (r.slotOutcomes || []).some((so) =>
+          (so.candidates || []).some((c) => isRealRasterImageUrl(c.imageUrl))
+        );
+        if (!hasAnyRealImg) {
+          hadCorruptedSvgRounds = true;
+        }
+        return hasAnyRealImg;
+      }
+    );
+    let resumePartialRoundNumber: number | null = null;
+    let hadInterruptedLastRound = false;
+
+    if (sanitizedRounds.length > 0) {
+      const lastR = sanitizedRounds[sanitizedRounds.length - 1];
+      const expectedR1Slots =
+        lastR.roundNumber === 1 ? sanitizedDeliverables.length : 0;
+      const isLastRoundIncomplete =
+        lastR.status !== "completed" ||
+        (lastR.roundNumber === 1 &&
+          loaded.status === "running" &&
+          lastR.slotOutcomes.length < expectedR1Slots);
+
+      if (isLastRoundIncomplete) {
+        hadInterruptedLastRound = true;
+        const scoredOutcomes = (lastR.slotOutcomes || []).filter((so) =>
+          (so.candidates || []).some(
+            (c) => (c.totalScore || 0) > 0 && isRealRasterImageUrl(c.imageUrl)
+          )
+        );
+        if (scoredOutcomes.length === 0) {
+          sanitizedRounds = sanitizedRounds.slice(0, -1);
+        } else {
+          sanitizedRounds = [
+            ...sanitizedRounds.slice(0, -1),
+            {
+              ...lastR,
+              status: "evaluating",
+              slotOutcomes: scoredOutcomes,
+            },
+          ];
+          resumePartialRoundNumber = lastR.roundNumber;
+        }
+      }
+    }
+
+    missionTitleRef.current = loaded.title;
     setCustomNodePositions(restoredPositions);
     setActiveMissionId(loaded.id);
     setActiveHarnessMissionId(loaded.id);
+    setMissionCreatedAt(loaded.created_at || new Date().toISOString());
     setMissionTitle(loaded.title);
     setGoalInput(loaded.goal);
     setLastPlannedGoal(loaded.goal);
     setGlobalPackInvariants(loaded.globalPackInvariants);
-    setAspectRatio(loaded.config?.aspectRatio || "1:1");
-    setModelUsed(loaded.config?.model || "gemini-2.5-flash-image");
-    setMaxRounds(loaded.config?.maxRounds || 3);
-    setTargetScore(loaded.config?.targetScore || 85);
-    setCandidatesPerSlot(loaded.config?.candidatesPerSlot || 2);
+    setAspectRatio(loadedAspectRatio);
+    setModelUsed(loadedModel);
+    setMaxRounds(loadedMaxRounds);
+    setTargetScore(loadedTargetScore);
+    setCandidatesPerSlot(loadedCandidatesPerSlot);
     setStatus(
-      loaded.status === "running" || loaded.status === "planning"
+      loaded.status === "running" ||
+        loaded.status === "planning" ||
+        hadCorruptedSvgRounds
         ? "idle"
         : loaded.status || "idle"
     );
-    setDeliverables(loaded.deliverables || []);
-    setRubric(loaded.rubric || []);
-    setRounds(loaded.rounds || []);
-    setReferenceSlots(loaded.referenceSlots || []);
+    setDeliverables(sanitizedDeliverables);
+    setRubric(loadedRubric);
+    setRounds(sanitizedRounds);
+    setReferenceSlots(loadedRefSlots);
 
     if (opts?.preserveUrlParams) {
       const slotParam = urlParams.get("slot");
@@ -1113,17 +1473,9 @@ export default function GoalHarnessPage() {
       setSelectedSlotFilter("ALL");
     }
 
-    setActiveStageLabel("");
-    setLiveStepNote(
-      (loaded.rounds || []).length === 0 &&
-        (loaded.deliverables || []).length > 0
-        ? `Loaded planned mission "${loaded.title}" (${loaded.deliverables.length} deliverable slot(s) ready to run).`
-        : ""
-    );
-
-    if ((loaded.deliverables || []).length > 1) {
-      const top = [...loaded.deliverables]
-        .filter((d) => Boolean(d.incumbentImageUrl))
+    if (sanitizedDeliverables.length > 1) {
+      const top = [...sanitizedDeliverables]
+        .filter((d) => isRealRasterImageUrl(d.incumbentImageUrl))
         .sort((a, b) => b.incumbentScore - a.incumbentScore)[0];
       if (top && top.incumbentImageUrl) {
         setKeystoneAnchor({
@@ -1138,24 +1490,134 @@ export default function GoalHarnessPage() {
     } else {
       setKeystoneAnchor(null);
     }
+
+    // Detect if this mission got stuck (e.g., "Rainy Day Scenes" with planned deliverables & 0 real rounds,
+    // or a mission interrupted mid-planning / mid-round) and automatically continue it on entry!
+    const allSolvedOnLoad =
+      sanitizedDeliverables.length > 0 &&
+      sanitizedDeliverables.every((d) => d.status === "solved");
+
+    const isStuckDuringPlanning =
+      Boolean(loaded.goal?.trim()) &&
+      sanitizedDeliverables.length === 0 &&
+      (loaded.status === "planning" || loaded.status === "running");
+
+    const isStuckBeforeFirstRound =
+      sanitizedDeliverables.length > 0 &&
+      sanitizedRounds.length === 0 &&
+      (hadCorruptedSvgRounds ||
+        (loaded.status !== "stopped" && loaded.status !== "completed"));
+
+    const isStuckMidEvolution =
+      !allSolvedOnLoad &&
+      loaded.status !== "stopped" &&
+      (loaded.status === "running" ||
+        loaded.status === "planning" ||
+        hadInterruptedLastRound) &&
+      (sanitizedRounds.length < loadedMaxRounds ||
+        resumePartialRoundNumber !== null);
+
+    const shouldAutoContinue =
+      (isStuckDuringPlanning ||
+        isStuckBeforeFirstRound ||
+        isStuckMidEvolution) &&
+      lastAutoResumedMissionRef.current !== loaded.id;
+
+    if (shouldAutoContinue) {
+      lastAutoResumedMissionRef.current = loaded.id;
+      const resumeRoundNum =
+        resumePartialRoundNumber ?? sanitizedRounds.length + 1;
+      setActiveStageLabel("AUTO-RESUMING MISSION");
+      setLiveStepNote(
+        `↻ Detected unfinished mission "${loaded.title}" — continuing Round 0${resumeRoundNum}...`
+      );
+
+      if (isStuckDuringPlanning) {
+        void (async () => {
+          const plan = await handleRunPlanner({
+            createNewMission: false,
+            keepRunningStatus: true,
+            goalOverride: loaded.goal,
+            missionIdOverride: loaded.id,
+            titleOverride: loaded.title,
+          });
+          if (plan && !abortRef.current) {
+            await executeHarnessLoop(plan, undefined, {
+              missionId: plan.missionId,
+              title: plan.title,
+              goal: loaded.goal,
+              invariants: plan.invariants,
+              deliverables: plan.plannedDeliverables,
+              rubric: plan.plannedRubric,
+              rounds: [],
+              referenceSlots: loadedRefSlots,
+              model: loadedModel,
+              aspectRatio: loadedAspectRatio,
+              maxRounds: loadedMaxRounds,
+              candidatesPerSlot: loadedCandidatesPerSlot,
+              targetScore: loadedTargetScore,
+              resumePartialRoundNumber: null,
+              createdAt: loaded.created_at,
+            });
+          }
+        })();
+      } else {
+        void executeHarnessLoop(undefined, undefined, {
+          missionId: loaded.id,
+          title: loaded.title,
+          goal: loaded.goal,
+          invariants: loaded.globalPackInvariants,
+          deliverables: sanitizedDeliverables,
+          rubric: loadedRubric,
+          rounds: sanitizedRounds,
+          referenceSlots: loadedRefSlots,
+          model: loadedModel,
+          aspectRatio: loadedAspectRatio,
+          maxRounds: loadedMaxRounds,
+          candidatesPerSlot: loadedCandidatesPerSlot,
+          targetScore: loadedTargetScore,
+          resumePartialRoundNumber,
+          createdAt: loaded.created_at,
+        });
+      }
+      return;
+    }
+
+    setActiveStageLabel("");
+    setLiveStepNote(
+      sanitizedRounds.length === 0 && sanitizedDeliverables.length > 0
+        ? `Loaded planned mission "${loaded.title}" (${sanitizedDeliverables.length} deliverable slot(s) ready to run).`
+        : ""
+    );
   };
 
   useEffect(() => {
     let cancelled = false;
     const bootstrapMissionFromRouteOrDb = async () => {
+      if (isRunningRef.current) {
+        return;
+      }
+
       let targetId = "";
       let isExplicitNew = false;
+      let explicitNewTitle = "";
 
       if (typeof window !== "undefined") {
         const urlParams = new URLSearchParams(window.location.search);
         const fromQuery = urlParams.get("missionId");
         isExplicitNew = urlParams.get("new") === "1";
+        explicitNewTitle = urlParams.get("title") || "";
         if (fromQuery) {
           targetId = fromQuery;
         }
       }
 
       if (isExplicitNew) {
+        if (explicitNewTitle.trim()) {
+          setMissionTitle(explicitNewTitle.trim());
+        } else if (pendingHarnessTitle?.trim()) {
+          setMissionTitle(pendingHarnessTitle.trim());
+        }
         return;
       }
 
@@ -1176,7 +1638,12 @@ export default function GoalHarnessPage() {
         }
       }
 
-      if (!cancelled && targetId && targetId !== activeMissionId) {
+      if (
+        !cancelled &&
+        !isRunningRef.current &&
+        targetId &&
+        targetId !== activeMissionIdRef.current
+      ) {
         await handleLoadMission(targetId, { preserveUrlParams: true });
       }
     };
@@ -1238,6 +1705,9 @@ export default function GoalHarnessPage() {
   const handleRunPlanner = async (opts?: {
     createNewMission?: boolean;
     keepRunningStatus?: boolean;
+    goalOverride?: string;
+    missionIdOverride?: string;
+    titleOverride?: string;
   }): Promise<{
     missionId: string;
     title: string;
@@ -1245,10 +1715,11 @@ export default function GoalHarnessPage() {
     plannedDeliverables: HarnessDeliverableSpec[];
     plannedRubric: HarnessRubricCriterion[];
   } | null> => {
-    const trimmedGoal = goalInput.trim();
+    const trimmedGoal = (opts?.goalOverride ?? goalInput).trim();
     if (!trimmedGoal) return null;
 
     abortRef.current = false;
+    isRunningRef.current = true;
     setStatus("planning");
     setActiveStageLabel("STAGE 1/4 • THINKING & PLANNER");
     setLiveStepNote(
@@ -1256,25 +1727,40 @@ export default function GoalHarnessPage() {
     );
 
     try {
+      const effectiveApiKey = await resolveEffectiveApiKey();
       const plan = await runHarnessPlannerAgent({
-        apiKey,
+        apiKey: effectiveApiKey,
         goal: trimmedGoal,
         referenceSlots,
         customPlannerPrompt: harnessPlannerPrompt,
       });
 
       const nextMissionId =
-        !opts?.createNewMission && activeMissionId
-          ? activeMissionId
+        opts?.missionIdOverride ||
+        (!opts?.createNewMission && activeMissionIdRef.current
+          ? activeMissionIdRef.current
           : `hm_${Date.now().toString(36)}_${Math.random()
               .toString(36)
-              .slice(2, 6)}`;
+              .slice(2, 6)}`);
       const nowIso = new Date().toISOString();
       const preservedRounds = opts?.createNewMission ? [] : rounds;
 
-      setActiveMissionId(nextMissionId);
-      setActiveHarnessMissionId(nextMissionId);
-      setMissionTitle(plan.missionTitle);
+      // Preserve any custom name set by the user in "+ New Project" or the Rename Modal!
+      const existingCustomTitle = (
+        opts?.titleOverride ?? missionTitleRef.current
+      ).trim();
+      const isGenericDefaultTitle =
+        !existingCustomTitle ||
+        existingCustomTitle === "Untitled Goal Mission" ||
+        existingCustomTitle === "Goal Mission" ||
+        existingCustomTitle === "Harness Mission";
+      const effectiveTitle = isGenericDefaultTitle
+        ? plan.missionTitle
+        : existingCustomTitle;
+
+      activeMissionIdRef.current = nextMissionId;
+      missionTitleRef.current = effectiveTitle;
+      setMissionTitle(effectiveTitle);
       setLastPlannedGoal(trimmedGoal);
       setGlobalPackInvariants(plan.globalPackInvariants);
       setDeliverables(plan.deliverables);
@@ -1288,7 +1774,7 @@ export default function GoalHarnessPage() {
       const initialRecord: HarnessMissionRecord = {
         id: nextMissionId,
         user_id: activeUser.id,
-        title: plan.missionTitle,
+        title: effectiveTitle,
         goal: trimmedGoal,
         globalPackInvariants: plan.globalPackInvariants,
         referenceSlots,
@@ -1308,13 +1794,25 @@ export default function GoalHarnessPage() {
         status: opts?.keepRunningStatus ? "running" : "idle",
         bestScore: 0,
         bestImageUrl: null,
-        created_at: nowIso,
+        created_at: missionCreatedAt || nowIso,
         updated_at: nowIso,
       };
 
       const saved = await localDbSaveHarnessMission(initialRecord);
+      activeMissionIdRef.current = saved.id;
+      setActiveMissionId(saved.id);
+      setActiveHarnessMissionId(saved.id);
       setDeliverables(saved.deliverables);
+
+      if (abortRef.current) {
+        isRunningRef.current = false;
+        setStatus("stopped");
+        setActiveStageLabel("STOPPED");
+        return null;
+      }
+
       if (!opts?.keepRunningStatus) {
+        isRunningRef.current = false;
         setStatus("idle");
         setActiveStageLabel("PLAN READY");
       }
@@ -1330,6 +1828,7 @@ export default function GoalHarnessPage() {
         plannedRubric: saved.rubric,
       };
     } catch (err) {
+      isRunningRef.current = false;
       setStatus("idle");
       setActiveStageLabel("");
       setLiveStepNote(
@@ -1356,31 +1855,91 @@ export default function GoalHarnessPage() {
       targetSlotId?: string;
       userRefinementNote?: string;
       anchorToIncumbent?: boolean;
+    },
+    resumeSnapshot?: {
+      missionId: string;
+      title: string;
+      goal: string;
+      invariants: string;
+      deliverables: HarnessDeliverableSpec[];
+      rubric: HarnessRubricCriterion[];
+      rounds: HarnessRoundRecord[];
+      referenceSlots: HarnessReferenceSlot[];
+      model: NanoBananaModel;
+      aspectRatio: string;
+      maxRounds: number;
+      candidatesPerSlot: number;
+      targetScore: number;
+      resumePartialRoundNumber: number | null;
+      createdAt?: string;
     }
   ) => {
     const currentMissionId =
+      resumeSnapshot?.missionId ||
       overridePlan?.missionId ||
+      activeMissionIdRef.current ||
       activeMissionId ||
       `hm_${Date.now().toString(36)}`;
-    const currentTitle = overridePlan?.title || missionTitle || "Goal Mission";
-    const currentInvariants =
-      overridePlan?.invariants ?? globalPackInvariants;
+    const currentTitle =
+      resumeSnapshot?.title ||
+      overridePlan?.title ||
+      missionTitleRef.current ||
+      missionTitle ||
+      "Goal Mission";
+    let currentGoal = (resumeSnapshot?.goal ?? goalInput).trim();
+    let currentInvariants =
+      resumeSnapshot?.invariants ??
+      overridePlan?.invariants ??
+      globalPackInvariants;
     let workingDeliverables = [
-      ...(overridePlan?.plannedDeliverables || deliverables),
+      ...(resumeSnapshot?.deliverables ||
+        overridePlan?.plannedDeliverables ||
+        deliverables),
     ];
-    const workingRubric = [...(overridePlan?.plannedRubric || rubric)];
+    const workingRubric = [
+      ...(resumeSnapshot?.rubric || overridePlan?.plannedRubric || rubric),
+    ];
+    const effectiveModel = resumeSnapshot?.model || modelUsed;
+    const effectiveAspectRatio = resumeSnapshot?.aspectRatio || aspectRatio;
+    const effectiveMaxRounds = resumeSnapshot?.maxRounds || maxRounds;
+    const effectiveCandidatesPerSlot =
+      resumeSnapshot?.candidatesPerSlot || candidatesPerSlot;
+    const effectiveTargetScore = resumeSnapshot?.targetScore || targetScore;
+    const effectiveReferenceSlots =
+      resumeSnapshot?.referenceSlots || referenceSlots;
 
     if (workingDeliverables.length === 0 || workingRubric.length === 0) {
+      isRunningRef.current = false;
       return;
     }
 
+    isRunningRef.current = true;
+    const effectiveApiKey = await resolveEffectiveApiKey();
+    if (!effectiveApiKey) {
+      isRunningRef.current = false;
+      setStatus("idle");
+      setActiveStageLabel("API KEY REQUIRED");
+      setLiveStepNote(
+        "⚠ Gemini API Key not configured — open Settings to enter your key."
+      );
+      if (!resumeSnapshot) {
+        openSettingsModal();
+      }
+      return;
+    }
+
+    activeMissionIdRef.current = currentMissionId;
     setActiveMissionId(currentMissionId);
     setActiveHarnessMissionId(currentMissionId);
 
-    const hasExistingRounds = rounds.length > 0;
-    const isReiterating = Boolean(
-      reiterateOpts?.isReiteration || hasExistingRounds
-    );
+    const isAutoResume = Boolean(resumeSnapshot);
+    let workingRounds: HarnessRoundRecord[] = [
+      ...(resumeSnapshot ? resumeSnapshot.rounds : rounds),
+    ];
+    const hasExistingRounds = workingRounds.length > 0;
+    const isReiterating =
+      !isAutoResume &&
+      Boolean(reiterateOpts?.isReiteration || hasExistingRounds);
     const targetSlotFilter = isReiterating
       ? reiterateOpts?.targetSlotId || "ALL"
       : "ALL";
@@ -1391,20 +1950,81 @@ export default function GoalHarnessPage() {
       ? reiterateOpts?.anchorToIncumbent ?? true
       : true;
 
-    let workingRounds: HarnessRoundRecord[] = [...rounds];
-    const startRoundNum = workingRounds.length + 1;
-    const totalMaxRounds = isReiterating
+    const priorDirectivesHistory: string[] = workingRounds
+      .map((r) => {
+        const match = r.roundSummary?.match(/\(Refined:\s*"([^"]+)"\)/i);
+        return match?.[1]?.trim() || "";
+      })
+      .filter(Boolean);
+
+    const startRoundNum =
+      isAutoResume && resumeSnapshot?.resumePartialRoundNumber
+        ? resumeSnapshot.resumePartialRoundNumber
+        : workingRounds.length + 1;
+    const totalMaxRounds = isAutoResume
+      ? Math.max(effectiveMaxRounds, startRoundNum)
+      : isReiterating
       ? workingRounds.length + Math.max(1, reiterateOpts?.extraRounds || 1)
-      : workingRounds.length + maxRounds;
+      : workingRounds.length + effectiveMaxRounds;
 
-    workingDeliverables = workingDeliverables.map((d) =>
-      targetSlotFilter === "ALL" || d.id === targetSlotFilter
-        ? { ...d, status: "pending" }
-        : d
-    );
-    setDeliverables([...workingDeliverables]);
+    if (isReiterating) {
+      workingDeliverables = workingDeliverables.map((d) =>
+        targetSlotFilter === "ALL" || d.id === targetSlotFilter
+          ? { ...d, status: "pending" }
+          : d
+      );
+      setDeliverables([...workingDeliverables]);
+    }
 
-    setCanvasViewport((prev) => ({ ...prev, x: 20, y: 12 }));
+    const focusViewportOnRoundNumber = (
+      roundNum: number,
+      mode: "round" | "result" = "round",
+      slotIdx = 0
+    ) => {
+      hasRestoredViewportRef.current = true;
+      const roundChronIdx = Math.max(0, roundNum - 1);
+      const roundBaseX =
+        HARNESS_LEFT_X + roundChronIdx * HARNESS_ROUND_STRIDE_X;
+      const draftRows = Math.max(1, candidatesPerSlot);
+      const swimlaneStrideY = draftRows * HARNESS_DRAFT_ROW_SPACING + 96;
+      const swimlaneTopY =
+        HARNESS_TOP_ROW_Y + Math.max(0, slotIdx) * swimlaneStrideY;
+      const bottomY =
+        swimlaneTopY + (draftRows - 1) * HARNESS_DRAFT_ROW_SPACING;
+
+      if (mode === "result") {
+        const resultX = roundBaseX + 3 * HARNESS_COL_SPACING;
+        const resultY =
+          swimlaneTopY +
+          Math.round(((draftRows - 1) * HARNESS_DRAFT_ROW_SPACING) / 2);
+        const viewportEl = canvasViewportRef.current;
+        const vw = viewportEl?.clientWidth || 920;
+        const vh = viewportEl?.clientHeight || 760;
+        const toolbarSafeTop = 86;
+        const usableH = Math.max(260, vh - toolbarSafeTop - 24);
+        const targetZoom = 0.65;
+        const centerX =
+          resultX - HARNESS_COL_SPACING * 0.75 + HARNESS_CARD_WIDTH / 2;
+        const centerY = resultY + HARNESS_CARD_HEIGHT / 2;
+        triggerCameraGlide();
+        setCanvasViewport({
+          zoom: targetZoom,
+          x: Math.round(vw / 2 - centerX * targetZoom),
+          y: Math.round(toolbarSafeTop + usableH / 2 - centerY * targetZoom),
+        });
+        return;
+      }
+
+      applyFitViewportToPositions(
+        [
+          { x: roundBaseX, y: swimlaneTopY },
+          { x: roundBaseX + 3 * HARNESS_COL_SPACING, y: bottomY },
+        ],
+        { minZoom: 0.48 }
+      );
+    };
+
+    focusViewportOnRoundNumber(startRoundNum, "round", 0);
 
     abortRef.current = false;
     setStatus("running");
@@ -1413,8 +2033,35 @@ export default function GoalHarnessPage() {
         ? `STEP 01 • THINKING & REFINING PLAN`
         : "STEP 02 • CANDIDATE DRAFTS"
     );
+
+    if (isReiterating && steeringNote) {
+      setLiveStepNote(
+        `Round ${startRoundNum} • Updating Mission Goal & Deliverable Specification with "${steeringNote}"...`
+      );
+      const evolvedSpec = await evolveMissionSpecWithUserRefinement({
+        apiKey: effectiveApiKey,
+        currentGoal,
+        currentInvariants,
+        deliverables: workingDeliverables,
+        targetSlotId: targetSlotFilter,
+        userRefinementNote: steeringNote,
+        priorDirectivesHistory,
+      });
+      currentGoal = evolvedSpec.updatedGoal;
+      currentInvariants = evolvedSpec.updatedInvariants;
+      workingDeliverables = evolvedSpec.updatedDeliverables;
+      setGoalInput(currentGoal);
+      setLastPlannedGoal(currentGoal);
+      setGlobalPackInvariants(currentInvariants);
+      setDeliverables([...workingDeliverables]);
+    }
+
+    const activeDirectivesHistory = steeringNote
+      ? [...priorDirectivesHistory, steeringNote]
+      : priorDirectivesHistory;
     let workingKeystone = keystoneAnchor;
-    const createdAtIso = new Date().toISOString();
+    const createdAtIso =
+      resumeSnapshot?.createdAt || missionCreatedAt || new Date().toISOString();
 
     const nextDraftsBySlot: Record<
       string,
@@ -1432,7 +2079,7 @@ export default function GoalHarnessPage() {
       const liveRound: HarnessRoundRecord = {
         roundNumber: roundNum,
         status: roundStatus,
-        modelUsed,
+        modelUsed: effectiveModel,
         modelParamsUsed: { temperature: 1.0, topP: 0.95, seed: null },
         keystoneDeliverableId: workingKeystone?.deliverableId || null,
         keystoneImageUrl: workingKeystone?.imageUrl || null,
@@ -1451,6 +2098,24 @@ export default function GoalHarnessPage() {
         workingRounds = [...workingRounds, liveRound];
       }
       setRounds([...workingRounds]);
+
+      const activeSlotIdx = Math.max(0, slotOutcomes.length - 1);
+      const latestOutcome = slotOutcomes[activeSlotIdx];
+      if (latestOutcome) {
+        if (roundStatus === "completed") {
+          setSelectedNodeId(
+            `r${roundNum}::${latestOutcome.deliverableId}::result`
+          );
+          focusViewportOnRoundNumber(roundNum, "result", activeSlotIdx);
+        } else {
+          setSelectedNodeId(
+            `r${roundNum}::${latestOutcome.deliverableId}::${
+              roundStatus === "evaluating" ? "refining" : "thinking"
+            }`
+          );
+          focusViewportOnRoundNumber(roundNum, "round", activeSlotIdx);
+        }
+      }
     };
 
     try {
@@ -1463,10 +2128,17 @@ export default function GoalHarnessPage() {
           setStatus("stopped");
           setActiveStageLabel("STOPPED");
           setLiveStepNote("Mission stopped by user.");
+          void localDbUpdateHarnessMissionStatus(currentMissionId, "stopped");
           break;
         }
 
-        const slotOutcomes: HarnessSlotRoundOutcome[] = [];
+        const existingPartialRound =
+          isAutoResume && roundNum === resumeSnapshot?.resumePartialRoundNumber
+            ? workingRounds.find((r) => r.roundNumber === roundNum)
+            : undefined;
+        const slotOutcomes: HarnessSlotRoundOutcome[] = existingPartialRound
+          ? [...existingPartialRound.slotOutcomes]
+          : [];
         const unsolvedCount = workingDeliverables.filter(
           (d) =>
             (targetSlotFilter === "ALL" || d.id === targetSlotFilter) &&
@@ -1490,7 +2162,14 @@ export default function GoalHarnessPage() {
             continue;
           }
 
-          if (slot.status === "solved" && roundNum > startRoundNum) {
+          if (slotOutcomes.some((so) => so.deliverableId === slot.id)) {
+            continue;
+          }
+
+          if (
+            slot.status === "solved" &&
+            (roundNum > startRoundNum || isAutoResume)
+          ) {
             continue;
           }
 
@@ -1518,6 +2197,23 @@ export default function GoalHarnessPage() {
 
             let priorStrengths: string[] = [];
             let priorComplaints: string[] = [];
+            const priorRoundTrajectory: string[] = [];
+            for (let rIdx = 0; rIdx < workingRounds.length; rIdx++) {
+              const rRec = workingRounds[rIdx];
+              const prevOutcome = rRec.slotOutcomes.find(
+                (so) => so.deliverableId === slot.id
+              );
+              if (prevOutcome && prevOutcome.candidates.length > 0) {
+                const winCand =
+                  prevOutcome.candidates[prevOutcome.slotWinnerIndex] ||
+                  prevOutcome.candidates[0];
+                priorRoundTrajectory.push(
+                  `Round ${rRec.roundNumber} (${winCand.totalScore}/100): ${
+                    rRec.roundSummary
+                  } | Prompt: "${winCand.prompt.slice(0, 140)}..."`
+                );
+              }
+            }
             for (let rIdx = workingRounds.length - 1; rIdx >= 0; rIdx--) {
               const prevOutcome = workingRounds[rIdx].slotOutcomes.find(
                 (so) => so.deliverableId === slot.id
@@ -1536,12 +2232,12 @@ export default function GoalHarnessPage() {
             }
 
             const reitPlan = await buildReiterationDraftsForDeliverable({
-              apiKey,
-              goal: goalInput.trim(),
+              apiKey: effectiveApiKey,
+              goal: currentGoal,
               globalPackInvariants: currentInvariants,
               deliverable: slot,
               nextRoundNumber: roundNum,
-              candidatesPerSlot,
+              candidatesPerSlot: effectiveCandidatesPerSlot,
               anchorToIncumbent: forceAnchorToIncumbent,
               hasKeystoneAnchorAvailable: Boolean(
                 workingKeystone && workingKeystone.deliverableId !== slot.id
@@ -1549,7 +2245,9 @@ export default function GoalHarnessPage() {
               priorStrengths,
               priorComplaints,
               userRefinementNote: steeringNote,
-              aspectRatio,
+              priorDirectivesHistory,
+              priorRoundTrajectory: priorRoundTrajectory.slice(-4),
+              aspectRatio: effectiveAspectRatio,
               customRefinerPrompt: harnessRefinerPrompt,
             });
             draftEntries = reitPlan.drafts;
@@ -1558,13 +2256,13 @@ export default function GoalHarnessPage() {
             draftEntries = buildRound1DraftPromptsForDeliverable({
               deliverable: slot,
               globalPackInvariants: currentInvariants,
-              referenceSlots,
+              referenceSlots: effectiveReferenceSlots,
               hasKeystoneAnchor: Boolean(
                 workingKeystone && workingKeystone.deliverableId !== slot.id
               ),
-              candidatesPerSlot,
+              candidatesPerSlot: effectiveCandidatesPerSlot,
               modifierLabels: [],
-              aspectRatio,
+              aspectRatio: effectiveAspectRatio,
             });
           } else {
             draftEntries = nextDraftsBySlot[slot.id];
@@ -1582,14 +2280,14 @@ export default function GoalHarnessPage() {
 
           const primaryRef = shouldAnchorIncumbent
             ? slot.incumbentImageUrl
-            : referenceSlots[0]?.dataUrl || null;
+            : effectiveReferenceSlots[0]?.dataUrl || null;
 
           const secondaryRef =
             workingDeliverables.length > 1 &&
             workingKeystone &&
             workingKeystone.deliverableId !== slot.id
               ? workingKeystone.imageUrl
-              : referenceSlots[1]?.dataUrl || null;
+              : effectiveReferenceSlots[1]?.dataUrl || null;
 
           const streamingCandidates: HarnessCandidateEvaluation[] =
             draftEntries.map((d, cIdx) => ({
@@ -1656,8 +2354,8 @@ export default function GoalHarnessPage() {
           ]);
 
           const renderedVariants = await renderPreparedBatchWithNanoBanana({
-            apiKey,
-            model: modelUsed,
+            apiKey: effectiveApiKey,
+            model: effectiveModel,
             items: draftEntries.map((d) => ({
               label: d.label,
               prompt: d.prompt,
@@ -1695,32 +2393,15 @@ export default function GoalHarnessPage() {
 
           if (abortRef.current) break;
 
-          void localDbSaveHarnessMission({
-            id: currentMissionId,
-            user_id: activeUser.id,
-            title: currentTitle,
-            goal: goalInput.trim(),
-            globalPackInvariants: currentInvariants,
-            referenceSlots,
-            deliverables: workingDeliverables,
-            rubric: workingRubric,
-            config: {
-              model: modelUsed,
-              modelParams: { temperature: 1.0, topP: 0.95, seed: null },
-              aspectRatio,
-              modifierIds: [],
-              maxRounds: Math.max(maxRounds, totalMaxRounds),
-              candidatesPerSlot,
-              targetScore,
-              checkpointMode: executionMode === "COPILOT",
-            },
-            rounds: workingRounds,
-            status: "running",
-            bestScore: 0,
-            bestImageUrl: renderedVariants[0]?.imageUrl || null,
-            created_at: createdAtIso,
-            updated_at: new Date().toISOString(),
-          });
+          const hasRealRenderedImage = renderedVariants.some(
+            (v) =>
+              Boolean(v.imageUrl) && !v.imageUrl.startsWith("data:image/svg+xml")
+          );
+          if (!hasRealRenderedImage) {
+            throw new Error(
+              `Image generation returned no raster image for "${slot.title}". Please check your Gemini API key or quota.`
+            );
+          }
 
           setActiveStageLabel("STEP 03 • CRITIC & TRACE REFINING");
           setLiveStepNote(
@@ -1747,8 +2428,8 @@ export default function GoalHarnessPage() {
                 });
 
               const criticEval = await runHarnessCriticAgent({
-                apiKey,
-                goal: goalInput.trim(),
+                apiKey: effectiveApiKey,
+                goal: currentGoal,
                 globalPackInvariants: currentInvariants,
                 deliverable: slot,
                 rubric: workingRubric,
@@ -1761,6 +2442,7 @@ export default function GoalHarnessPage() {
                 mimeType: variant.mimeType || "image/png",
                 roundNumber: roundNum,
                 userSteeringHint: steeringNote || undefined,
+                priorDirectivesHistory: activeDirectivesHistory,
                 customCriticPrompt: harnessCriticPrompt,
               });
 
@@ -1788,21 +2470,23 @@ export default function GoalHarnessPage() {
           );
 
           const traceResult = await runHarnessTraceRefinerAgent({
-            apiKey,
-            goal: goalInput.trim(),
+            apiKey: effectiveApiKey,
+            goal: currentGoal,
             globalPackInvariants: currentInvariants,
             deliverable: slot,
             rubric: workingRubric,
             roundNumber: roundNum,
             candidates: evaluatedCandidates,
             currentModelParams: slotParams,
-            candidatesPerSlot,
-            targetScore,
+            candidatesPerSlot: effectiveCandidatesPerSlot,
+            targetScore: effectiveTargetScore,
             hasKeystoneAnchorAvailable: Boolean(workingKeystone),
             modifierLabels: [],
-            aspectRatio,
+            aspectRatio: effectiveAspectRatio,
             userSteeringHint: steeringNote || undefined,
+            priorDirectivesHistory: activeDirectivesHistory,
             customRefinerPrompt: harnessRefinerPrompt,
+            skipNextRoundSynthesis: roundNum >= totalMaxRounds,
           });
 
           const annotatedCandidates = evaluatedCandidates.map((c, idx) => ({
@@ -1875,20 +2559,20 @@ export default function GoalHarnessPage() {
           const savedInterim = await localDbSaveHarnessMission({
             id: currentMissionId,
             user_id: activeUser.id,
-            title: currentTitle,
-            goal: goalInput.trim(),
+            title: missionTitleRef.current.trim() || currentTitle,
+            goal: currentGoal,
             globalPackInvariants: currentInvariants,
-            referenceSlots,
+            referenceSlots: effectiveReferenceSlots,
             deliverables: workingDeliverables,
             rubric: workingRubric,
             config: {
-              model: modelUsed,
+              model: effectiveModel,
               modelParams: { temperature: 1.0, topP: 0.95, seed: null },
-              aspectRatio,
+              aspectRatio: effectiveAspectRatio,
               modifierIds: [],
-              maxRounds: Math.max(maxRounds, totalMaxRounds),
-              candidatesPerSlot,
-              targetScore,
+              maxRounds: Math.max(effectiveMaxRounds, totalMaxRounds),
+              candidatesPerSlot: effectiveCandidatesPerSlot,
+              targetScore: effectiveTargetScore,
               checkpointMode: executionMode === "COPILOT",
             },
             rounds: workingRounds,
@@ -1903,6 +2587,16 @@ export default function GoalHarnessPage() {
           });
           workingDeliverables = savedInterim.deliverables;
           workingRounds = savedInterim.rounds;
+          const persistedRoundNow = savedInterim.rounds.find(
+            (r) => r.roundNumber === roundNum
+          );
+          if (persistedRoundNow?.slotOutcomes?.length) {
+            slotOutcomes.splice(
+              0,
+              slotOutcomes.length,
+              ...persistedRoundNow.slotOutcomes
+            );
+          }
           setDeliverables(savedInterim.deliverables);
           setRounds(savedInterim.rounds);
         }
@@ -1911,6 +2605,7 @@ export default function GoalHarnessPage() {
           setStatus("stopped");
           setActiveStageLabel("STOPPED");
           setLiveStepNote("Mission stopped by user.");
+          void localDbUpdateHarnessMissionStatus(currentMissionId, "stopped");
           break;
         }
 
@@ -1950,20 +2645,20 @@ export default function GoalHarnessPage() {
         const persisted = await localDbSaveHarnessMission({
           id: currentMissionId,
           user_id: activeUser.id,
-          title: currentTitle,
-          goal: goalInput.trim(),
+          title: missionTitleRef.current.trim() || currentTitle,
+          goal: currentGoal,
           globalPackInvariants: currentInvariants,
-          referenceSlots,
+          referenceSlots: effectiveReferenceSlots,
           deliverables: workingDeliverables,
           rubric: workingRubric,
           config: {
-            model: modelUsed,
+            model: effectiveModel,
             modelParams: { temperature: 1.0, topP: 0.95, seed: null },
-            aspectRatio,
+            aspectRatio: effectiveAspectRatio,
             modifierIds: [],
-            maxRounds: Math.max(maxRounds, totalMaxRounds),
-            candidatesPerSlot,
-            targetScore,
+            maxRounds: Math.max(effectiveMaxRounds, totalMaxRounds),
+            candidatesPerSlot: effectiveCandidatesPerSlot,
+            targetScore: effectiveTargetScore,
             checkpointMode: executionMode === "COPILOT",
           },
           rounds: workingRounds,
@@ -2006,6 +2701,7 @@ export default function GoalHarnessPage() {
         }`
       );
     } finally {
+      isRunningRef.current = false;
       setStatus((prev) =>
         prev === "running" || prev === "planning" ? "completed" : prev
       );
@@ -2071,8 +2767,13 @@ export default function GoalHarnessPage() {
         createNewMission: false,
         keepRunningStatus: true,
       });
-      if (plan && !abortRef.current) {
-        await executeHarnessLoop(plan);
+      if (plan) {
+        if (!abortRef.current) {
+          await executeHarnessLoop(plan);
+        } else {
+          isRunningRef.current = false;
+          setStatus("stopped");
+        }
       }
     } else if (rounds.length > 0) {
       await handleReiterateLoop();
@@ -2130,6 +2831,68 @@ export default function GoalHarnessPage() {
     ).slice(0, 2);
   }, [newestFirstRounds]);
 
+  const handleOpenEditMissionTitleModal = () => {
+    setMissionTitleDraft(missionTitle || "Untitled Goal Mission");
+    setIsRenameMissionModalOpen(true);
+    window.setTimeout(() => {
+      missionTitleInputRef.current?.focus();
+      missionTitleInputRef.current?.select();
+    }, 30);
+  };
+
+  const handleSaveMissionTitleModal = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const nextTitle = missionTitleDraft.trim() || "Untitled Goal Mission";
+    missionTitleRef.current = nextTitle;
+    setMissionTitle(nextTitle);
+    setIsRenameMissionModalOpen(false);
+
+    const targetMissionId = activeMissionIdRef.current || activeMissionId;
+    if (targetMissionId) {
+      await localDbUpdateHarnessMissionTitle(targetMissionId, nextTitle);
+    } else {
+      const nowIso = new Date().toISOString();
+      const createdId = `hm_${Date.now().toString(36)}_${Math.random()
+        .toString(36)
+        .slice(2, 6)}`;
+      const topDeliverable = [...deliverables].sort(
+        (a, b) => b.incumbentScore - a.incumbentScore
+      )[0];
+      const saved = await localDbSaveHarnessMission({
+        id: createdId,
+        user_id: activeUser.id,
+        title: nextTitle,
+        goal: goalInput.trim(),
+        globalPackInvariants,
+        referenceSlots,
+        deliverables,
+        rubric,
+        config: {
+          model: modelUsed,
+          modelParams: { temperature: 1.0, topP: 0.95, seed: null },
+          aspectRatio,
+          modifierIds: [],
+          maxRounds,
+          candidatesPerSlot,
+          targetScore,
+          checkpointMode: executionMode === "COPILOT",
+        },
+        rounds,
+        status,
+        bestScore: overallPackAverage,
+        bestImageUrl: topDeliverable?.incumbentImageUrl || null,
+        created_at: missionCreatedAt || nowIso,
+        updated_at: nowIso,
+      });
+      activeMissionIdRef.current = saved.id;
+      setActiveMissionId(saved.id);
+      setActiveHarnessMissionId(saved.id);
+      setMissionCreatedAt(saved.created_at || nowIso);
+    }
+
+    setLiveStepNote(`✦ Mission renamed to "${nextTitle}"`);
+  };
+
   return (
     <div className="ref-page-container">
       <div className="ref-harness-flow-layout">
@@ -2142,6 +2905,37 @@ export default function GoalHarnessPage() {
           <div className="ref-flow-toolbar ref-harness-flow-toolbar">
             <div className="ref-flow-toolbar-left">
               <div className="ref-flow-project-title-group">
+                <button
+                  type="button"
+                  id="harness-edit-title-btn"
+                  className="ref-flow-project-edit-btn"
+                  onClick={handleOpenEditMissionTitleModal}
+                  title="Edit mission name"
+                  aria-label="Edit mission name"
+                >
+                  <svg
+                    width="13"
+                    height="13"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    aria-hidden="true"
+                  >
+                    <path
+                      d="M12 20.5H21"
+                      stroke="currentColor"
+                      strokeWidth="2.2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                    <path
+                      d="M16.5 4a2.121 2.121 0 0 1 3 3L7 19.5l-4 1 1-4L16.5 4z"
+                      stroke="currentColor"
+                      strokeWidth="2.2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                  </svg>
+                </button>
                 <span
                   className="ref-flow-project-title-text"
                   title={missionTitle}
@@ -2151,10 +2945,9 @@ export default function GoalHarnessPage() {
               </div>
               <span className="ref-flow-toolbar-divider" aria-hidden="true" />
               <span className="ref-flow-toolbar-badge is-solved-pill">
-                {rounds.length}R • {flowNodes.length} Steps
                 {deliverables.length > 0
-                  ? ` • 🏆 ${overallPackAverage}/100`
-                  : ""}
+                  ? `${rounds.length}R • 🏆 ${overallPackAverage}/100`
+                  : `${rounds.length}R • ${flowNodes.length} Steps`}
               </span>
             </div>
 
@@ -2179,14 +2972,14 @@ export default function GoalHarnessPage() {
 
               <button
                 type="button"
-                id="harness-new-mission-btn"
+                id="harness-last-generated-btn"
                 className="ref-mura-btn-outline"
-                onClick={handleResetNewMission}
-                disabled={isRunning}
-                title="Start a new Goal Harness mission"
+                onClick={handleFocusLastGeneratedCard}
+                disabled={flowNodes.length === 0}
+                title="Move the Flow Canvas to the last generated card"
               >
-                <IconPlus size={11} strokeWidth={2.3} />
-                <span>New</span>
+                <IconAtelierStar size={12} />
+                <span>Last Generated</span>
               </button>
 
               <button
@@ -2335,41 +3128,10 @@ export default function GoalHarnessPage() {
               {/* 1. SVG ORTHOGONAL WIRES LAYER (Left-to-Right Pipeline Wires + Inter-Round Trajectory Wires) */}
               <svg
                 className="ref-flow-edges-svg"
-                width="4800"
-                height="3600"
+                width="14000"
+                height="10000"
                 aria-hidden="true"
               >
-                <defs>
-                  <marker
-                    id="harness-arrow-pipeline"
-                    markerWidth="7"
-                    markerHeight="7"
-                    refX="6"
-                    refY="3.5"
-                    markerUnits="userSpaceOnUse"
-                    orient="auto"
-                  >
-                    <path
-                      d="M0,1 L6.5,3.5 L0,6 Z"
-                      fill="var(--ref-moss-outer)"
-                    />
-                  </marker>
-                  <marker
-                    id="harness-arrow-highlight"
-                    markerWidth="7"
-                    markerHeight="7"
-                    refX="6"
-                    refY="3.5"
-                    markerUnits="userSpaceOnUse"
-                    orient="auto"
-                  >
-                    <path
-                      d="M0,1 L6.5,3.5 L0,6 Z"
-                      fill="var(--ref-lime-accent)"
-                    />
-                  </marker>
-                </defs>
-
                 {flowEdges.map((edge) => {
                   const isInterRound = edge.edgeKind === "inter-round";
                   return (
@@ -2395,11 +3157,6 @@ export default function GoalHarnessPage() {
                         strokeDasharray={isInterRound ? "6 4" : undefined}
                         strokeLinecap="round"
                         strokeLinejoin="round"
-                        markerEnd={
-                          edge.isHighlighted
-                            ? "url(#harness-arrow-highlight)"
-                            : "url(#harness-arrow-pipeline)"
-                        }
                       />
                       {(isRunning ||
                         selectedNodeId === edge.sourceNodeId ||
@@ -2410,39 +3167,12 @@ export default function GoalHarnessPage() {
                           className="ref-flow-wire-signal"
                         />
                       )}
-                      <circle
-                        cx={edge.startX}
-                        cy={edge.startY}
-                        r="3.2"
-                        fill="var(--ref-lime-accent)"
-                        stroke="var(--ref-moss-outer)"
-                        strokeWidth="1.4"
-                      />
                     </g>
                   );
                 })}
               </svg>
 
-              {/* 2. ITERATION COLUMN HEADERS ON CANVAS (LEFT-TO-RIGHT BY ROUND) */}
-              {rowHeaders.map((hdr) => (
-                <div
-                  key={hdr.key}
-                  className={`ref-harness-canvas-row-tag ${
-                    hdr.isLatest ? "is-latest" : ""
-                  }`}
-                  style={{
-                    left: `${hdr.colX}px`,
-                    top: `${hdr.rowY - 56}px`,
-                  }}
-                >
-                  <span>
-                    ROUND 0{hdr.roundNumber}
-                    {hdr.isLatest ? " • LATEST" : ""} • {hdr.deliverableTitle}
-                  </span>
-                </div>
-              ))}
-
-              {/* 3. ALL 4 PIPELINE STEP NODES (LEFT-TO-RIGHT): THINKING -> DRAFTS [STACK] -> REFINING -> RESULT */}
+              {/* 2. ALL 4 PIPELINE STEP NODES (LEFT-TO-RIGHT): THINKING -> DRAFTS [STACK] -> REFINING -> RESULT */}
               {flowNodes.map((node) => {
                 const pos = getEffectivePos(node);
                 const isSelected = selectedNodeId === node.nodeId;
@@ -2476,21 +3206,40 @@ export default function GoalHarnessPage() {
                       />
                     )}
 
-                    {/* '+' Output Port on Draft & Result nodes: branch/refine next round from this node */}
-                    {(isResult || isDraft) && (
+                    {(isThinking || isRefining) && rounds.length > 0 && (
+                      <span
+                        className="ref-flow-port output-port-dot"
+                        title="Connected to next pipeline step"
+                      />
+                    )}
+
+                    {/* '+' Output Port on Planned Thinking nodes (when rounds.length === 0) or Draft & Result nodes */}
+                    {(isResult || isDraft || (isThinking && rounds.length === 0)) && (
                       <button
                         type="button"
                         className="ref-flow-port output-port-btn"
                         disabled={isRunning}
                         onClick={(e) => {
                           e.stopPropagation();
-                          handleSelectCandidateForReiteration(
-                            cand,
-                            node.roundNumber
-                          );
+                          if (rounds.length === 0) {
+                            void handlePrimaryAction();
+                          } else {
+                            handleSelectCandidateForReiteration(
+                              cand,
+                              node.roundNumber
+                            );
+                          }
                         }}
-                        title={`Refine next iteration from R${node.roundNumber} • ${cand.label}`}
-                        aria-label={`Refine from R${node.roundNumber}`}
+                        title={
+                          rounds.length === 0
+                            ? `Launch Evolution for ${node.deliverableTitle}`
+                            : `Refine next iteration from R${node.roundNumber} • ${cand.label}`
+                        }
+                        aria-label={
+                          rounds.length === 0
+                            ? `Launch Evolution for ${node.deliverableTitle}`
+                            : `Refine from R${node.roundNumber}`
+                        }
                       >
                         <IconPlus size={12} strokeWidth={2.3} />
                       </button>
@@ -2553,103 +3302,164 @@ export default function GoalHarnessPage() {
                     </div>
 
                     {/* ==================== BODY BY STEP KIND ==================== */}
-                    {isThinking && (
-                      <div className="ref-harness-node-stage-box is-thinking">
-                        <div className="ref-harness-stage-top">
-                          <div className="ref-harness-stage-heading-row">
-                            <span className="ref-harness-stage-heading">
-                              ✦{" "}
-                              {node.roundNumber === 1
-                                ? "Initial Goal Decomposition"
-                                : "Iterative Refinement Strategy"}
-                            </span>
-                          </div>
-                          <p className="ref-harness-stage-summary">
-                            {node.roundNumber > 1 &&
-                            node.roundSummary.includes("Refined:")
-                              ? node.roundSummary
-                              : `Goal: "${goalInput}" — Slot: ${node.deliverableTitle}`}
-                          </p>
-                        </div>
-
-                        <div className="ref-harness-stage-bottom">
-                          <span className="ref-harness-stage-sublabel">
-                            Synthesized Draft Strategies (
-                            {node.outcome.candidates.length}):
-                          </span>
-                          {node.outcome.candidates.map((c, idx) => (
-                            <div
-                              key={idx}
-                              className="ref-harness-strategy-pill"
-                            >
-                              • <strong>#{idx + 1}:</strong>{" "}
-                              {c.promptStrategy || c.label}
+                    {isThinking &&
+                      (() => {
+                        const refinedMatch = node.roundSummary.match(
+                          /\(Refined:\s*"([^"]+)"\)/i
+                        );
+                        const conciseDirective =
+                          refinedMatch?.[1]?.trim() ||
+                          (deliverables.length > 1
+                            ? `${node.deliverableTitle} — ${goalInput.trim()}`
+                            : goalInput.trim() || node.deliverableTitle);
+                        return (
+                          <div className="ref-harness-node-stage-box is-thinking">
+                            <div className="ref-harness-stage-top">
+                              <div className="ref-harness-stage-heading-row">
+                                <span className="ref-harness-stage-heading">
+                                  ✦{" "}
+                                  {node.roundNumber === 1
+                                    ? "Initial Plan"
+                                    : refinedMatch
+                                    ? "User Refinement"
+                                    : "Auto-Refinement"}
+                                </span>
+                                <span className="ref-harness-stage-count-pill">
+                                  {node.outcome.candidates.length} Drafts •{" "}
+                                  {aspectRatio}
+                                </span>
+                              </div>
+                              <p className="ref-harness-stage-summary is-concise">
+                                &ldquo;{conciseDirective}&rdquo;
+                              </p>
                             </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
 
-                    {isRefining && (
-                      <div className="ref-harness-node-stage-box is-refining">
-                        <div className="ref-harness-stage-top">
-                          <div className="ref-harness-stage-heading-row">
-                            <span className="ref-harness-stage-heading">
-                              ✦ TRACE:{" "}
-                              {node.outcome.traceAttribution.failurePattern}
-                            </span>
-                            <span className="ref-harness-stage-module-tag">
-                              {node.outcome.traceAttribution.primaryModule.split(
-                                "_"
-                              )[0]}
-                            </span>
-                          </div>
-                          <p className="ref-harness-stage-summary">
-                            {node.outcome.traceAttribution.pairwiseReasoning ||
-                              node.outcome.traceAttribution.diagnosisSummary}
-                          </p>
-                        </div>
-
-                        {/* Top 3 Rubric Mini-Bars */}
-                        <div className="ref-harness-stage-bottom">
-                          {node.winnerCandidate.criterionScores
-                            .slice(0, 3)
-                            .map((cs) => {
-                              const critMeta = rubric.find(
-                                (r) => r.id === cs.criterionId
-                              );
-                              const maxW = critMeta?.weight || 25;
-                              const pct = Math.round((cs.score / maxW) * 100);
-                              return (
-                                <div
-                                  key={cs.criterionId}
-                                  className="ref-harness-mini-rubric-row"
-                                >
-                                  <div className="ref-harness-mini-rubric-head">
-                                    <span className="ref-harness-mini-rubric-label">
-                                      {critMeta?.label || cs.criterionId}
+                            <div className="ref-harness-stage-chips-grid">
+                              {node.outcome.candidates.map((c, idx) => {
+                                const rawStrat = (
+                                  c.promptStrategy ||
+                                  c.label ||
+                                  `Draft #${idx + 1}`
+                                )
+                                  .replace(/^R\d+\s+Draft\s+[A-Z]\s*•\s*/i, "")
+                                  .replace(/^Draft\s+[A-Z]\s*•\s*/i, "")
+                                  .replace(
+                                    /^PROMPT_SPECIFICATION$/i,
+                                    "Prompt Spec"
+                                  )
+                                  .replace(
+                                    /^REFERENCE_ROUTING$/i,
+                                    "Ref Routing"
+                                  )
+                                  .replace(/^MODEL_PARAMETERS$/i, "Model Params");
+                                const shortStrat = rawStrat
+                                  .split(/[•,&]/)[0]
+                                  .trim();
+                                return (
+                                  <div
+                                    key={idx}
+                                    className="ref-harness-strategy-chip"
+                                    title={c.promptStrategy || c.label}
+                                  >
+                                    <span className="ref-harness-strategy-chip-idx">
+                                      #{idx + 1}
                                     </span>
-                                    <strong>
-                                      {cs.score}/{maxW}
-                                    </strong>
+                                    <span className="ref-harness-strategy-chip-text">
+                                      {shortStrat}
+                                    </span>
                                   </div>
-                                  <div className="ref-harness-mini-rubric-track">
+                                );
+                              })}
+                            </div>
+                          </div>
+                        );
+                      })()}
+
+                    {isRefining &&
+                      (() => {
+                        const verdict =
+                          node.outcome.traceAttribution.pairwiseVerdict;
+                        const verdictLabel =
+                          node.winnerCandidate.totalScore >= targetScore
+                            ? "✓ Target Met"
+                            : verdict === "CHALLENGER_WON"
+                            ? "↑ Promoted"
+                            : verdict === "INCUMBENT_RETAINED"
+                            ? "↺ Kept Best"
+                            : "★ Baseline";
+                        return (
+                          <div className="ref-harness-node-stage-box is-refining">
+                            <div className="ref-harness-refining-score-banner">
+                              <div className="ref-harness-refining-score-main">
+                                <span className="ref-harness-refining-score-num">
+                                  {node.winnerCandidate.totalScore}
+                                </span>
+                                <span className="ref-harness-refining-score-denom">
+                                  /100
+                                </span>
+                              </div>
+                              <div className="ref-harness-refining-badges">
+                                <span className="ref-harness-verdict-pill">
+                                  {verdictLabel}
+                                </span>
+                                <span className="ref-harness-stage-module-tag">
+                                  {
+                                    node.outcome.traceAttribution.primaryModule.split(
+                                      "_"
+                                    )[0]
+                                  }
+                                </span>
+                              </div>
+                            </div>
+
+                            {/* Rubric Telemetry Bars */}
+                            <div className="ref-harness-stage-bottom">
+                              {node.winnerCandidate.criterionScores
+                                .slice(0, 4)
+                                .map((cs) => {
+                                  const critMeta = rubric.find(
+                                    (r) => r.id === cs.criterionId
+                                  );
+                                  const maxW = critMeta?.weight || 25;
+                                  const pct = Math.round(
+                                    (cs.score / maxW) * 100
+                                  );
+                                  const shortLabel = (
+                                    critMeta?.label || cs.criterionId
+                                  )
+                                    .split(/[&/]/)[0]
+                                    .trim();
+                                  return (
                                     <div
-                                      className="ref-harness-mini-rubric-fill"
-                                      style={{
-                                        width: `${Math.min(
-                                          100,
-                                          Math.max(0, pct)
-                                        )}%`,
-                                      }}
-                                    />
-                                  </div>
-                                </div>
-                              );
-                            })}
-                        </div>
-                      </div>
-                    )}
+                                      key={cs.criterionId}
+                                      className="ref-harness-mini-rubric-row"
+                                    >
+                                      <div className="ref-harness-mini-rubric-head">
+                                        <span className="ref-harness-mini-rubric-label">
+                                          {shortLabel}
+                                        </span>
+                                        <strong>
+                                          {cs.score}/{maxW}
+                                        </strong>
+                                      </div>
+                                      <div className="ref-harness-mini-rubric-track">
+                                        <div
+                                          className="ref-harness-mini-rubric-fill"
+                                          style={{
+                                            width: `${Math.min(
+                                              100,
+                                              Math.max(0, pct)
+                                            )}%`,
+                                          }}
+                                        />
+                                      </div>
+                                    </div>
+                                  );
+                                })}
+                            </div>
+                          </div>
+                        );
+                      })()}
 
                     {(isDraft || isResult) && (
                       <div
@@ -2722,11 +3532,9 @@ export default function GoalHarnessPage() {
                     >
                       <span className="ref-flow-node-prompt-single">
                         {isThinking
-                          ? `Plan: ${globalPackInvariants || goalInput}`
+                          ? "Plan & Draft Prompts"
                           : isRefining
-                          ? node.outcome.refinerDecisionForNextRound
-                              ?.refinementSummary ||
-                            node.outcome.traceAttribution.diagnosisSummary
+                          ? "Critic & TRACE Diagnosis"
                           : cand.prompt}
                       </span>
                       <span className="ref-flow-footer-inspect-tag">
@@ -2792,6 +3600,7 @@ export default function GoalHarnessPage() {
             </button>
           </div>
 
+          <div className="ref-harness-side-scroll">
           {/* 2. GOAL TEXT BOX */}
           <div className="ref-harness-goal-box">
             <div className="ref-harness-goal-label-row">
@@ -2989,6 +3798,14 @@ export default function GoalHarnessPage() {
                   setStatus("stopped");
                   setActiveStageLabel("STOPPING");
                   setLiveStepNote("Stopping after current API call...");
+                  const currentId =
+                    activeMissionIdRef.current || activeMissionId;
+                  if (currentId) {
+                    void localDbUpdateHarnessMissionStatus(
+                      currentId,
+                      "stopped"
+                    );
+                  }
                 }}
               >
                 Stop
@@ -3083,6 +3900,7 @@ export default function GoalHarnessPage() {
                 })}
               </div>
             )}
+          </div>
           </div>
         </aside>
       </div>
@@ -3207,7 +4025,7 @@ export default function GoalHarnessPage() {
                       htmlFor="harness-rounds-select"
                       className="ref-field-label"
                     >
-                      Max Rounds per Run
+                      Max Steps / Rounds per Run (3–10)
                     </label>
                     <select
                       id="harness-rounds-select"
@@ -3215,9 +4033,10 @@ export default function GoalHarnessPage() {
                       value={maxRounds}
                       onChange={(e) => setMaxRounds(Number(e.target.value))}
                     >
-                      {[1, 2, 3, 4, 5].map((r) => (
+                      {[3, 4, 5, 6, 7, 8, 9, 10].map((r) => (
                         <option key={r} value={r}>
-                          {r} {r === 1 ? "Round" : "Rounds"}
+                          {r} Steps / Rounds
+                          {r === (harnessDefaultSteps || 4) ? " (Default)" : ""}
                         </option>
                       ))}
                     </select>
@@ -3710,6 +4529,73 @@ export default function GoalHarnessPage() {
               );
             })()}
           </div>
+        </div>
+      )}
+      {/* ==================== RENAME MISSION MODAL ==================== */}
+      {isRenameMissionModalOpen && (
+        <div
+          className="ref-modal-backdrop"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="edit-mission-title-modal-heading"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              setIsRenameMissionModalOpen(false);
+            }
+          }}
+        >
+          <form
+            className="ref-modal-card ref-project-rename-modal"
+            onSubmit={handleSaveMissionTitleModal}
+          >
+            <div className="ref-modal-header">
+              <strong
+                id="edit-mission-title-modal-heading"
+                className="ref-soft-card-title"
+              >
+                Edit Mission Name
+              </strong>
+              <button
+                type="button"
+                aria-label="Close modal"
+                className="ref-circle-icon-btn sm"
+                onClick={() => setIsRenameMissionModalOpen(false)}
+              >
+                <IconClose size={12} />
+              </button>
+            </div>
+
+            <div>
+              <label
+                className="ref-field-label"
+                htmlFor="edit-mission-title-input"
+              >
+                Mission Name
+              </label>
+              <input
+                ref={missionTitleInputRef}
+                id="edit-mission-title-input"
+                type="text"
+                value={missionTitleDraft}
+                onChange={(e) => setMissionTitleDraft(e.target.value)}
+                className="ref-input"
+                placeholder="Enter mission name..."
+              />
+            </div>
+
+            <div className="ref-project-rename-actions">
+              <button
+                type="button"
+                className="ref-mura-btn-outline lg"
+                onClick={() => setIsRenameMissionModalOpen(false)}
+              >
+                Cancel
+              </button>
+              <button type="submit" className="ref-dark-pill-btn">
+                <span>Save Name</span>
+              </button>
+            </div>
+          </form>
         </div>
       )}
     </div>

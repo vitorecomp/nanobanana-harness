@@ -672,6 +672,7 @@ export async function runHarnessCriticAgent(params: {
   mimeType: string;
   roundNumber: number;
   userSteeringHint?: string;
+  priorDirectivesHistory?: string[];
   customCriticPrompt?: string;
 }): Promise<HarnessCandidateEvaluation> {
   // Deterministic fallback evaluation when no API key or no rendered image is present
@@ -752,11 +753,16 @@ export async function runHarnessCriticAgent(params: {
 
     const criticText = [
       params.customCriticPrompt?.trim() || DEFAULT_HARNESS_CRITIC_PROMPT,
-      `Mission Goal: "${params.goal}"`,
+      `Mission Goal (Current Living Spec): "${params.goal}"`,
       `Global Pack Invariants: "${params.globalPackInvariants}"`,
-      `Target Deliverable: "${params.deliverable.title} — ${params.deliverable.description}"`,
+      `Target Deliverable (Current Living Spec): "${params.deliverable.title} — ${params.deliverable.description}"`,
+      params.priorDirectivesHistory && params.priorDirectivesHistory.length > 0
+        ? `Cumulative User Refinement History (Newer directives supersede any conflicting earlier traits):\n${params.priorDirectivesHistory
+            .map((d, i) => `  ${i + 1}. "${d}"`)
+            .join("\n")}`
+        : "",
       params.userSteeringHint?.trim()
-        ? `User Refinement Directive for Round ${params.roundNumber}: "${params.userSteeringHint.trim()}" (Verify and reward candidates that faithfully incorporate this refinement directive while preserving visual quality.)`
+        ? `Active User Refinement Directive for Round ${params.roundNumber}: "${params.userSteeringHint.trim()}" (IMPORTANT: This directive overrides any conflicting attribute from earlier rounds. Reward candidates that faithfully execute this change.)`
         : "",
       `Evaluation Rubric (weights sum to 100):\n${rubricDesc}`,
       'Return ONLY valid JSON with this exact structure: {"passedHardGate": true, "hardFailures": [], "criterionScores": [{"criterionId": "...", "score": 25, "rationale": "..."}], "strengths": ["..."], "complaints": ["Concrete flaw 1 to fix...", "Concrete flaw 2 to fix..."]}',
@@ -889,7 +895,9 @@ export async function runHarnessTraceRefinerAgent(params: {
   modifierLabels: string[];
   aspectRatio: string;
   userSteeringHint?: string;
+  priorDirectivesHistory?: string[];
   customRefinerPrompt?: string;
+  skipNextRoundSynthesis?: boolean;
 }): Promise<{
   slotWinnerIndex: number;
   updatedDeliverable: HarnessDeliverableSpec;
@@ -941,14 +949,14 @@ export async function runHarnessTraceRefinerAgent(params: {
     updatedDeliverable.incumbentPrompt = roundWinner.prompt;
   } else if (
     roundWinner.passedHardGate &&
-    (roundWinner.totalScore >= params.deliverable.incumbentScore ||
-      (hasUserSteering && roundWinner.totalScore >= Math.min(params.targetScore - 5, params.deliverable.incumbentScore - 8)))
+    (hasUserSteering ||
+      roundWinner.totalScore >= params.deliverable.incumbentScore)
   ) {
     pairwiseVerdict = "CHALLENGER_WON";
     pairwiseReasoning = hasUserSteering
       ? `User-steered Challenger R${params.roundNumber}.#${bestIdx + 1} (${
           roundWinner.totalScore
-        }/100) promoted as the new Incumbent after applying refinement directive ("${params.userSteeringHint?.trim()}").`
+        }/100) promoted as the new Incumbent baseline after applying user directive ("${params.userSteeringHint?.trim()}").`
       : `Challenger R${params.roundNumber}.#${bestIdx + 1} (${
           roundWinner.totalScore
         }/100) outperformed prior Incumbent R${
@@ -1109,7 +1117,7 @@ export async function runHarnessTraceRefinerAgent(params: {
       }.`;
 
   const trimmedKey = params.apiKey.trim();
-  if (trimmedKey) {
+  if (trimmedKey && !params.skipNextRoundSynthesis) {
     try {
       const endpoint =
         "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent";
@@ -1213,6 +1221,169 @@ export async function runHarnessTraceRefinerAgent(params: {
   };
 }
 
+export async function evolveMissionSpecWithUserRefinement(params: {
+  apiKey: string;
+  currentGoal: string;
+  currentInvariants: string;
+  deliverables: HarnessDeliverableSpec[];
+  targetSlotId: string;
+  userRefinementNote: string;
+  priorDirectivesHistory: string[];
+}): Promise<{
+  updatedGoal: string;
+  updatedInvariants: string;
+  updatedDeliverables: HarnessDeliverableSpec[];
+}> {
+  const cleanNote = params.userRefinementNote.trim();
+  if (!cleanNote) {
+    return {
+      updatedGoal: params.currentGoal,
+      updatedInvariants: params.currentInvariants,
+      updatedDeliverables: params.deliverables,
+    };
+  }
+
+  const allDirectives = [...params.priorDirectivesHistory, cleanNote];
+  const fallbackGoal = params.currentGoal
+    .toLowerCase()
+    .includes(cleanNote.toLowerCase())
+    ? params.currentGoal
+    : `${params.currentGoal.replace(/\.+$/, "")} — ${cleanNote}`;
+
+  const fallbackDeliverables = params.deliverables.map((d) => {
+    if (params.targetSlotId !== "ALL" && d.id !== params.targetSlotId) {
+      return d;
+    }
+    const baseDesc = d.description.replace(/\s*\[Refinements:[\s\S]*$/i, "").trim();
+    return {
+      ...d,
+      description: `${baseDesc} [Refinements: ${allDirectives.join(" → ")}]`,
+    };
+  });
+
+  const trimmedKey = params.apiKey.trim();
+  if (!trimmedKey) {
+    return {
+      updatedGoal: fallbackGoal,
+      updatedInvariants: params.currentInvariants,
+      updatedDeliverables: fallbackDeliverables,
+    };
+  }
+
+  try {
+    const endpoint =
+      "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent";
+    const promptLines = [
+      "You are the Specification Evolution Agent of an iterative Goal-Driven Image Generation Harness.",
+      "The user is steering an active mission with a new refinement instruction. Update the Mission Goal, Global Pack Invariants, and targeted Deliverable Specifications so they reflect the latest cumulative state.",
+      "CRITICAL RULE: If the new instruction contradicts an earlier attribute (e.g., 'sunny calm sunset' -> 'add a storm', or 'modern glass house' -> 'traditional wooden house'), REPLACE the outdated attribute in the goal and deliverable description so future iterations and the Critic judge against the updated truth without losing prior compatible history.",
+      `Current Mission Goal: "${params.currentGoal}"`,
+      `Current Global Pack Invariants: "${params.currentInvariants}"`,
+      params.priorDirectivesHistory.length > 0
+        ? `Prior Refinement History:\n${params.priorDirectivesHistory
+            .map((h, i) => `  ${i + 1}. "${h}"`)
+            .join("\n")}`
+        : "",
+      `NEW User Refinement Instruction: "${cleanNote}"`,
+      `Current Deliverables JSON:\n${JSON.stringify(
+        params.deliverables.map((d) => ({
+          id: d.id,
+          title: d.title,
+          description: d.description,
+          targeted:
+            params.targetSlotId === "ALL" || d.id === params.targetSlotId,
+        }))
+      )}`,
+      'Return ONLY valid JSON: {"updatedGoal": "Concise updated mission goal in the user\'s language...", "updatedInvariants": "Updated English global pack invariants...", "deliverables": [{"id": "...", "title": "...", "description": "Updated comprehensive English visual specification incorporating all cumulative refinements..."}]}',
+    ]
+      .filter(Boolean)
+      .join("\n\n");
+
+    const response = await fetchWithTimeout(
+      endpoint,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-goog-api-key": trimmedKey,
+        },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: promptLines }] }],
+          generationConfig: {
+            responseMimeType: "application/json",
+            thinkingConfig: { thinkingBudget: 0 },
+          },
+        }),
+        cache: "no-store",
+      },
+      10000
+    );
+
+    if (!response.ok) {
+      return {
+        updatedGoal: fallbackGoal,
+        updatedInvariants: params.currentInvariants,
+        updatedDeliverables: fallbackDeliverables,
+      };
+    }
+
+    const data = (await response.json()) as GeminiResponse;
+    const rawText =
+      data.candidates?.[0]?.content?.parts
+        ?.filter((p) => !p.thought)
+        ?.map((p) => p.text || "")
+        .join("")
+        .trim() || "";
+    if (!rawText) {
+      return {
+        updatedGoal: fallbackGoal,
+        updatedInvariants: params.currentInvariants,
+        updatedDeliverables: fallbackDeliverables,
+      };
+    }
+
+    const parsed = JSON.parse(rawText) as {
+      updatedGoal?: string;
+      updatedInvariants?: string;
+      deliverables?: Array<{
+        id?: string;
+        title?: string;
+        description?: string;
+      }>;
+    };
+
+    const byId = new Map(
+      (parsed.deliverables || []).map((item) => [item.id, item])
+    );
+
+    const mergedDeliverables = params.deliverables.map((d, idx) => {
+      if (params.targetSlotId !== "ALL" && d.id !== params.targetSlotId) {
+        return d;
+      }
+      const match = byId.get(d.id) || parsed.deliverables?.[idx];
+      return {
+        ...d,
+        title: match?.title?.trim() || d.title,
+        description:
+          match?.description?.trim() || fallbackDeliverables[idx].description,
+      };
+    });
+
+    return {
+      updatedGoal: parsed.updatedGoal?.trim() || fallbackGoal,
+      updatedInvariants:
+        parsed.updatedInvariants?.trim() || params.currentInvariants,
+      updatedDeliverables: mergedDeliverables,
+    };
+  } catch {
+    return {
+      updatedGoal: fallbackGoal,
+      updatedInvariants: params.currentInvariants,
+      updatedDeliverables: fallbackDeliverables,
+    };
+  }
+}
+
 export async function buildReiterationDraftsForDeliverable(params: {
   apiKey: string;
   goal: string;
@@ -1225,6 +1396,8 @@ export async function buildReiterationDraftsForDeliverable(params: {
   priorStrengths: string[];
   priorComplaints: string[];
   userRefinementNote: string;
+  priorDirectivesHistory?: string[];
+  priorRoundTrajectory?: string[];
   aspectRatio: string;
   customRefinerPrompt?: string;
 }): Promise<{
@@ -1247,12 +1420,17 @@ export async function buildReiterationDraftsForDeliverable(params: {
       : "";
 
   const directives = [
-    ...(trimmedNote ? [`User Refinement Request: ${trimmedNote}`] : []),
+    ...(params.priorDirectivesHistory || []).map(
+      (d, idx) => `Prior Round Directive #${idx + 1}: ${d}`
+    ),
+    ...(trimmedNote
+      ? [`Latest Round ${params.nextRoundNumber} User Directive: ${trimmedNote}`]
+      : []),
     ...params.priorComplaints,
   ];
   const directiveClause =
     directives.length > 0
-      ? ` Mandatory Refinements for Round ${params.nextRoundNumber}: ${directives.join(
+      ? ` Cumulative Refinements for Round ${params.nextRoundNumber}: ${directives.join(
           "; "
         )}.`
       : " Further elevate micro-texture detail, lighting contrast, and silhouette crispness.";
@@ -1269,7 +1447,7 @@ export async function buildReiterationDraftsForDeliverable(params: {
           : idx === 2
           ? "Strict Projection & Spatial Balance"
           : "Hero Composition & Chromatic Harmony";
-      const rawComposed = `${anchorPrefix}${params.deliverable.description}. ${params.globalPackInvariants}.${directiveClause} (${emphasis})`.trim();
+      const rawComposed = `${anchorPrefix}${basePrompt}. Updated Deliverable Spec: ${params.deliverable.description}. ${params.globalPackInvariants}.${directiveClause} (${emphasis})`.trim();
       return {
         label: `R${params.nextRoundNumber} Draft ${String.fromCharCode(
           65 + idx
@@ -1299,13 +1477,21 @@ export async function buildReiterationDraftsForDeliverable(params: {
       "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent";
     const promptLines = [
       params.customRefinerPrompt?.trim() || DEFAULT_HARNESS_REFINER_PROMPT,
-      `Mission Goal: "${params.goal}"`,
+      `Mission Goal (Living Spec): "${params.goal}"`,
       `Global Pack Invariants: "${params.globalPackInvariants}"`,
-      `Deliverable: "${params.deliverable.title} — ${params.deliverable.description}"`,
+      `Deliverable (Living Spec): "${params.deliverable.title} — ${params.deliverable.description}"`,
       `Current Incumbent Prompt (Score ${params.deliverable.incumbentScore}/100): "${basePrompt}"`,
       `Anchored to Incumbent Image as Reference #1: ${Boolean(
         params.anchorToIncumbent && params.deliverable.incumbentImageUrl
       )}`,
+      params.priorDirectivesHistory && params.priorDirectivesHistory.length > 0
+        ? `Cumulative User Refinement Directives Across Previous Rounds (MUST BE PRESERVED unless superseded by the latest instruction):\n${params.priorDirectivesHistory
+            .map((d, i) => `  ${i + 1}. "${d}"`)
+            .join("\n")}`
+        : "",
+      params.priorRoundTrajectory && params.priorRoundTrajectory.length > 0
+        ? `Recent Round Trajectory History:\n${params.priorRoundTrajectory.join("\n")}`
+        : "",
       params.priorStrengths.length > 0
         ? `Strengths to Preserve: ${params.priorStrengths.join("; ")}`
         : "",
@@ -1313,9 +1499,9 @@ export async function buildReiterationDraftsForDeliverable(params: {
         ? `Prior Critic Complaints to Fix: ${params.priorComplaints.join("; ")}`
         : "",
       trimmedNote
-        ? `CRITICAL USER REITERATION INSTRUCTION (MUST BE APPLIED IN EVERY DRAFT): "${trimmedNote}"`
+        ? `CRITICAL NEW USER REITERATION INSTRUCTION FOR ROUND ${params.nextRoundNumber} (MUST BE APPLIED IN EVERY DRAFT, superseding any conflicting old attribute while keeping all compatible prior refinements): "${trimmedNote}"`
         : "No manual user note provided; refine micro-details, lighting, and resolve any remaining complaints.",
-      `Generate ${safeCount} distinct refined English image generation prompts for Round ${params.nextRoundNumber}. If anchored to the incumbent reference image, start the prompt by instructing the image model to preserve the reference composition while applying the specific refinements.`,
+      `Generate ${safeCount} distinct refined English image generation prompts for Round ${params.nextRoundNumber}. Rewrite the Current Incumbent Prompt so it integrates the entire cumulative refinement history and the new instruction into a single cohesive scene description.`,
       'Return ONLY valid JSON: {"refinementSummary": "1-sentence summary of the reiteration strategy...", "drafts": [{"label": "R2 Draft A • ...", "promptStrategy": "...", "prompt": "Full English prompt..."}]}',
     ]
       .filter(Boolean)

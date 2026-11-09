@@ -1,12 +1,54 @@
 # Processing Pipelines — Nano Banana Atelier Studio 🍌✦
 
-This document provides sequence diagrams and step-by-step specifications for all **5 core processing pipelines** in **Nano Banana Atelier Studio**:
+This document provides sequence diagrams and step-by-step specifications for all **6 core processing pipelines** in **Nano Banana Atelier Studio**:
 
+0. **Autonomous Goal-Driven Harness (`01 Thinking` $\rightarrow$ `02 Drafts` $\rightarrow$ `03 Critic & TRACE` $\rightarrow$ `04 Champion`)** — see also [**`goal-harness.md`**](./goal-harness.md)
 1. **Dynamic Scene Expansion & 4-Quad Generation (`1 + 3`)**
 2. **Surgical Delta & Dual-Anchor Preservation**
 3. **Non-Destructive Branching Timeline & History Resumption**
 4. **Local Filesystem Persistence & Folder Synchronization**
 5. **Modifiers Studio AI Synthesis**
+
+---
+
+## 0. Autonomous Goal-Driven Harness (`AutoRef + EvoGen TRACE`)
+
+On `/harness`, the user provides a visual goal (single scene or up to 8-asset game pack) and optional reference images. Four coordinated agent stages iterate across rounds (configurable `3..10` default steps, default `4`) until every deliverable slot meets `targetScore`:
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor Creator as User / Art Director
+    participant HarnessUI as GoalHarnessPage (/harness)
+    participant Planner as Planner & Spec Agent (2.5-flash)
+    participant NanoBanana as Nano Banana (2.5-flash-image / 3-pro)
+    participant Critic as Multimodal Critic (2.5-flash Vision)
+    participant Trace as TRACE Refiner (2.5-flash)
+    participant Bridge as tauriBridge.ts -> SQLite & Disk
+
+    Creator->>HarnessUI: Enter Goal (e.g. "Cyberpunk ships pack") & Launch
+    HarnessUI->>Planner: runHarnessPlannerAgent(goal, references)
+    Planner-->>HarnessUI: JSON { deliverables[1..8], globalPackInvariants, rubric[100pts] }
+    HarnessUI->>Bridge: Save initial mission record
+
+    loop Round 1 .. maxRounds (until all deliverables SOLVED)
+        loop Each unsolved deliverable slot
+            HarnessUI->>NanoBanana: Parallel render K drafts (+ Incumbent>=60 + Keystone Anchor)
+            NanoBanana-->>HarnessUI: K candidate PNGs
+            HarnessUI->>Critic: Score K candidates (Hard-Failure Gate + 100pt Rubric)
+            Critic-->>HarnessUI: Scores, strengths & actionable complaints
+            HarnessUI->>Trace: Attribution (PROMPT / REFERENCE / PARAMS) + No-Patch Gate
+            Trace-->>HarnessUI: Crown Slot Winner + Next-round complaint-directed drafts
+            HarnessUI->>Bridge: Persist PNGs to ~/Pictures/nanobanana/Harness_<title>/ & SQLite
+        end
+    end
+
+    opt User Reiteration / Steering
+        Creator->>HarnessUI: Enter refinement directive in Reiteration Console
+        HarnessUI->>Planner: evolveMissionSpecWithUserRefinement(livingGoal, history, directive)
+        Planner-->>HarnessUI: Updated Living Goal & Deliverable Specs (preserving history)
+    end
+```
 
 ---
 

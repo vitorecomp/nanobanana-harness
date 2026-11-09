@@ -21,6 +21,7 @@ export default function Navbar() {
     hasKeyInRam,
     rememberKeyInVault,
     triggerNewProject,
+    triggerNewHarnessMission,
     activeHarnessMissionId,
     isSettingsModalOpen,
     setSettingsModalOpen,
@@ -29,6 +30,9 @@ export default function Navbar() {
   const [isNewProjectModalOpen, setNewProjectModalOpen] =
     useState<boolean>(false);
   const [newProjectNameInput, setNewProjectNameInput] = useState<string>("");
+  const [newProjectKind, setNewProjectKind] = useState<"studio" | "harness">(
+    "studio"
+  );
   const newProjectInputRef = useRef<HTMLInputElement | null>(null);
 
   const activeUser = user || LOCAL_DEV_USER;
@@ -58,13 +62,27 @@ export default function Navbar() {
 
   const handleOpenNewProjectModal = () => {
     setNewProjectNameInput("");
+    setNewProjectKind(isHarness ? "harness" : "studio");
     setNewProjectModalOpen(true);
   };
 
   const handleConfirmCreateNewProject = async (e: React.FormEvent) => {
     e.preventDefault();
-    const chosenTitle = newProjectNameInput.trim() || "New Project";
+    const chosenTitle =
+      newProjectNameInput.trim() ||
+      (newProjectKind === "harness" ? "Untitled Goal Mission" : "New Project");
     setNewProjectModalOpen(false);
+    if (newProjectKind === "harness") {
+      const createdMissionId = await triggerNewHarnessMission(chosenTitle);
+      if (createdMissionId) {
+        router.push(
+          `/harness?missionId=${encodeURIComponent(createdMissionId)}`
+        );
+      } else {
+        router.push(`/harness?new=1&title=${encodeURIComponent(chosenTitle)}`);
+      }
+      return;
+    }
     await triggerNewProject(chosenTitle);
     if (!isCreate) {
       router.push("/create");
@@ -357,8 +375,7 @@ export default function Navbar() {
           }}
         >
           <form
-            className="ref-modal-card"
-            style={{ maxWidth: "400px", padding: "20px 22px", gap: "14px" }}
+            className="ref-modal-card ref-new-project-modal-card"
             onSubmit={handleConfirmCreateNewProject}
           >
             <div className="ref-modal-header">
@@ -379,6 +396,51 @@ export default function Navbar() {
             </div>
 
             <div>
+              <span className="ref-field-label">Creation Process</span>
+              <div
+                className="ref-new-project-kind-grid"
+                role="radiogroup"
+                aria-label="Creation Process"
+              >
+                <button
+                  type="button"
+                  id="new-project-kind-studio"
+                  role="radio"
+                  aria-checked={newProjectKind === "studio"}
+                  className={`ref-new-project-kind-card ${
+                    newProjectKind === "studio" ? "active" : ""
+                  }`}
+                  onClick={() => setNewProjectKind("studio")}
+                >
+                  <strong className="ref-new-project-kind-title">
+                    Studio Flow
+                  </strong>
+                  <span className="ref-new-project-kind-sub">
+                    2×2 interactive batch generation &amp; DNA locks
+                  </span>
+                </button>
+
+                <button
+                  type="button"
+                  id="new-project-kind-harness"
+                  role="radio"
+                  aria-checked={newProjectKind === "harness"}
+                  className={`ref-new-project-kind-card ${
+                    newProjectKind === "harness" ? "active" : ""
+                  }`}
+                  onClick={() => setNewProjectKind("harness")}
+                >
+                  <strong className="ref-new-project-kind-title">
+                    Goal Harness
+                  </strong>
+                  <span className="ref-new-project-kind-sub">
+                    Planner → Generator → Critic → TRACE loop
+                  </span>
+                </button>
+              </div>
+            </div>
+
+            <div>
               <label
                 className="ref-field-label"
                 htmlFor="new-project-name-input"
@@ -392,19 +454,15 @@ export default function Navbar() {
                 value={newProjectNameInput}
                 onChange={(e) => setNewProjectNameInput(e.target.value)}
                 className="ref-input"
-                placeholder="E.g.: Cyber Samurai Storyboard..."
+                placeholder={
+                  newProjectKind === "harness"
+                    ? "E.g.: Isometric Space Asset Pack..."
+                    : "E.g.: Cyber Samurai Storyboard..."
+                }
               />
             </div>
 
-            <div
-              style={{
-                display: "flex",
-                justifyContent: "flex-end",
-                alignItems: "center",
-                gap: "8px",
-                paddingTop: "2px",
-              }}
-            >
+            <div className="ref-new-project-modal-actions">
               <button
                 type="button"
                 className="ref-mura-btn-outline lg"
@@ -412,8 +470,16 @@ export default function Navbar() {
               >
                 Cancel
               </button>
-              <button type="submit" className="ref-dark-pill-btn">
-                <span>Create Project</span>
+              <button
+                type="submit"
+                id="new-project-confirm-btn"
+                className="ref-dark-pill-btn"
+              >
+                <span>
+                  {newProjectKind === "harness"
+                    ? "Create Goal Harness"
+                    : "Create Studio Project"}
+                </span>
               </button>
             </div>
           </form>
