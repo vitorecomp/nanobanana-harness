@@ -388,34 +388,32 @@ export default function ProjectsWorkspacePage() {
                         fontWeight: 700,
                         letterSpacing: "0.02em",
                         backgroundColor: isHarnessItem
-                          ? "#14213d"
+                          ? "var(--ref-moss-outer)"
                           : "rgba(255, 255, 255, 0.92)",
-                        color: isHarnessItem ? "#fca311" : "#14213d",
+                        color: isHarnessItem
+                          ? "var(--ref-canvas)"
+                          : "var(--ref-navy-deep)",
                         border: isHarnessItem
-                          ? "1px solid rgba(252, 163, 17, 0.45)"
-                          : "1px solid rgba(20, 33, 61, 0.14)",
+                          ? "1px solid var(--ref-lime-accent)"
+                          : "1px solid var(--ref-border-subtle)",
                         fontVariantNumeric: "tabular-nums",
                       }}
                     >
-                      {isHarnessItem
-                        ? `GOAL HARNESS • ${hMission?.solvedCount ?? 0}/${
-                            hMission?.deliverableCount ?? 1
-                          } SOLVED`
-                        : "STUDIO"}
+                      {isHarnessItem ? "GOAL HARNESS" : "STUDIO"}
                     </span>
 
                     {isHarnessItem && (hMission?.bestScore ?? 0) > 0 && (
                       <span
                         style={{
                           position: "absolute",
-                          top: "10px",
-                          right: "10px",
-                          padding: "4px 10px",
+                          top: "8px",
+                          right: "8px",
+                          padding: "4px 12px",
                           borderRadius: "999px",
                           fontSize: "12px",
                           fontWeight: 800,
-                          backgroundColor: "#fca311",
-                          color: "#14213d",
+                          backgroundColor: "var(--ref-lime-accent)",
+                          color: "var(--ref-moss-outer)",
                           fontVariantNumeric: "tabular-nums",
                         }}
                       >
@@ -427,9 +425,7 @@ export default function ProjectsWorkspacePage() {
                   {/* 2. MIDDLE METADATA BLOCK */}
                   <div className="ref-mura-card-body">
                     <div className="ref-mura-title-row">
-                      <h2 className="ref-mura-card-title">
-                        {item.title} #{String(itemIdx + 1).padStart(2, "0")}
-                      </h2>
+                      <h2 className="ref-mura-card-title">{item.title}</h2>
                       <span className="ref-mura-card-price-tag">
                         ({count} {count === 1 ? "round" : "rounds"})
                       </span>

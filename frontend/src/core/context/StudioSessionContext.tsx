@@ -120,15 +120,7 @@ export function StudioSessionProvider({ children }: { children: ReactNode }) {
     useState<string>("New Project");
   const [activeHarnessMissionId, setActiveHarnessMissionIdState] = useState<
     string | null
-  >(() => {
-    if (typeof window !== "undefined") {
-      return (
-        window.localStorage.getItem("nanobanana_active_harness_mission_id") ||
-        null
-      );
-    }
-    return null;
-  });
+  >(null);
 
   const setActiveHarnessMissionId = (id: string | null) => {
     setActiveHarnessMissionIdState(id);
@@ -286,6 +278,14 @@ export function StudioSessionProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     let mounted = true;
+    if (typeof window !== "undefined") {
+      const savedMissionId = window.localStorage.getItem(
+        "nanobanana_active_harness_mission_id"
+      );
+      if (savedMissionId) {
+        setActiveHarnessMissionIdState((prev) => prev || savedMissionId);
+      }
+    }
     Promise.all([
       fetchBootstrap(),
       vaultGetModifierCategories<ModifierCategory>(),

@@ -121,7 +121,7 @@ export async function imageUrlToInlinePartForHarness(
               resolve(null);
               return;
             }
-            ctx.fillStyle = "#14213d";
+            ctx.fillStyle = "#1b263b";
             ctx.fillRect(0, 0, targetW, targetH);
             ctx.drawImage(img, 0, 0, targetW, targetH);
             const jpegDataUrl = canvas.toDataURL("image/jpeg", 0.8);

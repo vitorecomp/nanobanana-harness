@@ -187,7 +187,7 @@ export default function Navbar() {
                 cx="12"
                 cy="12"
                 r="4.2"
-                stroke="#fca311"
+                stroke="#778da9"
                 strokeWidth="2"
               />
               <circle cx="12" cy="12" r="1.5" fill="currentColor" />
@@ -238,7 +238,7 @@ export default function Navbar() {
                 cx="9"
                 cy="6"
                 r="2.2"
-                fill="#fca311"
+                fill="#778da9"
                 stroke="currentColor"
                 strokeWidth="1.8"
               />
@@ -246,7 +246,7 @@ export default function Navbar() {
                 cx="15"
                 cy="12"
                 r="2.2"
-                fill="#fca311"
+                fill="#778da9"
                 stroke="currentColor"
                 strokeWidth="1.8"
               />
@@ -254,7 +254,7 @@ export default function Navbar() {
                 cx="10"
                 cy="18"
                 r="2.2"
-                fill="#fca311"
+                fill="#778da9"
                 stroke="currentColor"
                 strokeWidth="1.8"
               />
@@ -283,7 +283,7 @@ export default function Navbar() {
                 <span
                   className="ref-sidebar-status-dot"
                   style={{
-                    backgroundColor: hasKeyInRam ? "#fca311" : "#14213d",
+                    backgroundColor: hasKeyInRam ? "#415a77" : "#1b263b",
                   }}
                 />
                 <span className="ref-sidebar-status-text">
@@ -329,7 +329,7 @@ export default function Navbar() {
               <span
                 className="ref-sidebar-status-dot"
                 style={{
-                  backgroundColor: hasKeyInRam ? "#fca311" : "#d62828",
+                  backgroundColor: hasKeyInRam ? "#415a77" : "#9e2a2b",
                 }}
               />
             )}

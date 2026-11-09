@@ -2428,24 +2428,29 @@ export default function InteractiveStudio({
                 <defs>
                   <marker
                     id="flow-arrow-locked"
-                    markerWidth="9"
-                    markerHeight="9"
-                    refX="7"
-                    refY="4.5"
-                    orient="auto"
-                  >
-                    <path d="M0,0 L9,4.5 L0,9 Z" fill="var(--ref-moss-outer)" />
-                  </marker>
-                  <marker
-                    id="flow-arrow-draft"
-                    markerWidth="9"
-                    markerHeight="9"
-                    refX="7"
-                    refY="4.5"
+                    markerWidth="7"
+                    markerHeight="7"
+                    refX="6"
+                    refY="3.5"
+                    markerUnits="userSpaceOnUse"
                     orient="auto"
                   >
                     <path
-                      d="M0,0 L9,4.5 L0,9 Z"
+                      d="M0,1 L6.5,3.5 L0,6 Z"
+                      fill="var(--ref-moss-outer)"
+                    />
+                  </marker>
+                  <marker
+                    id="flow-arrow-draft"
+                    markerWidth="7"
+                    markerHeight="7"
+                    refX="6"
+                    refY="3.5"
+                    markerUnits="userSpaceOnUse"
+                    orient="auto"
+                  >
+                    <path
+                      d="M0,1 L6.5,3.5 L0,6 Z"
                       fill="var(--ref-lime-accent)"
                     />
                   </marker>

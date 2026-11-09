@@ -2,13 +2,13 @@
 name: Nano Banana Studio
 description: Estúdio desktop e web de direção de arte interativa e geração multi-turno 2×2 com Google Nano Banana
 colors:
-  jet-black: "#000000"
-  oxford-navy: "#14213d"
-  amber-gold: "#fca311"
-  platinum-canvas: "#e5e5e5"
+  rich-black: "#0d1b2a"
+  oxford-blue: "#1b263b"
+  yinmn-blue: "#415a77"
+  silver-lake-blue: "#778da9"
+  platinum-alabaster: "#e0e1dd"
   crisp-white: "#ffffff"
-  oxford-ink-muted: "rgba(20, 33, 61, 0.62)"
-  oxford-divider: "rgba(20, 33, 61, 0.22)"
+  oxford-divider: "rgba(27, 38, 59, 0.24)"
 typography:
   display:
     fontFamily: "Plus Jakarta Sans, -apple-system, BlinkMacSystemFont, sans-serif"
@@ -171,6 +171,18 @@ The application operates as a fixed full-viewport desktop environment (`100vw ×
 3. **Modifiers (`/modifiers` — `.ref-modifiers-split-layout`)**:
    - **Left 60% Panel**: Chamfered search/filter bar + 2-column grid of category cards.
    - **Right 40% Panel**: Gemini AI category/modifier generator + manual category/modifier creation forms.
+
+## Motion & Choreography
+
+- **Focal Moment (`cubic-bezier(0.16, 1, 0.3, 1)`)**:
+  - **Directional Pipeline Signal (`refFlowSignalPulse`)**: Active and selected flow wires emit a directional SVG signal pulse (`stroke-dasharray: 6 10`) tracing `01 Thinking → 02 Drafts → 03 Refining → 04 Result`.
+  - **Stage-Staggered Card Settle (`refFlowCardSettle`, `260ms`)**: Pipeline step cards settle into place with subtle sibling stagger (`0ms`, `45ms`, `90ms`, `135ms`).
+  - **Critic Rubric Bar Reveal (`refRubricScaleReveal`, `420ms`)**: Rubric evaluation bars scale smoothly from `scaleX(0)` to `scaleX(1)` (`transform-origin: left center`).
+- **Spatial Continuity (`320ms`)**:
+  - Programmatic camera transitions (**Organize**, **Fit**, **Zoom Presets**, and **Iteration Focus**) glide smoothly via `.is-camera-gliding`, while manual drag/wheel panning bypasses transitions for zero-latency manipulation.
+  - Floating Inspector and Parameters modals enter with a `220ms cubic-bezier(0.16, 1, 0.3, 1)` scale-and-rise choreography.
+- **Reduced Motion (`@media (prefers-reduced-motion: reduce)`)**:
+  - Disables spatial transforms, camera glides, and continuous signal loops while preserving instant opacity and color state feedback.
 
 ## Do's and Don'ts
 

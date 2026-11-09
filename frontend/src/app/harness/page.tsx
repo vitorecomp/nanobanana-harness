@@ -146,7 +146,7 @@ function buildLeftToRightFlowWire(
 ): { path: string; startX: number; startY: number } {
   const startX = Math.round(sourcePos.x + HARNESS_CARD_WIDTH);
   const startY = Math.round(sourcePos.y + HARNESS_PORT_OFFSET_Y);
-  const endX = Math.round(targetPos.x);
+  const endX = Math.round(targetPos.x - 6);
   const endY = Math.round(targetPos.y + HARNESS_PORT_OFFSET_Y);
   const midX = Math.round((startX + endX) / 2);
 
@@ -187,7 +187,12 @@ function buildProceduralIsometricPreviewDataUrl(params: {
   slotIndex: number;
   candidateIndex: number;
 }): string {
-  const accentColors = ["#fca311", "#38bdf8", "#a855f7", "#34d399"];
+  const accentColors = [
+    "rgb(119,141,169)",
+    "rgb(65,90,119)",
+    "rgb(224,225,221)",
+    "rgb(148,163,184)",
+  ];
   const accent =
     accentColors[
       (params.slotIndex + params.candidateIndex) % accentColors.length
@@ -195,8 +200,8 @@ function buildProceduralIsometricPreviewDataUrl(params: {
   const safeTitle = params.slotTitle.replace(/[<>&"']/g, "").slice(0, 32);
   const safeLabel = params.candidateLabel.replace(/[<>&"']/g, "").slice(0, 36);
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
-    <rect width="512" height="512" fill="#0f172a"/>
-    <g stroke="rgba(148,163,184,0.16)" stroke-width="1">
+    <rect width="512" height="512" fill="rgb(13,27,42)"/>
+    <g stroke="rgba(119,141,169,0.22)" stroke-width="1">
       <line x1="256" y1="64" x2="448" y2="176"/>
       <line x1="256" y1="64" x2="64" y2="176"/>
       <line x1="64" y1="176" x2="256" y2="288"/>
@@ -204,12 +209,12 @@ function buildProceduralIsometricPreviewDataUrl(params: {
       <line x1="64" y1="304" x2="256" y2="416"/>
       <line x1="448" y1="304" x2="256" y2="416"/>
     </g>
-    <polygon points="256,112 396,192 256,272 116,192" fill="rgba(56,189,248,0.14)" stroke="${accent}" stroke-width="3"/>
-    <polygon points="116,192 256,272 256,384 116,304" fill="rgba(20,33,61,0.85)" stroke="${accent}" stroke-width="2.5"/>
-    <polygon points="396,192 256,272 256,384 396,304" fill="rgba(15,23,42,0.92)" stroke="${accent}" stroke-width="2.5"/>
+    <polygon points="256,112 396,192 256,272 116,192" fill="rgba(65,90,119,0.28)" stroke="${accent}" stroke-width="3"/>
+    <polygon points="116,192 256,272 256,384 116,304" fill="rgba(27,38,59,0.88)" stroke="${accent}" stroke-width="2.5"/>
+    <polygon points="396,192 256,272 256,384 396,304" fill="rgba(13,27,42,0.92)" stroke="${accent}" stroke-width="2.5"/>
     <circle cx="256" cy="192" r="24" fill="${accent}" opacity="0.88"/>
-    <text x="256" y="446" text-anchor="middle" fill="#f8fafc" font-family="monospace" font-size="16" font-weight="700">${safeTitle}</text>
-    <text x="256" y="472" text-anchor="middle" fill="#94a3b8" font-family="monospace" font-size="13">R${params.roundNumber} • ${safeLabel}</text>
+    <text x="256" y="446" text-anchor="middle" fill="rgb(224,225,221)" font-family="monospace" font-size="16" font-weight="700">${safeTitle}</text>
+    <text x="256" y="472" text-anchor="middle" fill="rgb(119,141,169)" font-family="monospace" font-size="13">R${params.roundNumber} • ${safeLabel}</text>
   </svg>`;
   return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
 }
@@ -307,7 +312,21 @@ export default function GoalHarnessPage() {
   >({});
   const [selectedNodeId, setSelectedNodeId] = useState<string>("");
   const [isDraggingCanvas, setIsDraggingCanvas] = useState<boolean>(false);
+  const [isCameraGliding, setIsCameraGliding] = useState<boolean>(false);
+  const cameraGlideTimerRef = useRef<number | null>(null);
   const canvasViewportRef = useRef<HTMLDivElement | null>(null);
+
+  const triggerCameraGlide = useCallback(() => {
+    if (typeof window === "undefined") return;
+    setIsCameraGliding(true);
+    if (cameraGlideTimerRef.current !== null) {
+      window.clearTimeout(cameraGlideTimerRef.current);
+    }
+    cameraGlideTimerRef.current = window.setTimeout(() => {
+      setIsCameraGliding(false);
+      cameraGlideTimerRef.current = null;
+    }, 360);
+  }, []);
   const dragStateRef = useRef<
     | {
         mode: "pan";
@@ -749,6 +768,7 @@ export default function GoalHarnessPage() {
 
   const applyFitViewportToPositions = useCallback(
     (positions: FlowNodePosition[], options?: { minZoom?: number }) => {
+      triggerCameraGlide();
       if (positions.length === 0) {
         setCanvasViewport({ x: 24, y: 24, zoom: 0.65 });
         return;
@@ -843,6 +863,7 @@ export default function GoalHarnessPage() {
       const cy = (viewportEl?.clientHeight || 760) / 2;
 
       hasRestoredViewportRef.current = true;
+      triggerCameraGlide();
       setCanvasViewport((prev) => {
         const worldCenterX = (cx - prev.x) / prev.zoom;
         const worldCenterY = (cy - prev.y) / prev.zoom;
@@ -2111,23 +2132,14 @@ export default function GoalHarnessPage() {
 
   return (
     <div className="ref-page-container">
-      <div
-        className="ref-flow-studio-layout"
-        style={{
-          display: "grid",
-          gridTemplateColumns: "minmax(0, 1fr) 390px",
-          gap: "14px",
-          height: "100%",
-          minHeight: 0,
-        }}
-      >
+      <div className="ref-harness-flow-layout">
         {/* ==================== LEFT: STUDIO-STYLE INTERACTIVE FLOW CANVAS (ALL STEPS: THINKING -> DRAFTS -> REFINING -> RESULT) ==================== */}
         <section
           className="ref-flow-canvas-panel"
           aria-label="Goal Harness Evolution Flow Canvas"
         >
-          {/* Floating Top Flow Toolbar */}
-          <div className="ref-flow-toolbar">
+          {/* Floating Single-Row Top Flow Toolbar */}
+          <div className="ref-flow-toolbar ref-harness-flow-toolbar">
             <div className="ref-flow-toolbar-left">
               <div className="ref-flow-project-title-group">
                 <span
@@ -2138,46 +2150,24 @@ export default function GoalHarnessPage() {
                 </span>
               </div>
               <span className="ref-flow-toolbar-divider" aria-hidden="true" />
-              <span className="ref-flow-toolbar-badge">
-                ⛓ Flow • {flowNodes.length} Steps ({rounds.length}{" "}
-                {rounds.length === 1 ? "Iteration" : "Iterations"})
+              <span className="ref-flow-toolbar-badge is-solved-pill">
+                {rounds.length}R • {flowNodes.length} Steps
+                {deliverables.length > 0
+                  ? ` • 🏆 ${overallPackAverage}/100`
+                  : ""}
               </span>
-              {deliverables.length > 0 && (
-                <span
-                  className="ref-flow-toolbar-badge"
-                  style={{
-                    backgroundColor: "#14213d",
-                    color: "#fca311",
-                  }}
-                >
-                  Solved {solvedDeliverablesCount}/{deliverables.length} • Avg{" "}
-                  {overallPackAverage}/100
-                </span>
-              )}
-              <button
-                type="button"
-                id="harness-new-mission-btn"
-                className="ref-mura-btn-outline"
-                onClick={handleResetNewMission}
-                disabled={isRunning}
-                title="Start a new Goal Harness mission"
-              >
-                <IconPlus size={11} strokeWidth={2.3} />
-                <span>New Mission</span>
-              </button>
             </div>
 
             <div className="ref-flow-toolbar-right">
               {deliverables.length > 1 && (
                 <select
-                  className="ref-harness-select"
-                  style={{ height: "30px", fontSize: "12px" }}
+                  className="ref-harness-select ref-harness-toolbar-select"
                   value={selectedSlotFilter}
                   onChange={(e) => setSelectedSlotFilter(e.target.value)}
                   aria-label="Filter Flow Canvas by deliverable"
                 >
                   <option value="ALL">
-                    All Deliverables ({deliverables.length})
+                    All Slots ({deliverables.length})
                   </option>
                   {deliverables.map((d) => (
                     <option key={d.id} value={d.id}>
@@ -2189,31 +2179,24 @@ export default function GoalHarnessPage() {
 
               <button
                 type="button"
-                id="harness-toolbar-params-btn"
-                className="ref-mura-btn-solid"
-                onClick={() => setIsParamsModalOpen(true)}
-                title="Open Parameters, Deliverables & Rubric Floating Modal"
+                id="harness-new-mission-btn"
+                className="ref-mura-btn-outline"
+                onClick={handleResetNewMission}
+                disabled={isRunning}
+                title="Start a new Goal Harness mission"
               >
-                <span>⚙ Parameters &amp; Plan</span>
-              </button>
-
-              <button
-                type="button"
-                className="ref-studio-ghost-action"
-                onClick={openSettingsModal}
-                title="Configure Agent System Prompts"
-              >
-                <span>Agent Prompts</span>
+                <IconPlus size={11} strokeWidth={2.3} />
+                <span>New</span>
               </button>
 
               <button
                 type="button"
                 className="ref-studio-ghost-action"
                 onClick={handleAutoOrganizeFlow}
-                title="Auto-organize nodes with Latest Iteration at the top"
+                title="Auto-organize nodes left-to-right across rounds"
               >
                 <IconAutoGrid size={13} />
-                <span>Auto-Organize</span>
+                <span>Organize</span>
               </button>
 
               <button
@@ -2223,7 +2206,7 @@ export default function GoalHarnessPage() {
                 title="Fit all iterations in viewport"
               >
                 <IconExpand size={13} />
-                <span>Fit View</span>
+                <span>Fit</span>
               </button>
 
               <div className="ref-flow-zoom-pill">
@@ -2243,15 +2226,7 @@ export default function GoalHarnessPage() {
                 </button>
                 <select
                   id="harness-zoom-preset-select"
-                  className="ref-flow-zoom-readout"
-                  style={{
-                    padding: "0 8px",
-                    fontSize: "12px",
-                    fontWeight: 800,
-                    cursor: "pointer",
-                    outline: "none",
-                    appearance: "auto",
-                  }}
+                  className="ref-flow-zoom-readout ref-harness-zoom-select"
                   value={String(Math.round(canvasViewport.zoom * 100))}
                   onChange={(e) => handleApplyZoomPreset(e.target.value)}
                   aria-label="Select zoom preset"
@@ -2318,6 +2293,7 @@ export default function GoalHarnessPage() {
               ) {
                 return;
               }
+              setIsCameraGliding(false);
               dragStateRef.current = {
                 mode: "pan",
                 startClientX: e.clientX,
@@ -2328,6 +2304,7 @@ export default function GoalHarnessPage() {
               setIsDraggingCanvas(true);
             }}
             onWheel={(e) => {
+              setIsCameraGliding(false);
               if (e.ctrlKey || e.metaKey) {
                 e.preventDefault();
                 const delta = e.deltaY < 0 ? 0.08 : -0.08;
@@ -2348,12 +2325,14 @@ export default function GoalHarnessPage() {
             }}
           >
             <div
-              className="ref-flow-canvas-transform-layer"
+              className={`ref-flow-canvas-transform-layer ${
+                isCameraGliding && !isDraggingCanvas ? "is-camera-gliding" : ""
+              }`}
               style={{
                 transform: `translate3d(${canvasViewport.x}px, ${canvasViewport.y}px, 0) scale(${canvasViewport.zoom})`,
               }}
             >
-              {/* 1. SVG ORTHOGONAL WIRES LAYER (Left-to-Right Pipeline Wires + Bottom-to-Top Inter-Round Trajectory Wires) */}
+              {/* 1. SVG ORTHOGONAL WIRES LAYER (Left-to-Right Pipeline Wires + Inter-Round Trajectory Wires) */}
               <svg
                 className="ref-flow-edges-svg"
                 width="4800"
@@ -2363,24 +2342,29 @@ export default function GoalHarnessPage() {
                 <defs>
                   <marker
                     id="harness-arrow-pipeline"
-                    markerWidth="9"
-                    markerHeight="9"
-                    refX="7"
-                    refY="4.5"
-                    orient="auto"
-                  >
-                    <path d="M0,0 L9,4.5 L0,9 Z" fill="var(--ref-moss-outer)" />
-                  </marker>
-                  <marker
-                    id="harness-arrow-highlight"
-                    markerWidth="9"
-                    markerHeight="9"
-                    refX="7"
-                    refY="4.5"
+                    markerWidth="7"
+                    markerHeight="7"
+                    refX="6"
+                    refY="3.5"
+                    markerUnits="userSpaceOnUse"
                     orient="auto"
                   >
                     <path
-                      d="M0,0 L9,4.5 L0,9 Z"
+                      d="M0,1 L6.5,3.5 L0,6 Z"
+                      fill="var(--ref-moss-outer)"
+                    />
+                  </marker>
+                  <marker
+                    id="harness-arrow-highlight"
+                    markerWidth="7"
+                    markerHeight="7"
+                    refX="6"
+                    refY="3.5"
+                    markerUnits="userSpaceOnUse"
+                    orient="auto"
+                  >
+                    <path
+                      d="M0,1 L6.5,3.5 L0,6 Z"
                       fill="var(--ref-lime-accent)"
                     />
                   </marker>
@@ -2394,7 +2378,7 @@ export default function GoalHarnessPage() {
                         d={edge.path}
                         fill="none"
                         stroke="var(--ref-canvas)"
-                        strokeWidth={edge.isHighlighted ? "6.5" : "5.5"}
+                        strokeWidth={edge.isHighlighted ? "4.5" : "3.8"}
                         strokeLinecap="round"
                         strokeLinejoin="round"
                       />
@@ -2407,8 +2391,8 @@ export default function GoalHarnessPage() {
                             ? "var(--ref-lime-accent)"
                             : "var(--ref-moss-outer)"
                         }
-                        strokeWidth={edge.isHighlighted ? "3.2" : "2.4"}
-                        strokeDasharray={isInterRound ? "8 5" : undefined}
+                        strokeWidth={edge.isHighlighted ? "2.2" : "1.75"}
+                        strokeDasharray={isInterRound ? "6 4" : undefined}
                         strokeLinecap="round"
                         strokeLinejoin="round"
                         markerEnd={
@@ -2417,13 +2401,22 @@ export default function GoalHarnessPage() {
                             : "url(#harness-arrow-pipeline)"
                         }
                       />
+                      {(isRunning ||
+                        selectedNodeId === edge.sourceNodeId ||
+                        selectedNodeId === edge.targetNodeId) && (
+                        <path
+                          d={edge.path}
+                          fill="none"
+                          className="ref-flow-wire-signal"
+                        />
+                      )}
                       <circle
                         cx={edge.startX}
                         cy={edge.startY}
-                        r="4.5"
+                        r="3.2"
                         fill="var(--ref-lime-accent)"
                         stroke="var(--ref-moss-outer)"
-                        strokeWidth="1.8"
+                        strokeWidth="1.4"
                       />
                     </g>
                   );
@@ -2434,36 +2427,17 @@ export default function GoalHarnessPage() {
               {rowHeaders.map((hdr) => (
                 <div
                   key={hdr.key}
-                  className="ref-harness-canvas-row-tag"
+                  className={`ref-harness-canvas-row-tag ${
+                    hdr.isLatest ? "is-latest" : ""
+                  }`}
                   style={{
-                    position: "absolute",
                     left: `${hdr.colX}px`,
-                    top: `${hdr.rowY - 44}px`,
-                    zIndex: 6,
-                    display: "inline-flex",
-                    alignItems: "center",
-                    gap: "10px",
-                    padding: "5px 14px",
-                    borderRadius: "999px",
-                    fontSize: "12px",
-                    fontWeight: 800,
-                    backgroundColor: hdr.isLatest ? "#fca311" : "#14213d",
-                    color: hdr.isLatest ? "#14213d" : "#ffffff",
-                    border: hdr.isLatest
-                      ? "1.5px solid #14213d"
-                      : "1.5px solid rgba(252,163,17,0.5)",
-                    boxShadow: "0 4px 10px rgba(20, 33, 61, 0.14)",
-                    fontVariantNumeric: "tabular-nums",
-                    pointerEvents: "none",
+                    top: `${hdr.rowY - 56}px`,
                   }}
                 >
                   <span>
                     ROUND 0{hdr.roundNumber}
-                    {hdr.isLatest ? " (LATEST ITERATION)" : ""} •{" "}
-                    {hdr.deliverableTitle}
-                  </span>
-                  <span style={{ fontWeight: 600, opacity: 0.9 }}>
-                    01 Thinking ──► 02 Drafts ──► 03 Refining ──► 04 Result 🏆
+                    {hdr.isLatest ? " • LATEST" : ""} • {hdr.deliverableTitle}
                   </span>
                 </div>
               ))}
@@ -2483,12 +2457,15 @@ export default function GoalHarnessPage() {
                     key={node.nodeId}
                     data-step-kind={node.stepKind}
                     className={`ref-flow-step-card is-locked ${
-                      isSelected || isResult ? "selected" : ""
+                      isResult ? "is-result-card" : ""
+                    } ${isSelected || isResult ? "selected" : ""} ${
+                      isCameraGliding && !isDraggingCanvas
+                        ? "is-camera-gliding"
+                        : ""
                     }`}
                     style={{
                       left: `${pos.x}px`,
                       top: `${pos.y}px`,
-                      borderColor: isResult ? "#fca311" : "#14213d",
                     }}
                     onClick={() => setSelectedNodeId(node.nodeId)}
                   >
@@ -2547,17 +2524,7 @@ export default function GoalHarnessPage() {
                           <IconGripDots size={12} />
                         </span>
                         <span
-                          className="ref-flow-step-badge locked"
-                          style={{
-                            backgroundColor: isResult
-                              ? "#fca311"
-                              : isThinking
-                              ? "#1e293b"
-                              : isRefining
-                              ? "#0f172a"
-                              : "#14213d",
-                            color: isResult ? "#14213d" : "#ffffff",
-                          }}
+                          className={`ref-flow-step-badge locked is-${node.stepKind}`}
                         >
                           {isThinking
                             ? `R${node.roundNumber} • 01 THINKING`
@@ -2572,33 +2539,14 @@ export default function GoalHarnessPage() {
 
                         {(isDraft || isResult) && (
                           <span
-                            className="ref-flow-step-ratio"
-                            style={{
-                              backgroundColor:
-                                isResult || cand.isSlotRoundWinner
-                                  ? "#fca311"
-                                  : "#14213d",
-                              color:
-                                isResult || cand.isSlotRoundWinner
-                                  ? "#14213d"
-                                  : "#ffffff",
-                              fontWeight: 800,
-                            }}
+                            className={`ref-flow-step-ratio ${
+                              isResult || cand.isSlotRoundWinner
+                                ? "is-winner"
+                                : "is-candidate"
+                            }`}
                           >
                             {isResult || cand.isSlotRoundWinner ? "🏆 " : ""}
                             {cand.totalScore}/100
-                          </span>
-                        )}
-
-                        {isThinking && (
-                          <span className="ref-flow-step-meta-chip">
-                            Planner &amp; Strategy
-                          </span>
-                        )}
-
-                        {isRefining && (
-                          <span className="ref-flow-step-meta-chip">
-                            Critic &amp; TRACE
                           </span>
                         )}
                       </div>
@@ -2606,48 +2554,17 @@ export default function GoalHarnessPage() {
 
                     {/* ==================== BODY BY STEP KIND ==================== */}
                     {isThinking && (
-                      <div
-                        style={{
-                          flex: 1,
-                          margin: "0 10px",
-                          padding: "12px",
-                          borderRadius: "14px",
-                          backgroundColor: "#0f172a",
-                          color: "#f8fafc",
-                          display: "flex",
-                          flexDirection: "column",
-                          justifyContent: "space-between",
-                          gap: "8px",
-                          overflow: "hidden",
-                        }}
-                      >
-                        <div>
-                          <span
-                            style={{
-                              display: "inline-block",
-                              fontSize: "12px",
-                              fontWeight: 800,
-                              color: "#fca311",
-                              marginBottom: "4px",
-                            }}
-                          >
-                            ✦{" "}
-                            {node.roundNumber === 1
-                              ? "Initial Goal Decomposition"
-                              : "Iterative Refinement Strategy"}
-                          </span>
-                          <p
-                            style={{
-                              margin: 0,
-                              fontSize: "12px",
-                              lineHeight: 1.38,
-                              color: "#e2e8f0",
-                              display: "-webkit-box",
-                              WebkitLineClamp: 3,
-                              WebkitBoxOrient: "vertical",
-                              overflow: "hidden",
-                            }}
-                          >
+                      <div className="ref-harness-node-stage-box is-thinking">
+                        <div className="ref-harness-stage-top">
+                          <div className="ref-harness-stage-heading-row">
+                            <span className="ref-harness-stage-heading">
+                              ✦{" "}
+                              {node.roundNumber === 1
+                                ? "Initial Goal Decomposition"
+                                : "Iterative Refinement Strategy"}
+                            </span>
+                          </div>
+                          <p className="ref-harness-stage-summary">
                             {node.roundNumber > 1 &&
                             node.roundSummary.includes("Refined:")
                               ? node.roundSummary
@@ -2655,35 +2572,15 @@ export default function GoalHarnessPage() {
                           </p>
                         </div>
 
-                        <div
-                          style={{
-                            display: "flex",
-                            flexDirection: "column",
-                            gap: "5px",
-                            paddingTop: "6px",
-                            borderTop: "1px solid rgba(148,163,184,0.22)",
-                          }}
-                        >
-                          <span
-                            style={{
-                              fontSize: "12px",
-                              fontWeight: 700,
-                              color: "#94a3b8",
-                            }}
-                          >
+                        <div className="ref-harness-stage-bottom">
+                          <span className="ref-harness-stage-sublabel">
                             Synthesized Draft Strategies (
                             {node.outcome.candidates.length}):
                           </span>
                           {node.outcome.candidates.map((c, idx) => (
                             <div
                               key={idx}
-                              style={{
-                                fontSize: "12px",
-                                color: "#f8fafc",
-                                whiteSpace: "nowrap",
-                                overflow: "hidden",
-                                textOverflow: "ellipsis",
-                              }}
+                              className="ref-harness-strategy-pill"
                             >
                               • <strong>#{idx + 1}:</strong>{" "}
                               {c.promptStrategy || c.label}
@@ -2694,77 +2591,27 @@ export default function GoalHarnessPage() {
                     )}
 
                     {isRefining && (
-                      <div
-                        style={{
-                          flex: 1,
-                          margin: "0 10px",
-                          padding: "12px",
-                          borderRadius: "14px",
-                          backgroundColor: "#14213d",
-                          color: "#f8fafc",
-                          display: "flex",
-                          flexDirection: "column",
-                          justifyContent: "space-between",
-                          gap: "8px",
-                          overflow: "hidden",
-                        }}
-                      >
-                        <div>
-                          <div
-                            style={{
-                              display: "flex",
-                              alignItems: "center",
-                              justifyContent: "space-between",
-                              gap: "4px",
-                              marginBottom: "4px",
-                            }}
-                          >
-                            <span
-                              style={{
-                                fontSize: "12px",
-                                fontWeight: 800,
-                                color: "#fca311",
-                              }}
-                            >
-                              TRACE:{" "}
+                      <div className="ref-harness-node-stage-box is-refining">
+                        <div className="ref-harness-stage-top">
+                          <div className="ref-harness-stage-heading-row">
+                            <span className="ref-harness-stage-heading">
+                              ✦ TRACE:{" "}
                               {node.outcome.traceAttribution.failurePattern}
                             </span>
-                            <span
-                              style={{
-                                fontSize: "12px",
-                                color: "#cbd5e1",
-                              }}
-                            >
-                              {node.outcome.traceAttribution.primaryModule}
+                            <span className="ref-harness-stage-module-tag">
+                              {node.outcome.traceAttribution.primaryModule.split(
+                                "_"
+                              )[0]}
                             </span>
                           </div>
-                          <p
-                            style={{
-                              margin: 0,
-                              fontSize: "12px",
-                              lineHeight: 1.35,
-                              color: "#e2e8f0",
-                              display: "-webkit-box",
-                              WebkitLineClamp: 3,
-                              WebkitBoxOrient: "vertical",
-                              overflow: "hidden",
-                            }}
-                          >
+                          <p className="ref-harness-stage-summary">
                             {node.outcome.traceAttribution.pairwiseReasoning ||
                               node.outcome.traceAttribution.diagnosisSummary}
                           </p>
                         </div>
 
                         {/* Top 3 Rubric Mini-Bars */}
-                        <div
-                          style={{
-                            display: "flex",
-                            flexDirection: "column",
-                            gap: "4px",
-                            paddingTop: "6px",
-                            borderTop: "1px solid rgba(148,163,184,0.22)",
-                          }}
-                        >
+                        <div className="ref-harness-stage-bottom">
                           {node.winnerCandidate.criterionScores
                             .slice(0, 3)
                             .map((cs) => {
@@ -2774,45 +2621,26 @@ export default function GoalHarnessPage() {
                               const maxW = critMeta?.weight || 25;
                               const pct = Math.round((cs.score / maxW) * 100);
                               return (
-                                <div key={cs.criterionId}>
-                                  <div
-                                    style={{
-                                      display: "flex",
-                                      justifyContent: "space-between",
-                                      fontSize: "12px",
-                                      color: "#f8fafc",
-                                    }}
-                                  >
-                                    <span
-                                      style={{
-                                        overflow: "hidden",
-                                        textOverflow: "ellipsis",
-                                        whiteSpace: "nowrap",
-                                        maxWidth: "180px",
-                                      }}
-                                    >
+                                <div
+                                  key={cs.criterionId}
+                                  className="ref-harness-mini-rubric-row"
+                                >
+                                  <div className="ref-harness-mini-rubric-head">
+                                    <span className="ref-harness-mini-rubric-label">
                                       {critMeta?.label || cs.criterionId}
                                     </span>
                                     <strong>
                                       {cs.score}/{maxW}
                                     </strong>
                                   </div>
-                                  <div
-                                    style={{
-                                      height: "4px",
-                                      borderRadius: "999px",
-                                      backgroundColor: "rgba(255,255,255,0.16)",
-                                      overflow: "hidden",
-                                    }}
-                                  >
+                                  <div className="ref-harness-mini-rubric-track">
                                     <div
+                                      className="ref-harness-mini-rubric-fill"
                                       style={{
-                                        height: "100%",
                                         width: `${Math.min(
                                           100,
                                           Math.max(0, pct)
                                         )}%`,
-                                        backgroundColor: "#fca311",
                                       }}
                                     />
                                   </div>
@@ -2837,22 +2665,13 @@ export default function GoalHarnessPage() {
                           className="ref-flow-hero-img"
                         />
                         <span
-                          className="ref-flow-slot-num-badge"
-                          style={
-                            isResult
-                              ? {
-                                  backgroundColor: "#fca311",
-                                  color: "#14213d",
-                                  fontWeight: 800,
-                                }
-                              : undefined
-                          }
+                          className={`ref-flow-slot-num-badge ${
+                            isResult ? "is-champion" : ""
+                          }`}
                         >
                           {isResult
-                            ? `CHAMPION RESULT • ${cand.totalScore}/100`
-                            : `${
-                                cand.passedHardGate ? "GATE PASS" : "GATE FAIL"
-                              } • ${cand.label.split(" • ")[0]}`}
+                            ? "Winner"
+                            : cand.label.split(" • ")[0]}
                         </span>
                         <div className="ref-flow-hero-hover-actions">
                           <button
@@ -2920,10 +2739,7 @@ export default function GoalHarnessPage() {
 
               {/* 4. EMPTY FLOW STARTER WHEN NO ROUNDS EXIST YET */}
               {!isRunning && flowNodes.length === 0 && (
-                <div
-                  className="ref-flow-starter-plus-wrapper"
-                  style={{ left: "160px", top: "140px" }}
-                >
+                <div className="ref-flow-starter-plus-wrapper ref-harness-empty-starter">
                   <button
                     type="button"
                     id="harness-flow-starter-btn"
@@ -2950,41 +2766,14 @@ export default function GoalHarnessPage() {
         <aside
           className="ref-harness-side-dock"
           aria-label="Goal and Reiteration Side Panel"
-          style={{
-            display: "flex",
-            flexDirection: "column",
-            gap: "12px",
-            backgroundColor: "#ffffff",
-            border: "2px solid #14213d",
-            borderRadius: "20px",
-            padding: "16px",
-            overflowY: "auto",
-            maxHeight: "100%",
-          }}
         >
           {/* 1. SIDE HEADER + FLOATING PARAMETERS MODAL BUTTON */}
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "space-between",
-              gap: "8px",
-              paddingBottom: "10px",
-              borderBottom: "1px solid rgba(20, 33, 61, 0.12)",
-            }}
-          >
+          <div className="ref-harness-side-header">
             <div>
-              <strong
-                style={{
-                  display: "block",
-                  fontSize: "14px",
-                  fontWeight: 800,
-                  color: "#14213d",
-                }}
-              >
+              <strong className="ref-harness-side-title">
                 Goal &amp; Iteration Prompt
               </strong>
-              <span style={{ fontSize: "12px", color: "#475569" }}>
+              <span className="ref-harness-side-meta">
                 {modelUsed === "gemini-3-pro-image-preview"
                   ? "Gemini 3 Pro"
                   : "Gemini 2.5 Flash"}{" "}
@@ -3004,40 +2793,18 @@ export default function GoalHarnessPage() {
           </div>
 
           {/* 2. GOAL TEXT BOX */}
-          <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-            <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "space-between",
-              }}
-            >
-              <label htmlFor="harness-goal-textarea" className="ref-field-label">
+          <div className="ref-harness-goal-box">
+            <div className="ref-harness-goal-label-row">
+              <label
+                htmlFor="harness-goal-textarea"
+                className="ref-field-label ref-no-margin"
+              >
                 Mission Visual Goal
               </label>
-              {deliverables.length > 0 && (
-                <button
-                  type="button"
-                  className="ref-studio-ghost-action"
-                  onClick={() => {
-                    setParamsModalTab("plan");
-                    setIsParamsModalOpen(true);
-                  }}
-                >
-                  <span>Edit {deliverables.length} Slot(s) &amp; Rubric ↗</span>
-                </button>
-              )}
             </div>
 
             {rounds.length === 0 && (
-              <div
-                style={{
-                  display: "flex",
-                  gap: "6px",
-                  flexWrap: "wrap",
-                  marginBottom: "2px",
-                }}
-              >
+              <div className="ref-harness-presets-wrap">
                 {QUICK_GOAL_PRESETS.map((preset) => (
                   <button
                     key={preset.label}
@@ -3069,29 +2836,10 @@ export default function GoalHarnessPage() {
           {rounds.length > 0 && (
             <div
               id="harness-reiteration-console"
-              style={{
-                display: "flex",
-                flexDirection: "column",
-                gap: "8px",
-                padding: "12px",
-                borderRadius: "14px",
-                backgroundColor: "#f8f7f3",
-                border: "1.5px solid rgba(20, 33, 61, 0.14)",
-              }}
+              className="ref-harness-reiterate-console"
             >
-              <div
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "space-between",
-                  gap: "6px",
-                  flexWrap: "wrap",
-                }}
-              >
-                <span
-                  className="ref-harness-round-tag"
-                  style={{ backgroundColor: "#fca311", color: "#14213d" }}
-                >
+              <div className="ref-harness-reiterate-top">
+                <span className="ref-harness-next-round-tag">
                   NEXT: ROUND 0{rounds.length + 1}
                 </span>
                 <button
@@ -3137,55 +2885,43 @@ export default function GoalHarnessPage() {
               />
 
               {/* Quick suggestion chips */}
-              <div
-                style={{
-                  display: "flex",
-                  gap: "5px",
-                  flexWrap: "wrap",
-                }}
-              >
-                {latestComplaints.map((comp, idx) => (
-                  <button
-                    key={`comp_${idx}`}
-                    type="button"
-                    className="ref-pill-chip"
-                    onClick={() => setReiterateNote(comp)}
-                    title={comp}
-                  >
-                    ✦ Fix: {comp.length > 34 ? `${comp.slice(0, 34)}...` : comp}
-                  </button>
-                ))}
-                {[
-                  "Warmer golden sunset light",
-                  "Sharpen textures & shadows",
-                ].map((chip) => (
-                  <button
-                    key={chip}
-                    type="button"
-                    className="ref-pill-chip"
-                    onClick={() =>
-                      setReiterateNote((prev) =>
-                        prev.trim() ? `${prev.trim()}; ${chip}` : chip
-                      )
-                    }
-                  >
-                    + {chip}
-                  </button>
-                ))}
+              <div className="ref-harness-quick-chips">
+                {latestComplaints.length > 0
+                  ? latestComplaints.map((comp, idx) => (
+                      <button
+                        key={`comp_${idx}`}
+                        type="button"
+                        className="ref-pill-chip"
+                        onClick={() => setReiterateNote(comp)}
+                        title={comp}
+                      >
+                        ✦ Fix: {comp.length > 34 ? `${comp.slice(0, 34)}...` : comp}
+                      </button>
+                    ))
+                  : [
+                      "Warmer golden sunset light",
+                      "Sharpen textures & shadows",
+                    ].map((chip) => (
+                      <button
+                        key={chip}
+                        type="button"
+                        className="ref-pill-chip"
+                        onClick={() =>
+                          setReiterateNote((prev) =>
+                            prev.trim() ? `${prev.trim()}; ${chip}` : chip
+                          )
+                        }
+                      >
+                        + {chip}
+                      </button>
+                    ))}
               </div>
 
-              <div
-                style={{
-                  display: "flex",
-                  gap: "6px",
-                  alignItems: "center",
-                }}
-              >
+              <div className="ref-harness-reiterate-controls-row">
                 {deliverables.length > 1 && (
                   <select
                     id="harness-reiterate-slot-select"
-                    className="ref-harness-select"
-                    style={{ flex: 1, fontSize: "12px" }}
+                    className="ref-harness-select ref-harness-reiterate-slot-select"
                     disabled={isRunning}
                     value={reiterateTargetSlotId}
                     onChange={(e) => setReiterateTargetSlotId(e.target.value)}
@@ -3203,8 +2939,7 @@ export default function GoalHarnessPage() {
 
                 <select
                   id="harness-reiterate-rounds-select"
-                  className="ref-harness-select"
-                  style={{ width: "110px", fontSize: "12px" }}
+                  className="ref-harness-select ref-harness-reiterate-rounds-select"
                   disabled={isRunning}
                   value={reiterateExtraRounds}
                   onChange={(e) =>
@@ -3220,12 +2955,11 @@ export default function GoalHarnessPage() {
           )}
 
           {/* 4. PRIMARY LAUNCH / REITERATE BUTTONS */}
-          <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+          <div className="ref-harness-primary-cta-row">
             <button
               type="button"
               id="harness-primary-launch-btn"
-              className="ref-dark-pill-btn"
-              style={{ flex: 1, justifyContent: "center" }}
+              className="ref-dark-pill-btn ref-harness-primary-cta-btn"
               disabled={isRunning || !goalInput.trim()}
               onClick={() => void handlePrimaryAction()}
             >
@@ -3263,167 +2997,84 @@ export default function GoalHarnessPage() {
           </div>
 
           {/* 5. ITERATIONS TIMELINE IN SIDE PANEL (LATEST ITERATION ON TOP, OLDER KEPT BELOW) */}
-          <div
-            style={{
-              display: "flex",
-              flexDirection: "column",
-              gap: "8px",
-              paddingTop: "8px",
-              borderTop: "1px solid rgba(20, 33, 61, 0.12)",
-              flex: 1,
-              minHeight: 0,
-            }}
-          >
-            <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "space-between",
-              }}
-            >
+          <div className="ref-harness-iterations-section">
+            <div className="ref-harness-iterations-header">
               <span className="ref-field-label ref-no-margin">
                 Iterations (Latest on Top • {rounds.length})
               </span>
               {deliverables.length > 0 && (
-                <span
-                  style={{
-                    fontSize: "12px",
-                    fontWeight: 700,
-                    color: "#14213d",
-                    fontVariantNumeric: "tabular-nums",
-                  }}
-                >
+                <span className="ref-harness-best-score-readout">
                   Best: {overallPackAverage}/100
                 </span>
               )}
             </div>
 
             {newestFirstRounds.length === 0 ? (
-              <div
-                style={{
-                  padding: "16px 12px",
-                  borderRadius: "12px",
-                  backgroundColor: "#f8f7f3",
-                  fontSize: "12px",
-                  color: "#475569",
-                  textAlign: "center",
-                }}
-              >
+              <div className="ref-harness-iterations-empty">
                 Enter a visual goal above and click{" "}
                 <strong>Plan &amp; Launch Flow</strong> to start Round 01.
               </div>
             ) : (
               <div
                 id="harness-iterations-feed"
-                style={{
-                  display: "flex",
-                  flexDirection: "column",
-                  gap: "8px",
-                }}
+                className="ref-harness-iterations-feed"
               >
                 {newestFirstRounds.map((round, idx) => {
                   const isLatest = idx === 0;
+                  const roundBestScore = Math.max(
+                    0,
+                    ...round.slotOutcomes.flatMap((so) =>
+                      so.candidates.map((c) => c.totalScore || 0)
+                    )
+                  );
                   return (
                     <div
                       key={`side-round-${round.roundNumber}`}
                       onClick={() => handleFocusRoundOnCanvas(round.roundNumber)}
-                      style={{
-                        padding: "10px 12px",
-                        borderRadius: "12px",
-                        backgroundColor: isLatest ? "#14213d" : "#f8f7f3",
-                        color: isLatest ? "#ffffff" : "#14213d",
-                        border: isLatest
-                          ? "1.5px solid #fca311"
-                          : "1px solid rgba(20, 33, 61, 0.14)",
-                        cursor: "pointer",
-                        display: "flex",
-                        flexDirection: "column",
-                        gap: "6px",
-                      }}
+                      className={`ref-harness-iteration-card ${
+                        isLatest ? "is-latest" : ""
+                      }`}
                       title={`Click to focus Round 0${round.roundNumber} on Flow Canvas`}
                     >
-                      <div
-                        style={{
-                          display: "flex",
-                          alignItems: "center",
-                          justifyContent: "space-between",
-                          gap: "6px",
-                        }}
-                      >
-                        <span
-                          style={{
-                            fontSize: "12px",
-                            fontWeight: 800,
-                            color: isLatest ? "#fca311" : "#14213d",
-                            fontVariantNumeric: "tabular-nums",
-                          }}
-                        >
+                      <div className="ref-harness-iteration-card-top">
+                        <span className="ref-harness-iteration-round-badge">
                           ROUND 0{round.roundNumber}
                           {isLatest ? " • LATEST" : ""}
                         </span>
-                        <span
-                          style={{
-                            fontSize: "12px",
-                            opacity: 0.85,
-                            fontVariantNumeric: "tabular-nums",
-                          }}
-                        >
-                          Thinking → Drafts → Refining → Result
+                        <span className="ref-harness-iteration-steps-flow">
+                          {roundBestScore > 0
+                            ? `🏆 ${roundBestScore}/100`
+                            : round.status}
                         </span>
                       </div>
 
-                      <p
-                        style={{
-                          margin: 0,
-                          fontSize: "12px",
-                          lineHeight: 1.35,
-                          opacity: 0.92,
-                        }}
-                      >
+                      <p className="ref-harness-iteration-summary">
                         {round.roundSummary}
                       </p>
 
-                      <div
-                        style={{
-                          display: "flex",
-                          gap: "6px",
-                          overflowX: "auto",
-                          paddingTop: "2px",
-                        }}
-                      >
+                      <div className="ref-harness-iteration-thumbs">
                         {round.slotOutcomes.flatMap((so) =>
                           so.candidates.map((cand) => (
-                            <div
+                            <button
                               key={`thumb_${round.roundNumber}_${so.deliverableId}_${cand.candidateIndex}`}
+                              type="button"
                               onClick={(e) => {
                                 e.stopPropagation();
                                 const nId = `r${round.roundNumber}::${so.deliverableId}::draft-${cand.candidateIndex}`;
                                 setSelectedNodeId(nId);
                                 setInspectedNodeId(nId);
                               }}
-                              style={{
-                                position: "relative",
-                                width: "48px",
-                                height: "48px",
-                                borderRadius: "8px",
-                                overflow: "hidden",
-                                flexShrink: 0,
-                                border: cand.isSlotRoundWinner
-                                  ? "2px solid #fca311"
-                                  : "1px solid rgba(148,163,184,0.35)",
-                              }}
+                              className={`ref-harness-iteration-thumb-btn ${
+                                cand.isSlotRoundWinner ? "is-winner" : ""
+                              }`}
                               title={`${cand.label} (${cand.totalScore}/100) — Click to inspect`}
                             >
                               <img
                                 src={cand.imageUrl}
                                 alt={cand.label}
-                                style={{
-                                  width: "100%",
-                                  height: "100%",
-                                  objectFit: "cover",
-                                }}
+                                className="ref-harness-iteration-thumb-img"
                               />
-                            </div>
+                            </button>
                           ))
                         )}
                       </div>
@@ -3447,19 +3098,7 @@ export default function GoalHarnessPage() {
             if (e.target === e.currentTarget) setIsParamsModalOpen(false);
           }}
         >
-          <div
-            className="ref-modal-card"
-            style={{
-              maxWidth: "820px",
-              width: "92vw",
-              maxHeight: "86vh",
-              overflowY: "auto",
-              padding: "22px 24px",
-              display: "flex",
-              flexDirection: "column",
-              gap: "16px",
-            }}
-          >
+          <div className="ref-modal-card ref-harness-modal-card">
             <div className="ref-modal-header">
               <div>
                 <strong
@@ -3468,13 +3107,7 @@ export default function GoalHarnessPage() {
                 >
                   ⚙ Goal Harness Parameters, Deliverables &amp; Rubric
                 </strong>
-                <span
-                  style={{
-                    display: "block",
-                    fontSize: "12px",
-                    color: "#475569",
-                  }}
-                >
+                <span className="ref-harness-modal-sub">
                   Configure model &amp; loop parameters, reference anchors, and
                   planned deliverable specifications.
                 </span>
@@ -3490,7 +3123,7 @@ export default function GoalHarnessPage() {
             </div>
 
             {/* Modal Section Tabs */}
-            <div style={{ display: "flex", gap: "8px" }}>
+            <div className="ref-harness-modal-tabs">
               <button
                 type="button"
                 className={`ref-pill-chip ${
@@ -3510,16 +3143,20 @@ export default function GoalHarnessPage() {
                 2. Deliverables ({deliverables.length}) &amp; Rubric (
                 {rubric.length})
               </button>
+              <button
+                type="button"
+                className="ref-studio-ghost-action"
+                onClick={() => {
+                  setIsParamsModalOpen(false);
+                  openSettingsModal();
+                }}
+              >
+                <span>Agent System Prompts ↗</span>
+              </button>
             </div>
 
             {paramsModalTab === "params" ? (
-              <div
-                style={{
-                  display: "flex",
-                  flexDirection: "column",
-                  gap: "16px",
-                }}
-              >
+              <div className="ref-harness-modal-body">
                 <div className="ref-harness-controls-grid">
                   <div>
                     <label
@@ -3668,7 +3305,7 @@ export default function GoalHarnessPage() {
                       ref={refFileInputRef}
                       type="file"
                       accept="image/*"
-                      style={{ display: "none" }}
+                      className="sr-only"
                       onChange={handleAddReferenceImage}
                     />
                     {referenceSlots.length < 2 && (
@@ -3724,22 +3361,8 @@ export default function GoalHarnessPage() {
                 </div>
               </div>
             ) : (
-              <div
-                style={{
-                  display: "flex",
-                  flexDirection: "column",
-                  gap: "14px",
-                }}
-              >
-                <div
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "space-between",
-                    gap: "8px",
-                    flexWrap: "wrap",
-                  }}
-                >
+              <div className="ref-harness-modal-body">
+                <div className="ref-harness-modal-toolbar">
                   <button
                     type="button"
                     id="harness-replan-btn"
@@ -3870,15 +3493,7 @@ export default function GoalHarnessPage() {
               </div>
             )}
 
-            <div
-              style={{
-                display: "flex",
-                justifyContent: "flex-end",
-                gap: "8px",
-                paddingTop: "8px",
-                borderTop: "1px solid rgba(20, 33, 61, 0.12)",
-              }}
-            >
+            <div className="ref-harness-modal-footer">
               <button
                 type="button"
                 className="ref-dark-pill-btn"
@@ -3902,19 +3517,7 @@ export default function GoalHarnessPage() {
             if (e.target === e.currentTarget) setInspectedNodeId(null);
           }}
         >
-          <div
-            className="ref-modal-card"
-            style={{
-              maxWidth: "780px",
-              width: "92vw",
-              maxHeight: "88vh",
-              overflowY: "auto",
-              padding: "22px 24px",
-              display: "flex",
-              flexDirection: "column",
-              gap: "16px",
-            }}
-          >
+          <div className="ref-modal-card ref-harness-modal-card">
             {(() => {
               const cand =
                 inspectedNode.candidate || inspectedNode.winnerCandidate;
@@ -3927,13 +3530,7 @@ export default function GoalHarnessPage() {
                         {inspectedNode.stepKind.toUpperCase()} STEP •{" "}
                         {inspectedNode.deliverableTitle} ({cand.label})
                       </strong>
-                      <span
-                        style={{
-                          display: "block",
-                          fontSize: "12px",
-                          color: "#475569",
-                        }}
-                      >
+                      <span className="ref-harness-modal-sub">
                         Score: <strong>{cand.totalScore}/100</strong> •{" "}
                         {cand.passedHardGate
                           ? "HARD GATE PASS"
@@ -3951,32 +3548,14 @@ export default function GoalHarnessPage() {
                     </button>
                   </div>
 
-                  <div
-                    style={{
-                      display: "grid",
-                      gridTemplateColumns: "240px minmax(0, 1fr)",
-                      gap: "16px",
-                      alignItems: "start",
-                    }}
-                  >
+                  <div className="ref-harness-inspector-grid">
                     <img
                       src={cand.imageUrl}
                       alt={cand.label}
-                      style={{
-                        width: "100%",
-                        borderRadius: "14px",
-                        border: "1.5px solid #14213d",
-                        objectFit: "cover",
-                      }}
+                      className="ref-harness-inspector-img"
                     />
 
-                    <div
-                      style={{
-                        display: "flex",
-                        flexDirection: "column",
-                        gap: "10px",
-                      }}
-                    >
+                    <div className="ref-harness-inspector-details">
                       <div className="ref-harness-crit-bars">
                         {cand.criterionScores.map((cs) => {
                           const critMeta = rubric.find(
@@ -4057,13 +3636,7 @@ export default function GoalHarnessPage() {
                     </pre>
                   </div>
 
-                  <div
-                    style={{
-                      display: "flex",
-                      justifyContent: "flex-end",
-                      gap: "8px",
-                    }}
-                  >
+                  <div className="ref-harness-modal-footer">
                     <button
                       type="button"
                       className="ref-mura-btn-outline"
@@ -4107,12 +3680,7 @@ export default function GoalHarnessPage() {
           onClick={() => setLightboxCard(null)}
         >
           <div
-            className="ref-modal-card"
-            style={{
-              maxWidth: "880px",
-              padding: "16px",
-              alignItems: "center",
-            }}
+            className="ref-modal-card ref-harness-lightbox-card"
             onClick={(e) => e.stopPropagation()}
           >
             {(() => {
@@ -4120,10 +3688,7 @@ export default function GoalHarnessPage() {
                 lightboxCard.candidate || lightboxCard.winnerCandidate;
               return (
                 <>
-                  <div
-                    className="ref-modal-header"
-                    style={{ width: "100%", marginBottom: "8px" }}
-                  >
+                  <div className="ref-modal-header ref-harness-lightbox-header">
                     <strong className="ref-soft-card-title">
                       R{lightboxCard.roundNumber} •{" "}
                       {lightboxCard.deliverableTitle} ({cand.totalScore}/100)
@@ -4139,12 +3704,7 @@ export default function GoalHarnessPage() {
                   <img
                     src={cand.imageUrl}
                     alt={cand.label}
-                    style={{
-                      maxWidth: "100%",
-                      maxHeight: "74vh",
-                      borderRadius: "14px",
-                      objectFit: "contain",
-                    }}
+                    className="ref-harness-lightbox-img"
                   />
                 </>
               );
