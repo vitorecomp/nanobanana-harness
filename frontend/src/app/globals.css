@@ -677,7 +677,7 @@ textarea {
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 24px;
+  padding: 14px 20px;
 }
 
 .ref-modal-card {
@@ -698,6 +698,7 @@ textarea {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
+  flex-shrink: 0;
 }
 
 .ref-new-project-modal-card {
@@ -2081,6 +2082,8 @@ textarea {
   align-items: center;
   justify-content: space-between;
   gap: 8px;
+  flex-shrink: 0;
+  min-width: 0;
 }
 
 .ref-studio-mod-manage-link {
@@ -2098,6 +2101,7 @@ textarea {
   justify-content: center;
   cursor: pointer;
   white-space: nowrap;
+  flex-shrink: 0;
   transition: background-color 0.14s ease, color 0.14s ease, border-color 0.14s ease;
 }
 
@@ -2115,8 +2119,13 @@ textarea {
 .ref-studio-mod-cat-tabs {
   display: flex;
   align-items: center;
-  gap: 4px;
-  flex-wrap: wrap;
+  gap: 5px;
+  flex: 1;
+  min-width: 0;
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  padding-bottom: 2px;
+  scrollbar-width: thin;
 }
 
 .ref-studio-mod-cat-tab {
@@ -2134,6 +2143,8 @@ textarea {
   align-items: center;
   justify-content: center;
   gap: 4px;
+  flex-shrink: 0;
+  white-space: nowrap;
   transition: background-color 0.14s ease, color 0.14s ease, border-color 0.14s ease;
 }
 
@@ -2823,13 +2834,35 @@ textarea {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
-  padding-right: 2px;
+  padding-right: 4px;
+}
+
+.ref-creation-modifiers-stack .ref-studio-param-tab-panel {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding-right: 0;
 }
 
 .ref-studio-tab-section {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 10px;
+}
+
+.ref-studio-modifiers-tab-section {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.ref-modifiers-pills-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  align-content: flex-start;
+  padding: 2px 10px 10px 2px;
+  scrollbar-gutter: stable;
 }
 
 .ref-studio-option-grid {
@@ -3611,15 +3644,15 @@ textarea {
 }
 
 .ref-flow-step-modal-card {
-  width: min(1020px, 95vw);
-  max-height: 90vh;
+  width: min(1040px, 95vw);
+  max-height: 92vh;
   background-color: #e0e1dd;
   border: 2px solid #1b263b;
   border-radius: 22px;
-  padding: 16px 18px 18px 18px;
+  padding: 14px 18px 16px 18px;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 10px;
   overflow: hidden;
   box-shadow: 0 24px 60px rgba(0, 0, 0, 0.36);
 }
@@ -3629,15 +3662,17 @@ textarea {
   min-height: 0;
   display: flex;
   flex-direction: column;
-  overflow-y: auto;
+  overflow: hidden;
   padding: 2px;
 }
 
 .ref-flow-create-modal-form {
+  flex: 1;
+  min-height: 0;
   display: flex;
   flex-direction: column;
-  gap: 14px;
-  min-height: 0;
+  gap: 12px;
+  overflow: hidden;
 }
 
 .ref-flow-create-modal-columns {
@@ -3652,10 +3687,11 @@ textarea {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 12px 16px;
+  padding: 11px 16px;
   border-radius: 16px;
   background-color: var(--ref-card-surface);
   border: 1.5px solid var(--ref-moss-outer);
+  flex-shrink: 0;
 }
 
 /* ============================================================================
@@ -3713,7 +3749,7 @@ textarea {
 
 /* Modal Stack: Top Stepper Bar + Modal Window */
 .ref-wizard-modal-stack {
-  width: min(1040px, 95vw);
+  width: min(1060px, 95vw);
   max-height: 94vh;
   display: flex;
   flex-direction: column;
@@ -3721,19 +3757,33 @@ textarea {
   gap: 8px;
 }
 
+.ref-wizard-modal-stack.is-wizard {
+  height: min(860px, 94vh);
+}
+
+.ref-wizard-modal-stack.is-inspector {
+  width: min(920px, 94vw);
+}
+
 .ref-wizard-modal-stack .ref-flow-step-modal-card {
   width: 100%;
-  flex: 1;
+  flex: 1 1 auto;
   min-height: 0;
   max-height: none;
 }
 
+.ref-wizard-modal-stack.is-inspector .ref-flow-step-modal-card {
+  flex: 0 1 auto;
+  max-height: 90vh;
+}
+
 .ref-wizard-stepper-bar {
   align-self: center;
+  flex-shrink: 0;
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  padding: 8px 12px;
+  padding: 6px 12px;
   border-radius: 24px;
   background-color: var(--ref-card-surface);
   border: 2px solid var(--ref-moss-outer);
@@ -3884,17 +3934,24 @@ textarea {
 
 /* Step 1 Two-Column Layout */
 .ref-creation-two-col {
+  flex: 1;
+  min-height: 0;
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 16px;
   align-items: stretch;
-  min-height: 0;
+  overflow: hidden;
 }
 
-@media (max-width: 820px) {
-  .ref-creation-two-col {
-    grid-template-columns: 1fr;
-  }
+.ref-creation-two-col > .ref-params-card,
+.ref-creation-two-col > .ref-params-card + .ref-params-card {
+  flex: unset;
+  border-top: none;
+  padding: 2px 4px 4px 2px;
+  gap: 10px;
+  min-height: 0;
+  height: 100%;
+  overflow: hidden;
 }
 
 .ref-creation-col-pane {
@@ -3902,20 +3959,21 @@ textarea {
   min-height: 0;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 10px;
 }
 
 .ref-creation-prompt-box {
-  min-height: 168px;
+  min-height: 132px;
   flex: 1;
 }
 
 .ref-creation-modifiers-stack {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 10px;
   flex: 1;
   min-height: 0;
+  overflow: hidden;
 }
 
 .ref-studio-param-tabs.two-cols {
@@ -4052,8 +4110,7 @@ textarea {
 
 .ref-refimage-preview-stage {
   flex: 1;
-  min-height: 220px;
-  max-height: 280px;
+  min-height: 160px;
   border-radius: 16px;
   border: 1.5px solid var(--ref-moss-outer);
   background-color: var(--ref-canvas);
@@ -4083,53 +4140,94 @@ textarea {
   padding: 8px 12px;
   background-color: var(--ref-card-surface);
   border-top: 1px solid var(--ref-border-hairline);
+  flex-shrink: 0;
 }
 
 .ref-refimage-locks-bar {
   padding-top: 8px;
   border-top: 1px solid var(--ref-border-hairline);
+  flex-shrink: 0;
 }
 
 .ref-tab2-right-pane {
-  gap: 12px;
+  gap: 10px;
 }
 
 .ref-tab2-prompt-block {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.ref-tab2-prompt-block .ref-toggle-switch-row {
+  padding-top: 6px;
 }
 
 .ref-tab2-prompt-textarea {
-  min-height: 92px;
-  max-height: 120px;
+  flex: 0 0 auto;
+  height: 74px;
+  min-height: 68px;
+  max-height: 112px;
+  resize: vertical;
 }
 
 .ref-tab2-modifiers-divider {
   height: 1px;
   background-color: var(--ref-border-hairline);
+  flex-shrink: 0;
 }
 
-/* Step 1 Footer: Slider 1..8 + Toggle Switch #2 + Primary Action */
+/* Step 1 Footer: 3-Zone Horizontal Bar (Slider 1..8 | Vary Toggle | Primary Actions) */
 .ref-creation-step1-footer {
   display: flex;
-  align-items: flex-end;
+  align-items: center;
   justify-content: space-between;
-  gap: 20px;
-  padding: 14px 16px;
+  gap: 16px;
+  padding: 10px 16px;
   border-radius: 16px;
   background-color: var(--ref-card-surface);
   border: 1.5px solid var(--ref-moss-outer);
   flex-wrap: wrap;
+  flex-shrink: 0;
+}
+
+@media (max-width: 820px), (max-height: 640px) {
+  .ref-creation-two-col {
+    overflow-y: auto;
+    padding-right: 4px;
+    align-items: start;
+  }
+
+  .ref-creation-two-col > .ref-params-card,
+  .ref-creation-two-col > .ref-params-card + .ref-params-card {
+    height: auto;
+    overflow: visible;
+  }
+
+  .ref-refimage-preview-stage {
+    max-height: 280px;
+  }
+
+  .ref-modifiers-pills-scroll {
+    min-height: 144px;
+    max-height: 220px;
+  }
+}
+
+@media (max-width: 820px) {
+  .ref-creation-two-col {
+    grid-template-columns: 1fr;
+  }
 }
 
 .ref-slider-footer-block {
-  flex: 1;
-  min-width: 280px;
-  max-width: 540px;
+  flex: 1 1 250px;
+  min-width: 220px;
+  max-width: 310px;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 4px;
 }
 
 .ref-slider-header-row {
@@ -4244,7 +4342,21 @@ textarea {
 }
 
 .ref-slider-vary-toggle {
-  margin-top: 2px;
+  margin-top: 0;
+  padding-top: 0;
+  padding-left: 16px;
+  border-top: none;
+  border-left: 1px solid var(--ref-border-hairline);
+  flex: 1 1 220px;
+  min-width: 200px;
+  max-width: 300px;
+}
+
+@media (max-width: 860px) {
+  .ref-slider-vary-toggle {
+    border-left: none;
+    padding-left: 0;
+  }
 }
 
 .ref-wizard-footer-actions {
@@ -4691,6 +4803,11 @@ textarea {
    ============================================================================ */
 
 .ref-model-params-panel {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 2px 10px 10px 2px;
+  scrollbar-gutter: stable;
   display: flex;
   flex-direction: column;
   gap: 8px;

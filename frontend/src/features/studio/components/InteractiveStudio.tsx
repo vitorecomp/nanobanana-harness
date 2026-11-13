@@ -1937,7 +1937,7 @@ export default function InteractiveStudio({
 
         <div className="ref-studio-param-tab-panel" role="tabpanel">
           {activeParamTab === "modifiers" ? (
-            <div className="ref-studio-tab-section">
+            <div className="ref-studio-tab-section ref-studio-modifiers-tab-section">
               <div className="ref-studio-mod-header-row">
                 <div
                   className="ref-studio-mod-cat-tabs"
@@ -1984,7 +1984,7 @@ export default function InteractiveStudio({
                 </Link>
               </div>
 
-              <div className="ref-params-pills-wrap">
+              <div className="ref-params-pills-wrap ref-modifiers-pills-scroll">
                 {(
                   bootstrapData.modifier_categories.find(
                     (c) => c.id === activeModCategoryId
@@ -2925,7 +2925,11 @@ export default function InteractiveStudio({
             if (e.target === e.currentTarget) setIsStepModalOpen(false);
           }}
         >
-          <div className="ref-wizard-modal-stack">
+          <div
+            className={`ref-wizard-modal-stack ${
+              isInspectingLockedCard ? "is-inspector" : "is-wizard"
+            }`}
+          >
             {/* STEPPER CONTROL ABOVE THE MODAL SCREEN (Shown during Creation Mode) */}
             {!isInspectingLockedCard && (
               <nav
@@ -3561,7 +3565,7 @@ export default function InteractiveStudio({
                       </div>
                     )}
 
-                    {/* SHARED FOOTER OF STEP 1: SLIDER (1..8) + TOGGLE SWITCH #2 BELOW SLIDER + PRIMARY ACTION */}
+                    {/* SHARED FOOTER OF STEP 1: 3-ZONE HORIZONTAL BAR (SLIDER 1..8 | AI VARIATION TOGGLE | PRIMARY ACTIONS) */}
                     <div className="ref-creation-step1-footer">
                       <div className="ref-slider-footer-block">
                         <div className="ref-slider-header-row">
@@ -3569,7 +3573,7 @@ export default function InteractiveStudio({
                             htmlFor="creation-image-count-slider"
                             className="ref-slider-question-label"
                           >
-                            How many images should be generated?
+                            How many images?
                           </label>
                           <span className="ref-slider-count-badge">
                             {imageCount}{" "}
@@ -3616,39 +3620,38 @@ export default function InteractiveStudio({
                             ))}
                           </div>
                         </div>
-
-                        {/* TOGGLE SWITCH #2: Directly below slider when imageCount > 1 */}
-                        {imageCount > 1 && (
-                          <div className="ref-toggle-switch-row ref-slider-vary-toggle">
-                            <div className="ref-toggle-switch-copy">
-                              <label
-                                htmlFor="toggle-vary-prompts-ai"
-                                className="ref-toggle-switch-title"
-                              >
-                                Vary prompt using AI
-                              </label>
-                              <span className="ref-toggle-switch-sub">
-                                Generate {imageCount} distinct AI prompt
-                                variations and review them in Step 3
-                              </span>
-                            </div>
-                            <button
-                              id="toggle-vary-prompts-ai"
-                              type="button"
-                              role="switch"
-                              aria-checked={varyPromptsWithAi}
-                              className={`ref-atelier-switch ${
-                                varyPromptsWithAi ? "is-on" : ""
-                              }`}
-                              onClick={() =>
-                                setVaryPromptsWithAi((prev) => !prev)
-                              }
-                            >
-                              <span className="ref-atelier-switch-thumb" />
-                            </button>
-                          </div>
-                        )}
                       </div>
+
+                      {/* TOGGLE SWITCH #2: Center zone beside slider when imageCount > 1 */}
+                      {imageCount > 1 && (
+                        <div className="ref-toggle-switch-row ref-slider-vary-toggle">
+                          <div className="ref-toggle-switch-copy">
+                            <label
+                              htmlFor="toggle-vary-prompts-ai"
+                              className="ref-toggle-switch-title"
+                            >
+                              Vary prompt using AI
+                            </label>
+                            <span className="ref-toggle-switch-sub">
+                              Review {imageCount} AI variations in Step 3
+                            </span>
+                          </div>
+                          <button
+                            id="toggle-vary-prompts-ai"
+                            type="button"
+                            role="switch"
+                            aria-checked={varyPromptsWithAi}
+                            className={`ref-atelier-switch ${
+                              varyPromptsWithAi ? "is-on" : ""
+                            }`}
+                            onClick={() =>
+                              setVaryPromptsWithAi((prev) => !prev)
+                            }
+                          >
+                            <span className="ref-atelier-switch-thumb" />
+                          </button>
+                        </div>
+                      )}
 
                       <div className="ref-wizard-footer-actions">
                         <button
