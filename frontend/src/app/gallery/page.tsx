@@ -1,10 +1,10 @@
 "use client";
 
-import React, { useState, useEffect, useCallback, useMemo } from "react";
+import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { useStudioSession } from "@/core/context/StudioSessionContext";
 import { LOCAL_DEV_USER } from "@/features/auth";
-import { IconClose, IconPlus, IconTrash } from "@/shared";
+import { IconClose, IconPlus, IconTrash, useDialogFocusTrap } from "@/shared";
 import {
   SavedConversationSummary,
   deleteConversation,
@@ -57,23 +57,21 @@ export default function ProjectsWorkspacePage() {
     null
   );
   const [isDeletingItem, setIsDeletingItem] = useState<boolean>(false);
+  const deleteDialogRef = useRef<HTMLDivElement | null>(null);
+  useDialogFocusTrap(
+    deleteDialogRef,
+    Boolean(itemToDelete),
+    () => {
+      if (!isDeletingItem) setItemToDelete(null);
+    },
+    !isDeletingItem
+  );
 
   useEffect(() => {
     if (!galleryNotice) return;
     const timer = window.setTimeout(() => setGalleryNotice(null), 4000);
     return () => window.clearTimeout(timer);
   }, [galleryNotice]);
-
-  useEffect(() => {
-    if (!itemToDelete) return;
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape" && !isDeletingItem) {
-        setItemToDelete(null);
-      }
-    };
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [itemToDelete, isDeletingItem]);
 
   const loadGalleryFromDb = useCallback(async () => {
     setLoading(true);
@@ -171,7 +169,7 @@ export default function ProjectsWorkspacePage() {
           }
           setItemToDelete(null);
           setGalleryNotice(
-            `✓ "${target.title}" removed from Gallery • PNG files preserved in ${imagesOutputDir}`
+            `"${target.title}" removed from Gallery • PNG files preserved in ${imagesOutputDir}`
           );
         }
       } else {
@@ -197,7 +195,7 @@ export default function ProjectsWorkspacePage() {
           }
           setItemToDelete(null);
           setGalleryNotice(
-            `✓ "${target.title}" removed from Gallery • PNG files preserved in ${imagesOutputDir}`
+            `"${target.title}" removed from Gallery • PNG files preserved in ${imagesOutputDir}`
           );
         }
       }
@@ -220,6 +218,7 @@ export default function ProjectsWorkspacePage() {
 
   return (
     <div className="ref-page-container">
+      <h1 className="sr-only">Projects and Goal Harness Gallery</h1>
       <div className="ref-studio-three-part-layout">
         {/* ==================== TOP BAR: SEARCH & FILTER ==================== */}
         <section
@@ -283,6 +282,13 @@ export default function ProjectsWorkspacePage() {
 
         {/* ==================== BOTTOM 85%: UNIFIED STUDIO & GOAL HARNESS CARDS GRID ==================== */}
         <div className="ref-projects-cards-grid">
+          {loading && (
+            <div className="ref-gallery-empty-state" role="status">
+              <strong className="ref-soft-card-title">
+                Loading Studio projects &amp; Goal Harness missions...
+              </strong>
+            </div>
+          )}
           {!loading &&
             filteredItems.map((item, itemIdx) => {
               const isHarnessItem = item.kind === "harness";
@@ -306,6 +312,8 @@ export default function ProjectsWorkspacePage() {
                       <img
                         src={item.previewImageUrl}
                         alt={item.title}
+                        loading="lazy"
+                        decoding="async"
                         className="ref-project-card-img"
                       />
                     ) : (
@@ -321,21 +329,21 @@ export default function ProjectsWorkspacePage() {
                     <span
                       style={{
                         position: "absolute",
-                        top: "10px",
-                        left: "10px",
+                        top: "8px",
+                        left: "8px",
                         padding: "4px 10px",
                         borderRadius: "8px",
                         fontSize: "12px",
                         fontWeight: 700,
                         letterSpacing: "0.02em",
                         backgroundColor: isHarnessItem
-                          ? "var(--ref-moss-outer)"
-                          : "rgba(255, 255, 255, 0.92)",
+                          ? "var(--ref-badge-solid-bg)"
+                          : "var(--ref-badge-overlay-bg)",
                         color: isHarnessItem
-                          ? "var(--ref-canvas)"
-                          : "var(--ref-navy-deep)",
+                          ? "var(--ref-badge-solid-fg)"
+                          : "var(--ref-badge-overlay-fg)",
                         border: isHarnessItem
-                          ? "1px solid var(--ref-lime-accent)"
+                          ? "1px solid var(--atelier-steel)"
                           : "1px solid var(--ref-border-subtle)",
                         fontVariantNumeric: "tabular-nums",
                       }}
@@ -353,8 +361,8 @@ export default function ProjectsWorkspacePage() {
                           borderRadius: "8px",
                           fontSize: "12px",
                           fontWeight: 800,
-                          backgroundColor: "var(--ref-lime-accent)",
-                          color: "var(--ref-moss-outer)",
+                          backgroundColor: "var(--atelier-steel)",
+                          color: "var(--ref-on-accent)",
                           fontVariantNumeric: "tabular-nums",
                         }}
                       >
@@ -474,10 +482,13 @@ export default function ProjectsWorkspacePage() {
       {/* ==================== MODAL FOR DELETION CONFIRMATION ==================== */}
       {itemToDelete && (
         <div
+          ref={deleteDialogRef}
+          data-atelier-modal="true"
           className="ref-modal-backdrop"
           role="dialog"
           aria-modal="true"
           aria-labelledby="delete-project-modal-title"
+          tabIndex={-1}
           onClick={(e) => {
             if (e.target === e.currentTarget && !isDeletingItem) {
               setItemToDelete(null);
@@ -510,6 +521,7 @@ export default function ProjectsWorkspacePage() {
                 <img
                   src={itemToDelete.previewImageUrl}
                   alt={itemToDelete.title}
+                  decoding="async"
                   className="ref-delete-modal-thumb"
                 />
               ) : (

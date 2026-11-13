@@ -8,76 +8,71 @@ web
 
 ## Users
 
-1. **Ilustradores, Concept Artists e Diretores de Arte**:
-   - Criadores que buscam refinar cenas iterativamente com controle sobre enquadramento, iluminação, estilo e composição, comparando variações lado a lado e evoluindo a imagem a partir da melhor alternativa de cada rodada.
-2. **Desenvolvedores e Criadores Desktop Locais (Local-First)**:
-   - Usuários que utilizam sua própria chave da API Google Gemini (`AIza...`) em uma aplicação desktop instalável (**Tauri v2**) ou servidor local, com persistência local em **SQLite** e arquivos `.png` salvos diretamente no sistema de arquivos do sistema operacional, sem dependência de containers externos, bancos em nuvem ou buckets remotos.
+1. **Illustrators, Concept Artists, and Art Directors**:
+   - Creators who refine scenes and multi-asset game/illustration packs iteratively with strict control over framing, lighting, style, character DNA, and rubric quality, comparing parallel candidates on an infinite flow canvas and evolving from the strongest frame of every round.
+2. **Local-First Desktop & Web Creators**:
+   - Users running their own Google Gemini API key (`AIza...`) in an installable **Tauri v2** desktop workstation or local Next.js server, backed by **SQLite** metadata persistence and `.png` files saved directly in the native OS filesystem without cloud buckets or external containers.
 
 ## Product Purpose
 
-**Nano Banana Studio** é um estúdio interativo desktop e web (`Tauri v2` + `Next.js` + `SQLite`) para criação e refinamento multi-turno de imagens com **Google Nano Banana (`gemini-2.5-flash-image`)** e **Gemini (`gemini-2.5-flash`)**.
+**Nano Banana Studio** (`NANO BANANA // ATELIER STUDIO`) is an interactive desktop and web art-direction workstation (`Tauri v2` + `Next.js 15` + `SQLite`) powered by **Google Nano Banana (`gemini-2.5-flash-image`)** and **Gemini (`gemini-2.5-flash`)**.
 
-O produto existe para substituir a tentativa-e-erro de um único prompt estático por um fluxo de exploração estruturada em 4 variações simultâneas e histórico ramificado por projeto. O sucesso significa permitir que o criador:
-- Gere 4 interpretações visuais a cada rodada (`1 Prompt Base + 3 Ênfases Dinâmicas do Gemini` em diferentes partes da cena);
-- Selecione qualquer uma das 4 imagens geradas para carregar seu prompt específico e continuar iterando (com ou sem referência visual `inlineData`);
-- Navegue livremente por todo o histórico de interações do projeto, criando ramificações a partir de qualquer interação anterior sem perder o rastreio de origem;
-- Tenha todas as imagens salvas automaticamente como arquivos `.png` organizados por pasta de projeto no computador (`~/Pictures/nanobanana/<nome-do-projeto>/`).
+It replaces single-shot static prompting with two complementary local-first creation engines:
+- **Studio Flow (`/` and `/create`)**: An immutable, branching node-graph canvas where each step generates `1..8` parallel scene interpretations (with optional AI prompt enhancement, AI variation synthesis, reference-image anchoring, preservation locks, and Canonical Character DNA) connected by collision-free orthogonal wires.
+- **Goal-Driven Agent Harness (`/harness`)**: An autonomous and co-pilot 4-stage pipeline (`01 Thinking` Planner → `02 Drafts` Generator → `03 Refining` Critic & TRACE Attribution → `04 Result` Pairwise Gate) that decomposes visual goals into deliverables and weighted rubrics and iterates until target scores converge.
+- **Unified Projects Gallery (`/gallery`) & Visual Direction Library (`/modifiers`)**: Instant filtering across Studio projects and Goal Harness missions plus reusable camera, lighting, wardrobe, and lens modifier sweeps.
 
 ## Positioning
 
-Diferente de geradores text-to-image convencionais que produzem uma única saída linear ou variações com a mesma instrução textual, o **Nano Banana Studio** combina:
-1. **Expansão Dinâmica de Cena (`1 + 3`)**: O `gemini-2.5-flash` analisa os elementos da cena descrita pelo usuário e formula 3 versões adicionais do prompt dando ênfase criativa a partes distintas da cena, gerando as 4 imagens em paralelo via `gemini-2.5-flash-image`.
-2. **Linhagem Ramificada de Interações**: Cada nova geração registra de qual interação anterior ela partiu (`parent_turn_number`), exibindo indicadores visuais de origem (`de #X ➔`) na linha do tempo superior.
-3. **Arquitetura Local-First (SQLite + Filesystem Nativo)**: O banco SQLite armazena exclusivamente metadados, prompts e caminhos de arquivo (`image_path`), enquanto os binários `.png` residem diretamente no diretório configurável do usuário (`~/Pictures/nanobanana/<nome-do-projeto>/`), sincronizando renomeações de projeto com a pasta no disco e preservando os arquivos mesmo quando um projeto é removido da galeria.
+Unlike linear text-to-image chat tools, **Nano Banana Studio** combines:
+1. **Immutable Branching Flow Canvas**: Every Studio turn and Goal Harness round is preserved as an inspectable canvas card (`parent_turn_number` lineage), allowing non-destructive branching from any variation.
+2. **Rubric-Scored TRACE Evolution**: The Goal Harness evaluates generated candidates against explicit weighted criteria, diagnoses failure modes (`PROMPT_SPECIFICATION`, `REFERENCE_ROUTING`, `MODEL_PARAMETERS`), and promotes challengers only when they beat the incumbent.
+3. **Local-First Ownership (SQLite + Native Filesystem)**: SQLite stores lightweight metadata, prompts, and file paths (`image_path`), while full-resolution `.png` files live directly in `~/Pictures/nanobanana/<project-name>/` and remain preserved on disk even if a project is removed from the Gallery.
 
 ## Operating Context
 
-- **Full-Viewport Desktop Application (`100vw × 100vh`, Zero-Scroll Outer Shell)**:
-  - Operates inside a fixed Oxford Navy (`#14213d`) window frame with custom Tauri titlebar controls, a collapsible chamfered sidebar (`Studio`, `Gallery`, `Modifiers`, `Settings`), and a rounded Platinum (`#e5e5e5`) main canvas.
-  - **Studio (`/` and `/create`)**: 3-column horizontal architecture (`224px` vertical branching timeline on the left | `2×2` quad generation grid in the center | dual-mode `Compose Scene` & `Surgical Delta` prompt editor + `2×2 Matrix & Parameters` on the right).
-  - **Gallery (`/gallery`)**: Top 15% strip (`Latest Project`, search bar, and style filter pills) + bottom 85% responsive grid of chamfered project cards.
-  - **Modifiers (`/modifiers`)**: Left 62% category filter bar and chamfered category cards + right 38% Gemini AI generator and manual category/modifier creator.
-- **Inspection & Selection in the Workflow**:
-  - Clicking one of the 4 cards selects the variation (`✓ Selected`) and loads its prompt into the editor; clicking `⚡ Delta` locks the frame and opens `⚡ Surgical Delta` mode; clicking `⤢` (or double-clicking) opens the full-screen Lightbox with side-by-side `⇄ Compare`.
-  - Canonical Character DNA (`🧬 Pin DNA`) and Preservation Locks (`🔒 Character`, `🔒 Pose`, `🔒 Background`) allow dual-anchor visual consistency across turns.
+- **Full-Viewport Desktop Frame (`100vw × 100vh`, Zero Outer Scroll) with Adaptive Tablet/Mobile Reflow**:
+  - Framed by a Rich Ink (`#0d1b2a`) window shell with custom Tauri titlebar controls, a collapsible left navigation rail (`204px` expanded / `68px` collapsed, with a bottom `Collapse` toggle button; adapts to a compact bottom navigation bar below `768px`), and a Warm Alabaster (`#e0e1dd`) workspace canvas.
+  - **Studio (`/` and `/create`)**: Full-bleed dotted pan/zoom Flow Canvas with a single-row floating top bar (inline-editable project title on the left; `Auto-Organize`, `Fit View`, `Zoom`, and `+ New Step` on the right) and a 3-step creation wizard dialog.
+  - **Goal Harness (`/harness`)**: Split Flow Canvas on the left (`Thinking → Drafts → Refining → Result` columns per deliverable) and a `384px` Iteration & Refinement console dock on the right (stacking vertically below `960px`).
+  - **Gallery (`/gallery`)**: Compact left-aligned search bar + `[All] [Studio] [Goal Harness]` filter buttons above a responsive grid of aligned project and mission cards with white boxed `Open` and `Remove` actions on the bottom right.
+  - **Modifiers (`/modifiers`)**: Left `62%` Visual Direction Library category cards + right `38%` AI Generator and manual category/modifier editor.
 
 ## Capabilities and Constraints
 
-- **Modelos Utilizados**:
-  - `gemini-2.5-flash` para análise da cena e geração das 3 variações de prompt com ênfases dinâmicas.
-  - `gemini-2.5-flash-image` para geração paralela das 4 imagens (e refinamento multimodal quando `Referência Visual` está ativa).
-- **Armazenamento de Imagens no Filesystem**:
-  - Diretório padrão: `~/Pictures/nanobanana/<nome-do-projeto>/` (configurável no modal `⚙ Config` via chave `images_output_dir` na tabela `app_vault`).
-  - Nenhuma imagem em base64 (`image_data_url`) é persistida no SQLite; o banco guarda apenas `image_path` e `variants_json` apontando para os caminhos locais, servidos via `/api/image?path=...`.
-  - Novos projetos iniciam com os 4 slots vazios (sem imagens mockadas).
-- **Persistência SQLite (`~/.local/share/com.nanobanana.studio/nanobanana.sqlite3`)**:
-  - Tabelas: `users`, `conversations`, `conversation_turns` (incluindo `variants_json` e `parent_turn_number`) e `app_vault`.
-  - Excluir um projeto na Galeria remove os registros do SQLite, mas preserva intencionalmente a pasta e os arquivos `.png` em `~/Pictures/nanobanana/`.
-- **Gerenciamento de Chave de API (`AIza...`)**:
-  - Configurável no modal `⚙ Config`, com opção ativada por padrão para persistir localmente no `app_vault` do SQLite do usuário.
+- **Models**:
+  - `gemini-2.5-flash` for scene enhancement, `1 + N` prompt variation synthesis, Goal Harness planning, rubric critique, and TRACE refinement.
+  - `gemini-2.5-flash-image` for parallel image generation and multimodal reference-anchored refinement.
+- **Filesystem Image Storage**:
+  - Default folder: `~/Pictures/nanobanana/<project-name>/` (configurable in `Settings` via `images_output_dir` in `app_vault`).
+  - Raw base64 payloads are never stored in SQLite; local files stream via `/api/image?path=...`.
+- **SQLite Persistence (`~/.local/share/com.nanobanana.studio/nanobanana.sqlite3`)**:
+  - Tables: `users`, `conversations`, `conversation_turns`, `harness_missions`, and `app_vault`.
+- **Zero-Storage API Key Security (`AIza...`)**:
+  - Held in volatile React RAM (`useState`) and never written to `localStorage`, `sessionStorage`, cookies, or URLs; persisted exclusively to local SQLite `app_vault` when the user enables *"Remember in Local App Vault"*.
 
 ## Brand Commitments
 
-- **Identidade**: **Nano Banana Studio** (`NANO BANANA // ATELIER STUDIO`).
-- **Idioma da Interface**: Inglês (`en-US`).
-- **Restrições Visuais Vinculantes Definidas pelo Usuário**:
-  - Paleta de 5 cores base: `["#000000", "#14213d", "#fca311", "#e5e5e5", "#ffffff"]` (com `#d62828` reservado para confirmação de ações destrutivas em dois passos).
-  - Divisores estruturais (`1.5px solid rgba(20, 33, 61, 0.22)`) entre seções do workspace no lugar de containers aninhados; cards chanfrados (`clip-path` 45°) restritos à barra lateral, aos projetos na Galeria, às categorias de Modifiers, às 4 imagens geradas no grid `2×2` e aos itens da timeline.
+- **Identity**: **Nano Banana Studio** (`NANO BANANA // ATELIER STUDIO`).
+- **Interface Language**: English (`en-US`), supporting multilingual user prompts (`pt-BR`, `en-US`, etc.).
+- **Binding Visual Commitments**:
+  - **5-Step Cool-Slate Neo-Brutalist Atelier Palette**: `#0d1b2a` (Deepest Ink), `#1b263b` (Slate Navy), `#415a77` (Mid Slate), `#778da9` (Steel Blue), and `#e0e1dd` (Warm Alabaster Canvas), paired with `#ffffff` elevated card/button surfaces and `#9e2a2b` two-step destructive confirmation.
+  - **Boxed Rounded-Border Controls Only**: Every button, badge, port, and switch uses crisp boxed geometry with rounded borders (`4px`–`14px`), `1.5px solid #0d1b2a` structural strokes, and zero-blur offset shadows (`--ref-shadow-hard-*`)—never circular (`50%`) or stadium capsule (`9999px`) buttons.
 
 ## Evidence on Hand
 
-- **Código-Fonte e Rotas Ativas**:
-  - Estúdio Interativo em `frontend/src/features/studio/components/InteractiveStudio.tsx` (`/` e `/create`).
-  - Galeria de Projetos em `frontend/src/app/gallery/page.tsx` (`/gallery`).
-  - Cliente Gemini / Nano Banana em `frontend/src/features/studio/services/nanobananaClient.ts`.
-  - Persistência SQLite e gerenciamento de pastas no filesystem em `frontend/src/app/api/db/route.ts` e `src-tauri/src/db.rs`.
-  - Streaming local de imagens em `frontend/src/app/api/image/route.ts`.
-- **Ausências Confirmadas (Não Fabricar)**:
-  - Sem depoimentos de clientes, métricas comerciais externas, planos de preços ou infraestrutura multi-tenant em nuvem.
+- **Source Routes & Services**:
+  - Studio Flow Canvas & 3-Step Creation Wizard: `frontend/src/features/studio/components/InteractiveStudio.tsx` (`/` and `/create`).
+  - Goal-Driven Agent Harness: `frontend/src/app/harness/page.tsx` (`/harness`) and `frontend/src/features/harness/services/harnessAgentService.ts`.
+  - Unified Gallery: `frontend/src/app/gallery/page.tsx` (`/gallery`).
+  - Visual Direction Modifiers: `frontend/src/app/modifiers/page.tsx` (`/modifiers`).
+  - Universal Tauri / Dev SQLite Bridge: `frontend/src/core/tauri/tauriBridge.ts`, `frontend/src/app/api/db/route.ts`, and `src-tauri/src/db.rs`.
+- **Confirmed Absences (Do Not Fabricate)**:
+  - No cloud multi-tenancy, subscription pricing tiers, external marketing testimonials, or PostgreSQL/RustFS dependencies.
 
 ## Product Principles
 
-1. **Exploração Paralela sobre Tentativa Linear**: Sempre oferecer ao criador 4 interpretações reais da cena (`1 Base + 3 Ênfases Dinâmicas do Gemini`) em vez de forçar ajustes cegos em uma única imagem por vez.
-2. **Propriedade Real dos Arquivos (Filesystem-First)**: As imagens geradas pertencem diretamente às pastas do usuário em `~/Pictures/nanobanana/<projeto>/`, legíveis fora do aplicativo e preservadas mesmo se o projeto for removido da listagem.
-3. **Rastreabilidade Não-Destrutiva**: Toda iteração preserva sua linhagem (`parent_turn_number`), permitindo voltar a qualquer ponto da história, inspecionar as 4 variações daquela rodada e abrir novos ramos criativos.
-4. **Foco Total na Tela (`100vw × 100vh` Zero-Scroll)**: Toda a operação criativa — linha do tempo, grade `2×2` de geração e controles de prompt/parâmetros — deve caber e responder dentro do viewport fixo sem barras de rolagem de página.
+1. **Parallel & Rubric-Guided Exploration over Blind Retries**: Offer simultaneous visual variations in Studio and structured Critic/TRACE evolution in Goal Harness.
+2. **Real File Ownership (Filesystem-First)**: Generated `.png` files belong directly to the user's OS folder and survive Gallery cleanups.
+3. **Non-Destructive Lineage**: Every step records its parent origin so creators can branch freely without overwriting prior work.
+4. **Focused Zero-Scroll Workstation**: Keep outer desktop chrome locked to `100vw × 100vh` while adapting cleanly to touch pointers and narrow viewports.

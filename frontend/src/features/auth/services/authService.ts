@@ -34,11 +34,11 @@ export function buildInitialsAvatarDataUrl(
       ? `${parts[0][0]}${parts[parts.length - 1][0]}`.toUpperCase()
       : (name.slice(0, 2) || "NB").toUpperCase();
 
-  const bg = provider === "facebook" ? "#1877F2" : "#F2FA3C";
-  const fg = provider === "facebook" ? "#FFFFFF" : "#0B0B0B";
+  const bg = provider === "facebook" ? "#415a77" : "#778da9";
+  const fg = provider === "facebook" ? "#ffffff" : "#0d1b2a";
 
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 80 80" width="80" height="80">
-    <rect width="80" height="80" rx="40" fill="${bg}" stroke="#0B0B0B" stroke-width="4"/>
+    <rect width="80" height="80" rx="18" fill="${bg}" stroke="#0d1b2a" stroke-width="4"/>
     <text x="40" y="49" text-anchor="middle" fill="${fg}" font-family="sans-serif" font-weight="800" font-size="28">${initials}</text>
   </svg>`;
   return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;

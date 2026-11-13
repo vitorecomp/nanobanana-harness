@@ -722,6 +722,60 @@ export async function vaultSetAiPrompts(params: {
   );
 }
 
+export type StudioThemeMode = "light" | "dark";
+export const STUDIO_THEME_LOCAL_KEY = "nanobanana_theme_mode";
+
+export async function vaultGetThemeMode(): Promise<StudioThemeMode> {
+  const tauriRes = await invokeTauriCommand<string | null>(
+    "tauri_vault_get_theme"
+  );
+  if (tauriRes === "dark" || tauriRes === "light") {
+    return tauriRes;
+  }
+
+  const dbRes = await querySqliteApi<string | null>("vault_get_theme");
+  if (dbRes === "dark" || dbRes === "light") {
+    return dbRes;
+  }
+
+  if (typeof window !== "undefined") {
+    try {
+      const saved = window.localStorage.getItem(STUDIO_THEME_LOCAL_KEY);
+      if (saved === "dark" || saved === "light") {
+        return saved;
+      }
+    } catch {
+      // Ignore storage access errors
+    }
+  }
+  return "light";
+}
+
+export async function vaultSetThemeMode(
+  themeMode: StudioThemeMode
+): Promise<StudioThemeMode> {
+  const normalized: StudioThemeMode = themeMode === "dark" ? "dark" : "light";
+  if (typeof window !== "undefined") {
+    try {
+      window.localStorage.setItem(STUDIO_THEME_LOCAL_KEY, normalized);
+    } catch {
+      // Ignore storage access errors
+    }
+  }
+
+  const tauriSaved = await invokeTauriCommand<string>("tauri_vault_set_theme", {
+    themeMode: normalized,
+  });
+  if (tauriSaved === "dark" || tauriSaved === "light") {
+    return tauriSaved;
+  }
+
+  const dbSaved = await querySqliteApi<string>("vault_set_theme", {
+    themeMode: normalized,
+  });
+  return dbSaved === "dark" ? "dark" : normalized;
+}
+
 export async function localDbListHarnessMissions(
   userId: string
 ): Promise<HarnessMissionSummary[]> {

@@ -44,14 +44,19 @@ import {
 import {
   IconAtelierStar,
   IconAutoGrid,
+  IconCheck,
   IconClose,
   IconDownload,
+  IconEditPencil,
   IconExpand,
   IconGripDots,
   IconMinus,
   IconPlus,
   IconRefresh,
+  IconSettingsGear,
+  IconTrophy,
 } from "@/shared/components/icons/AtelierIcons";
+import { useDialogFocusTrap } from "@/shared/hooks/useDialogFocusTrap";
 
 const HARNESS_MODELS: Array<{
   id: NanoBananaModel;
@@ -78,13 +83,13 @@ const HARNESS_MODELS: Array<{
 const QUICK_GOAL_PRESETS = [
   {
     label: "Isometric Space Pack (4)",
-    goal: "Crie os assets do meu jogo de space, em formato isometrico",
+    goal: "Create an isometric space game asset pack of 4 detailed starships with cohesive hull lighting",
     aspectRatio: "1:1",
     candidatesPerSlot: 2,
   },
   {
     label: "Kyoto Matcha Bar Hero",
-    goal: "Hero banner editorial para cafeteria japonesa minimalista em Kyoto com cerâmica artesanal e luz matinal",
+    goal: "Editorial hero banner for a minimalist Japanese matcha cafe in Kyoto with handcrafted ceramics and morning light",
     aspectRatio: "16:9",
     candidatesPerSlot: 2,
   },
@@ -294,7 +299,7 @@ export default function GoalHarnessPage() {
   const [reiterateNote, setReiterateNote] = useState<string>("");
   const [reiterateTargetSlotId, setReiterateTargetSlotId] =
     useState<string>("ALL");
-  const [reiterateExtraRounds, setReiterateExtraRounds] = useState<number>(1);
+  const [reiterateExtraRounds, setReiterateExtraRounds] = useState<number>(3);
   const [reiterateAnchorToIncumbent, setReiterateAnchorToIncumbent] =
     useState<boolean>(true);
   const reiterateInputRef = useRef<HTMLTextAreaElement | null>(null);
@@ -312,6 +317,18 @@ export default function GoalHarnessPage() {
     useState<boolean>(false);
   const [missionTitleDraft, setMissionTitleDraft] = useState<string>("");
   const missionTitleInputRef = useRef<HTMLInputElement | null>(null);
+  const paramsDialogRef = useRef<HTMLDivElement | null>(null);
+  const inspectorDialogRef = useRef<HTMLDivElement | null>(null);
+  const lightboxDialogRef = useRef<HTMLDivElement | null>(null);
+  useDialogFocusTrap(paramsDialogRef, isParamsModalOpen, () =>
+    setIsParamsModalOpen(false)
+  );
+  useDialogFocusTrap(inspectorDialogRef, Boolean(inspectedNodeId), () =>
+    setInspectedNodeId(null)
+  );
+  useDialogFocusTrap(lightboxDialogRef, Boolean(lightboxCard), () =>
+    setLightboxCard(null)
+  );
 
   // Flow Canvas Pan, Zoom & Node Positions (0.50 default zoom fits all 5 pipeline steps horizontally)
   const [canvasViewport, setCanvasViewport] = useState<{
@@ -342,6 +359,7 @@ export default function GoalHarnessPage() {
   const dragStateRef = useRef<
     | {
         mode: "pan";
+        pointerId: number;
         startClientX: number;
         startClientY: number;
         originX: number;
@@ -349,6 +367,7 @@ export default function GoalHarnessPage() {
       }
     | {
         mode: "node";
+        pointerId: number;
         nodeId: string;
         startClientX: number;
         startClientY: number;
@@ -357,6 +376,8 @@ export default function GoalHarnessPage() {
       }
     | null
   >(null);
+  const zoomRef = useRef<number>(canvasViewport.zoom);
+  zoomRef.current = canvasViewport.zoom;
 
   const abortRef = useRef<boolean>(false);
   const hasRestoredViewportRef = useRef<boolean>(false);
@@ -419,67 +440,86 @@ export default function GoalHarnessPage() {
     return () => window.clearInterval(timer);
   }, [isRunning]);
 
-  // Global mouse move / up for Flow Canvas panning & node dragging
+  // Persist Harness canvas positions & viewport when idle (debounced, never during active pointer drag)
   useEffect(() => {
-    const handleMouseMove = (e: MouseEvent) => {
+    if (
+      !activeMissionId ||
+      isDraggingCanvas ||
+      !hasRestoredViewportRef.current
+    ) {
+      return;
+    }
+    const timer = window.setTimeout(() => {
+      persistHarnessCanvasState(
+        activeMissionId,
+        customNodePositions,
+        canvasViewport
+      );
+    }, 200);
+    return () => window.clearTimeout(timer);
+  }, [
+    activeMissionId,
+    canvasViewport,
+    customNodePositions,
+    isDraggingCanvas,
+    persistHarnessCanvasState,
+  ]);
+
+  // Global Pointer Event listeners for Flow Canvas panning & node dragging
+  useEffect(() => {
+    const handlePointerMove = (e: PointerEvent) => {
       const st = dragStateRef.current;
-      if (!st) return;
+      if (!st || e.pointerId !== st.pointerId) return;
       if (st.mode === "pan") {
         const dx = e.clientX - st.startClientX;
         const dy = e.clientY - st.startClientY;
         hasRestoredViewportRef.current = true;
-        setCanvasViewport((prev) => {
-          const next = {
-            ...prev,
+        setCanvasViewport((prev) => ({
+          ...prev,
+          x: Math.round(st.originX + dx),
+          y: Math.round(st.originY + dy),
+        }));
+      } else if (st.mode === "node") {
+        const zoom = zoomRef.current || 1;
+        const dx = (e.clientX - st.startClientX) / zoom;
+        const dy = (e.clientY - st.startClientY) / zoom;
+        hasRestoredViewportRef.current = true;
+        setCustomNodePositions((prev) => ({
+          ...prev,
+          [st.nodeId]: {
             x: Math.round(st.originX + dx),
             y: Math.round(st.originY + dy),
-          };
-          if (activeMissionId) {
-            persistHarnessCanvasState(
-              activeMissionId,
-              customNodePositions,
-              next
-            );
-          }
-          return next;
-        });
-      } else if (st.mode === "node") {
-        const dx = (e.clientX - st.startClientX) / canvasViewport.zoom;
-        const dy = (e.clientY - st.startClientY) / canvasViewport.zoom;
-        hasRestoredViewportRef.current = true;
-        setCustomNodePositions((prev) => {
-          const next = {
-            ...prev,
-            [st.nodeId]: {
-              x: Math.round(st.originX + dx),
-              y: Math.round(st.originY + dy),
-            },
-          };
-          if (activeMissionId) {
-            persistHarnessCanvasState(activeMissionId, next, canvasViewport);
-          }
-          return next;
-        });
+          },
+        }));
       }
     };
-    const handleMouseUp = () => {
+
+    const endPointerDrag = (e?: PointerEvent) => {
+      const st = dragStateRef.current;
+      if (!st) return;
+      if (e && e.pointerId !== st.pointerId) return;
+      dragStateRef.current = null;
+      setIsDraggingCanvas(false);
+    };
+
+    const handleWindowBlur = () => {
       if (dragStateRef.current) {
         dragStateRef.current = null;
         setIsDraggingCanvas(false);
       }
     };
-    window.addEventListener("mousemove", handleMouseMove);
-    window.addEventListener("mouseup", handleMouseUp);
+
+    window.addEventListener("pointermove", handlePointerMove);
+    window.addEventListener("pointerup", endPointerDrag);
+    window.addEventListener("pointercancel", endPointerDrag);
+    window.addEventListener("blur", handleWindowBlur);
     return () => {
-      window.removeEventListener("mousemove", handleMouseMove);
-      window.removeEventListener("mouseup", handleMouseUp);
+      window.removeEventListener("pointermove", handlePointerMove);
+      window.removeEventListener("pointerup", endPointerDrag);
+      window.removeEventListener("pointercancel", endPointerDrag);
+      window.removeEventListener("blur", handleWindowBlur);
     };
-  }, [
-    activeMissionId,
-    canvasViewport,
-    customNodePositions,
-    persistHarnessCanvasState,
-  ]);
+  }, []);
 
   // Rounds ordered from NEWEST (top of sidebar list) to OLDEST
   const newestFirstRounds = useMemo(() => {
@@ -1238,6 +1278,7 @@ export default function GoalHarnessPage() {
       setActiveStageLabel("");
       setSelectedSlotFilter("ALL");
       setReiterateNote("");
+      setReiterateExtraRounds(3);
       setMaxRounds(harnessDefaultSteps || 4);
       if (typeof window !== "undefined") {
         window.history.replaceState(
@@ -1455,6 +1496,7 @@ export default function GoalHarnessPage() {
     setRubric(loadedRubric);
     setRounds(sanitizedRounds);
     setReferenceSlots(loadedRefSlots);
+    setReiterateExtraRounds(3);
 
     if (opts?.preserveUrlParams) {
       const slotParam = urlParams.get("slot");
@@ -1529,7 +1571,7 @@ export default function GoalHarnessPage() {
         resumePartialRoundNumber ?? sanitizedRounds.length + 1;
       setActiveStageLabel("AUTO-RESUMING MISSION");
       setLiveStepNote(
-        `↻ Detected unfinished mission "${loaded.title}" — continuing Round 0${resumeRoundNum}...`
+        `Detected unfinished mission "${loaded.title}" — continuing Round 0${resumeRoundNum}...`
       );
 
       if (isStuckDuringPlanning) {
@@ -1920,7 +1962,7 @@ export default function GoalHarnessPage() {
       setStatus("idle");
       setActiveStageLabel("API KEY REQUIRED");
       setLiveStepNote(
-        "⚠ Gemini API Key not configured — open Settings to enter your key."
+        "Gemini API Key not configured — open Settings to enter your key."
       );
       if (!resumeSnapshot) {
         openSettingsModal();
@@ -1964,7 +2006,7 @@ export default function GoalHarnessPage() {
     const totalMaxRounds = isAutoResume
       ? Math.max(effectiveMaxRounds, startRoundNum)
       : isReiterating
-      ? workingRounds.length + Math.max(1, reiterateOpts?.extraRounds || 1)
+      ? workingRounds.length + Math.max(1, reiterateOpts?.extraRounds || 3)
       : workingRounds.length + effectiveMaxRounds;
 
     if (isReiterating) {
@@ -2676,7 +2718,7 @@ export default function GoalHarnessPage() {
 
         if (allSolved && (!isReiterating || roundNum >= totalMaxRounds)) {
           setStatus("completed");
-          setActiveStageLabel("CONVERGED 🏆");
+          setActiveStageLabel("CONVERGED");
           setLiveStepNote(
             `Round ${roundNum} complete! Avg Pack Score: ${packAvgScore}/100 (${solvedNow}/${workingDeliverables.length} solved).`
           );
@@ -2712,10 +2754,12 @@ export default function GoalHarnessPage() {
     if (isRunning || deliverables.length === 0) return;
     const noteToUse =
       overrideNote !== undefined ? overrideNote : reiterateNote;
+    const roundsToRun = reiterateExtraRounds;
     setReiterateNote("");
+    setReiterateExtraRounds(3);
     await executeHarnessLoop(undefined, {
       isReiteration: true,
-      extraRounds: reiterateExtraRounds,
+      extraRounds: roundsToRun,
       targetSlotId: reiterateTargetSlotId,
       userRefinementNote: noteToUse,
       anchorToIncumbent: reiterateAnchorToIncumbent,
@@ -2890,7 +2934,7 @@ export default function GoalHarnessPage() {
       setMissionCreatedAt(saved.created_at || nowIso);
     }
 
-    setLiveStepNote(`✦ Mission renamed to "${nextTitle}"`);
+    setLiveStepNote(`Mission renamed to "${nextTitle}"`);
   };
 
   return (
@@ -2905,43 +2949,65 @@ export default function GoalHarnessPage() {
           <div className="ref-flow-toolbar ref-harness-flow-toolbar">
             <div className="ref-flow-toolbar-left">
               <div className="ref-flow-project-title-group">
-                <button
-                  type="button"
-                  id="harness-edit-title-btn"
-                  className="ref-flow-project-edit-btn"
-                  onClick={handleOpenEditMissionTitleModal}
-                  title="Edit mission name"
-                  aria-label="Edit mission name"
-                >
-                  <svg
-                    width="13"
-                    height="13"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    aria-hidden="true"
+                {isRenameMissionModalOpen ? (
+                  <form
+                    className="ref-flow-inline-title-form"
+                    onSubmit={handleSaveMissionTitleModal}
                   >
-                    <path
-                      d="M12 20.5H21"
-                      stroke="currentColor"
-                      strokeWidth="2.2"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
+                    <input
+                      ref={missionTitleInputRef}
+                      type="text"
+                      value={missionTitleDraft}
+                      onChange={(e) => setMissionTitleDraft(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Escape") {
+                          e.stopPropagation();
+                          setIsRenameMissionModalOpen(false);
+                        }
+                      }}
+                      aria-label="Edit mission name"
+                      className="ref-input ref-flow-inline-title-input"
+                      placeholder="Mission name..."
                     />
-                    <path
-                      d="M16.5 4a2.121 2.121 0 0 1 3 3L7 19.5l-4 1 1-4L16.5 4z"
-                      stroke="currentColor"
-                      strokeWidth="2.2"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    />
-                  </svg>
-                </button>
-                <span
-                  className="ref-flow-project-title-text"
-                  title={missionTitle}
-                >
-                  {missionTitle}
-                </span>
+                    <button
+                      type="submit"
+                      className="ref-flow-project-edit-btn"
+                      title="Save mission name"
+                      aria-label="Save mission name"
+                    >
+                      <IconCheck size={12} />
+                    </button>
+                    <button
+                      type="button"
+                      className="ref-flow-project-edit-btn"
+                      onClick={() => setIsRenameMissionModalOpen(false)}
+                      title="Cancel editing"
+                      aria-label="Cancel editing mission name"
+                    >
+                      <IconClose size={11} />
+                    </button>
+                  </form>
+                ) : (
+                  <>
+                    <button
+                      type="button"
+                      id="harness-edit-title-btn"
+                      className="ref-flow-project-edit-btn"
+                      onClick={handleOpenEditMissionTitleModal}
+                      title="Edit mission name"
+                      aria-label="Edit mission name"
+                    >
+                      <IconEditPencil size={13} strokeWidth={2.2} />
+                    </button>
+                    <h1
+                      className="ref-flow-project-title-text"
+                      title={missionTitle}
+                      onDoubleClick={handleOpenEditMissionTitleModal}
+                    >
+                      {missionTitle}
+                    </h1>
+                  </>
+                )}
               </div>
             </div>
 
@@ -3072,7 +3138,8 @@ export default function GoalHarnessPage() {
             className={`ref-flow-canvas-viewport ${
               isDraggingCanvas ? "is-grabbing" : ""
             }`}
-            onMouseDown={(e) => {
+            onPointerDown={(e) => {
+              if (e.pointerType === "mouse" && e.button !== 0) return;
               const target = e.target as HTMLElement;
               if (
                 target.closest(".ref-flow-step-card") ||
@@ -3080,9 +3147,11 @@ export default function GoalHarnessPage() {
               ) {
                 return;
               }
+              if (dragStateRef.current) return;
               setIsCameraGliding(false);
               dragStateRef.current = {
                 mode: "pan",
+                pointerId: e.pointerId,
                 startClientX: e.clientX,
                 startClientY: e.clientY,
                 originX: canvasViewport.x,
@@ -3133,7 +3202,7 @@ export default function GoalHarnessPage() {
                       <path
                         d={edge.path}
                         fill="none"
-                        stroke="var(--ref-canvas)"
+                        stroke="var(--atelier-canvas)"
                         strokeWidth={edge.isHighlighted ? "4.5" : "3.8"}
                         strokeLinecap="round"
                         strokeLinejoin="round"
@@ -3144,8 +3213,8 @@ export default function GoalHarnessPage() {
                         fill="none"
                         stroke={
                           edge.isHighlighted
-                            ? "var(--ref-lime-accent)"
-                            : "var(--ref-moss-outer)"
+                            ? "var(--atelier-steel)"
+                            : "var(--ref-wire-stroke)"
                         }
                         strokeWidth={edge.isHighlighted ? "2.2" : "1.75"}
                         strokeDasharray={isInterRound ? "6 4" : undefined}
@@ -3242,14 +3311,19 @@ export default function GoalHarnessPage() {
                     {/* Draggable Card Header */}
                     <div
                       className="ref-flow-node-header"
-                      onMouseDown={(e) => {
+                      onPointerDown={(e) => {
+                        if (e.pointerType === "mouse" && e.button !== 0) {
+                          return;
+                        }
                         if ((e.target as HTMLElement).closest("button")) {
                           return;
                         }
+                        if (dragStateRef.current) return;
                         e.stopPropagation();
                         setSelectedNodeId(node.nodeId);
                         dragStateRef.current = {
                           mode: "node",
+                          pointerId: e.pointerId,
                           nodeId: node.nodeId,
                           startClientX: e.clientX,
                           startClientY: e.clientY,
@@ -3277,7 +3351,7 @@ export default function GoalHarnessPage() {
                               }`
                             : isRefining
                             ? `R${node.roundNumber} • 03 REFINING`
-                            : `R${node.roundNumber} • 04 RESULT 🏆`}
+                            : `R${node.roundNumber} • 04 RESULT`}
                         </span>
 
                         {(isDraft || isResult) && (
@@ -3287,9 +3361,16 @@ export default function GoalHarnessPage() {
                                 ? "is-winner"
                                 : "is-candidate"
                             }`}
+                            style={{
+                              display: "inline-flex",
+                              alignItems: "center",
+                              gap: "4px",
+                            }}
                           >
-                            {isResult || cand.isSlotRoundWinner ? "🏆 " : ""}
-                            {cand.totalScore}/100
+                            {(isResult || cand.isSlotRoundWinner) && (
+                              <IconTrophy size={11} />
+                            )}
+                            <span>{cand.totalScore}/100</span>
                           </span>
                         )}
                       </div>
@@ -3310,13 +3391,22 @@ export default function GoalHarnessPage() {
                           <div className="ref-harness-node-stage-box is-thinking">
                             <div className="ref-harness-stage-top">
                               <div className="ref-harness-stage-heading-row">
-                                <span className="ref-harness-stage-heading">
-                                  ✦{" "}
-                                  {node.roundNumber === 1
-                                    ? "Initial Plan"
-                                    : refinedMatch
-                                    ? "User Refinement"
-                                    : "Auto-Refinement"}
+                                <span
+                                  className="ref-harness-stage-heading"
+                                  style={{
+                                    display: "inline-flex",
+                                    alignItems: "center",
+                                    gap: "4px",
+                                  }}
+                                >
+                                  <IconAtelierStar size={11} />
+                                  <span>
+                                    {node.roundNumber === 1
+                                      ? "Initial Plan"
+                                      : refinedMatch
+                                      ? "User Refinement"
+                                      : "Auto-Refinement"}
+                                  </span>
                                 </span>
                                 <span className="ref-harness-stage-count-pill">
                                   {node.outcome.candidates.length} Drafts •{" "}
@@ -3375,12 +3465,12 @@ export default function GoalHarnessPage() {
                           node.outcome.traceAttribution.pairwiseVerdict;
                         const verdictLabel =
                           node.winnerCandidate.totalScore >= targetScore
-                            ? "✓ Target Met"
+                            ? "Target Met"
                             : verdict === "CHALLENGER_WON"
-                            ? "↑ Promoted"
+                            ? "Promoted"
                             : verdict === "INCUMBENT_RETAINED"
-                            ? "↺ Kept Best"
-                            : "★ Baseline";
+                            ? "Kept Best"
+                            : "Baseline";
                         return (
                           <div className="ref-harness-node-stage-box is-refining">
                             <div className="ref-harness-refining-score-banner">
@@ -3466,6 +3556,8 @@ export default function GoalHarnessPage() {
                         <img
                           src={cand.imageUrl}
                           alt={`${node.deliverableTitle} - ${cand.label}`}
+                          loading="lazy"
+                          decoding="async"
                           className="ref-flow-hero-img"
                         />
                         <span
@@ -3590,7 +3682,8 @@ export default function GoalHarnessPage() {
               onClick={() => setIsParamsModalOpen(true)}
               title="Open Floating Parameters, Deliverables & Rubric Modal"
             >
-              <span>⚙ Parameters</span>
+              <IconSettingsGear size={13} />
+              <span>Parameters</span>
             </button>
           </div>
 
@@ -3619,7 +3712,8 @@ export default function GoalHarnessPage() {
                       setCandidatesPerSlot(preset.candidatesPerSlot);
                     }}
                   >
-                    ✦ {preset.label}
+                    <IconAtelierStar size={11} />
+                    <span>{preset.label}</span>
                   </button>
                 ))}
               </div>
@@ -3631,7 +3725,7 @@ export default function GoalHarnessPage() {
               rows={rounds.length > 0 ? 2 : 3}
               value={goalInput}
               onChange={(e) => setGoalInput(e.target.value)}
-              placeholder='E.g.: "Crie os assets do meu jogo de space, em formato isometrico"...'
+              placeholder='E.g.: "Create an isometric space game asset pack of 4 starships with cohesive lighting"...'
             />
           </div>
 
@@ -3684,7 +3778,8 @@ export default function GoalHarnessPage() {
                         onClick={() => setReiterateNote(comp)}
                         title={comp}
                       >
-                        <span>✦ Fix: {comp}</span>
+                        <IconAtelierStar size={11} />
+                        <span>Fix: {comp}</span>
                       </button>
                     ))
                   : [
@@ -3744,6 +3839,7 @@ export default function GoalHarnessPage() {
               <button
                 type="button"
                 id="harness-reiterate-anchor-btn"
+                aria-pressed={reiterateAnchorToIncumbent}
                 className={`ref-pill-chip ref-harness-anchor-bottom-btn ${
                   reiterateAnchorToIncumbent ? "active" : ""
                 }`}
@@ -3751,9 +3847,12 @@ export default function GoalHarnessPage() {
                   setReiterateAnchorToIncumbent((prev) => !prev)
                 }
               >
-                {reiterateAnchorToIncumbent
-                  ? "✓ Anchor Winner: ON"
-                  : "○ Anchor Winner: OFF"}
+                {reiterateAnchorToIncumbent && <IconCheck size={11} />}
+                <span>
+                  {reiterateAnchorToIncumbent
+                    ? "Anchor Winner: ON"
+                    : "Anchor Winner: OFF"}
+                </span>
               </button>
             </div>
           )}
@@ -3842,21 +3941,45 @@ export default function GoalHarnessPage() {
                   return (
                     <div
                       key={`side-round-${round.roundNumber}`}
+                      role="button"
+                      tabIndex={0}
                       onClick={() => handleFocusRoundOnCanvas(round.roundNumber)}
+                      onKeyDown={(e) => {
+                        if (
+                          e.target === e.currentTarget &&
+                          (e.key === "Enter" || e.key === " ")
+                        ) {
+                          e.preventDefault();
+                          handleFocusRoundOnCanvas(round.roundNumber);
+                        }
+                      }}
                       className={`ref-harness-iteration-card ${
                         isLatest ? "is-latest" : ""
                       }`}
                       title={`Click to focus Round 0${round.roundNumber} on Flow Canvas`}
+                      aria-label={`Focus Round 0${round.roundNumber} on Flow Canvas`}
                     >
                       <div className="ref-harness-iteration-card-top">
                         <span className="ref-harness-iteration-round-badge">
                           ROUND 0{round.roundNumber}
                           {isLatest ? " • LATEST" : ""}
                         </span>
-                        <span className="ref-harness-iteration-steps-flow">
-                          {roundBestScore > 0
-                            ? `🏆 ${roundBestScore}/100`
-                            : round.status}
+                        <span
+                          className="ref-harness-iteration-steps-flow"
+                          style={{
+                            display: "inline-flex",
+                            alignItems: "center",
+                            gap: "4px",
+                          }}
+                        >
+                          {roundBestScore > 0 ? (
+                            <>
+                              <IconTrophy size={12} />
+                              <span>{roundBestScore}/100</span>
+                            </>
+                          ) : (
+                            round.status
+                          )}
                         </span>
                       </div>
 
@@ -3880,10 +4003,13 @@ export default function GoalHarnessPage() {
                                 cand.isSlotRoundWinner ? "is-winner" : ""
                               }`}
                               title={`${cand.label} (${cand.totalScore}/100) — Click to inspect`}
+                              aria-label={`Inspect ${cand.label} (${cand.totalScore}/100)`}
                             >
                               <img
                                 src={cand.imageUrl}
                                 alt={cand.label}
+                                loading="lazy"
+                                decoding="async"
                                 className="ref-harness-iteration-thumb-img"
                               />
                             </button>
@@ -3903,23 +4029,32 @@ export default function GoalHarnessPage() {
       {/* ==================== FLOATING MODAL 1: PARAMETERS, DELIVERABLES & RUBRIC ==================== */}
       {isParamsModalOpen && (
         <div
+          ref={paramsDialogRef}
+          data-atelier-modal="true"
           className="ref-modal-backdrop"
           role="dialog"
           aria-modal="true"
           aria-labelledby="harness-params-modal-title"
+          tabIndex={-1}
           onClick={(e) => {
             if (e.target === e.currentTarget) setIsParamsModalOpen(false);
           }}
         >
-          <div className="ref-modal-card ref-harness-modal-card">
-            <div className="ref-modal-header">
-              <div>
-                <strong
-                  id="harness-params-modal-title"
-                  className="ref-soft-card-title"
-                >
-                  ⚙ Goal Harness Parameters, Deliverables &amp; Rubric
-                </strong>
+        <div className="ref-modal-card ref-harness-modal-card">
+          <div className="ref-modal-header">
+            <div>
+              <strong
+                id="harness-params-modal-title"
+                className="ref-soft-card-title"
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: "8px",
+                }}
+              >
+                <IconSettingsGear size={15} />
+                <span>Goal Harness Parameters, Deliverables &amp; Rubric</span>
+              </strong>
                 <span className="ref-harness-modal-sub">
                   Configure model &amp; loop parameters, reference anchors, and
                   planned deliverable specifications.
@@ -4141,6 +4276,7 @@ export default function GoalHarnessPage() {
                           <img
                             src={ref.dataUrl}
                             alt={`Reference Slot ${idx + 1}`}
+                            decoding="async"
                             className="ref-harness-ref-thumb"
                           />
                           <div className="ref-harness-ref-meta">
@@ -4150,6 +4286,7 @@ export default function GoalHarnessPage() {
                             <input
                               type="text"
                               className="ref-input ref-harness-ref-role-input"
+                              aria-label={`Reference Slot ${idx + 1} Role`}
                               value={ref.role}
                               onChange={(e) => {
                                 const val = e.target.value;
@@ -4164,6 +4301,7 @@ export default function GoalHarnessPage() {
                           <button
                             type="button"
                             className="ref-circle-icon-btn sm"
+                            aria-label={`Remove Reference Slot ${idx + 1}`}
                             onClick={() => handleRemoveReference(ref.id)}
                           >
                             <IconClose size={12} />
@@ -4233,6 +4371,7 @@ export default function GoalHarnessPage() {
                           <input
                             type="text"
                             className="ref-input ref-harness-slot-title-input"
+                            aria-label={`Deliverable ${idx + 1} title`}
                             value={slot.title}
                             onChange={(e) => {
                               const val = e.target.value;
@@ -4245,18 +4384,29 @@ export default function GoalHarnessPage() {
                           />
                           <span
                             className={`ref-harness-slot-status-pill is-${slot.status}`}
+                            style={{
+                              display: "inline-flex",
+                              alignItems: "center",
+                              gap: "4px",
+                            }}
                           >
-                            {slot.status === "solved"
-                              ? `SOLVED 🏆 (${slot.incumbentScore}/100)`
-                              : slot.incumbentScore > 0
-                              ? `INCUMBENT: ${slot.incumbentScore}/100`
-                              : "PENDING"}
+                            {slot.status === "solved" ? (
+                              <>
+                                <IconTrophy size={11} />
+                                <span>SOLVED ({slot.incumbentScore}/100)</span>
+                              </>
+                            ) : slot.incumbentScore > 0 ? (
+                              `INCUMBENT: ${slot.incumbentScore}/100`
+                            ) : (
+                              "PENDING"
+                            )}
                           </span>
                         </div>
 
                         <input
                           type="text"
                           className="ref-input ref-harness-slot-prompt-input"
+                          aria-label={`Deliverable ${idx + 1} prompt specification`}
                           value={slot.incumbentPrompt || slot.description}
                           onChange={(e) => {
                             const val = e.target.value;
@@ -4275,6 +4425,7 @@ export default function GoalHarnessPage() {
                         <button
                           type="button"
                           className="ref-circle-icon-btn sm"
+                          aria-label={`Remove deliverable ${slot.title}`}
                           onClick={() => handleRemoveDeliverableSlot(slot.id)}
                         >
                           <IconClose size={12} />
@@ -4316,17 +4467,20 @@ export default function GoalHarnessPage() {
                 <span>Done</span>
               </button>
             </div>
-          </div>
+        </div>
         </div>
       )}
 
       {/* ==================== FLOATING MODAL 2: FLOW NODE INSPECTOR (THINKING, DRAFT, REFINING, RESULT) ==================== */}
       {inspectedNode && (
         <div
+          ref={inspectorDialogRef}
+          data-atelier-modal="true"
           className="ref-modal-backdrop"
           role="dialog"
           aria-modal="true"
           aria-label="Flow Card Inspector Modal"
+          tabIndex={-1}
           onClick={(e) => {
             if (e.target === e.currentTarget) setInspectedNodeId(null);
           }}
@@ -4366,6 +4520,7 @@ export default function GoalHarnessPage() {
                     <img
                       src={cand.imageUrl}
                       alt={cand.label}
+                      decoding="async"
                       className="ref-harness-inspector-img"
                     />
 
@@ -4488,15 +4643,18 @@ export default function GoalHarnessPage() {
       {/* ==================== FULLSCREEN IMAGE LIGHTBOX ==================== */}
       {lightboxCard && (
         <div
+          ref={lightboxDialogRef}
+          data-atelier-modal="true"
           className="ref-modal-backdrop"
           role="dialog"
           aria-modal="true"
-          onClick={() => setLightboxCard(null)}
+          aria-label="Full-size candidate image lightbox"
+          tabIndex={-1}
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setLightboxCard(null);
+          }}
         >
-          <div
-            className="ref-modal-card ref-harness-lightbox-card"
-            onClick={(e) => e.stopPropagation()}
-          >
+          <div className="ref-modal-card ref-harness-lightbox-card">
             {(() => {
               const cand =
                 lightboxCard.candidate || lightboxCard.winnerCandidate;
@@ -4509,6 +4667,7 @@ export default function GoalHarnessPage() {
                     </strong>
                     <button
                       type="button"
+                      aria-label="Close lightbox"
                       className="ref-circle-icon-btn sm"
                       onClick={() => setLightboxCard(null)}
                     >
@@ -4518,79 +4677,13 @@ export default function GoalHarnessPage() {
                   <img
                     src={cand.imageUrl}
                     alt={cand.label}
+                    decoding="async"
                     className="ref-harness-lightbox-img"
                   />
                 </>
               );
             })()}
           </div>
-        </div>
-      )}
-      {/* ==================== RENAME MISSION MODAL ==================== */}
-      {isRenameMissionModalOpen && (
-        <div
-          className="ref-modal-backdrop"
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="edit-mission-title-modal-heading"
-          onClick={(e) => {
-            if (e.target === e.currentTarget) {
-              setIsRenameMissionModalOpen(false);
-            }
-          }}
-        >
-          <form
-            className="ref-modal-card ref-project-rename-modal"
-            onSubmit={handleSaveMissionTitleModal}
-          >
-            <div className="ref-modal-header">
-              <strong
-                id="edit-mission-title-modal-heading"
-                className="ref-soft-card-title"
-              >
-                Edit Mission Name
-              </strong>
-              <button
-                type="button"
-                aria-label="Close modal"
-                className="ref-circle-icon-btn sm"
-                onClick={() => setIsRenameMissionModalOpen(false)}
-              >
-                <IconClose size={12} />
-              </button>
-            </div>
-
-            <div>
-              <label
-                className="ref-field-label"
-                htmlFor="edit-mission-title-input"
-              >
-                Mission Name
-              </label>
-              <input
-                ref={missionTitleInputRef}
-                id="edit-mission-title-input"
-                type="text"
-                value={missionTitleDraft}
-                onChange={(e) => setMissionTitleDraft(e.target.value)}
-                className="ref-input"
-                placeholder="Enter mission name..."
-              />
-            </div>
-
-            <div className="ref-project-rename-actions">
-              <button
-                type="button"
-                className="ref-mura-btn-outline lg"
-                onClick={() => setIsRenameMissionModalOpen(false)}
-              >
-                Cancel
-              </button>
-              <button type="submit" className="ref-dark-pill-btn">
-                <span>Save Name</span>
-              </button>
-            </div>
-          </form>
         </div>
       )}
     </div>

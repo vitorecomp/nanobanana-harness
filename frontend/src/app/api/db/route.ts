@@ -913,6 +913,24 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: true, data: true });
     }
 
+    if (action === "vault_get_theme") {
+      const row = db
+        .prepare(`SELECT value FROM app_vault WHERE key = 'studio_theme_mode'`)
+        .get() as { value: string } | undefined;
+      const mode = row?.value === "dark" ? "dark" : row?.value === "light" ? "light" : null;
+      return NextResponse.json({ ok: true, data: mode });
+    }
+
+    if (action === "vault_set_theme") {
+      const mode = payload.themeMode === "dark" ? "dark" : "light";
+      db.prepare(`
+        INSERT INTO app_vault (key, value, updated_at)
+        VALUES ('studio_theme_mode', ?, ?)
+        ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at
+      `).run(mode, now);
+      return NextResponse.json({ ok: true, data: mode });
+    }
+
     if (action === "vault_get_images_dir") {
       const dir = getConfiguredImagesDir(db);
       return NextResponse.json({ ok: true, data: dir });

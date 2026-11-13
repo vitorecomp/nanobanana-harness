@@ -53,6 +53,7 @@ import {
   IconClose,
   IconDna,
   IconDownload,
+  IconEditPencil,
   IconExpand,
   IconGripDots,
   IconMinus,
@@ -61,6 +62,7 @@ import {
   IconPromptText,
   IconRefresh,
   IconUploadImage,
+  useDialogFocusTrap,
 } from "@/shared";
 import {
   createConversation,
@@ -379,6 +381,14 @@ export default function InteractiveStudio({
     useState<boolean>(false);
   const [projectTitleDraft, setProjectTitleDraft] = useState<string>("");
   const projectTitleInputRef = useRef<HTMLInputElement | null>(null);
+  const stepDialogRef = useRef<HTMLDivElement | null>(null);
+  const lightboxDialogRef = useRef<HTMLDivElement | null>(null);
+  useDialogFocusTrap(stepDialogRef, isStepModalOpen, () =>
+    setIsStepModalOpen(false)
+  );
+  useDialogFocusTrap(lightboxDialogRef, Boolean(lightboxSlot), () =>
+    setLightboxSlot(null)
+  );
 
   // Pan & Zoom Canvas Viewport
   const [canvasViewport, setCanvasViewport] = useState<{
@@ -390,6 +400,7 @@ export default function InteractiveStudio({
   const dragStateRef = useRef<
     | {
         mode: "pan";
+        pointerId: number;
         startClientX: number;
         startClientY: number;
         originX: number;
@@ -397,6 +408,7 @@ export default function InteractiveStudio({
       }
     | {
         mode: "node";
+        pointerId: number;
         nodeId: string;
         startClientX: number;
         startClientY: number;
@@ -406,6 +418,8 @@ export default function InteractiveStudio({
     | null
   >(null);
   const [isDraggingCanvas, setIsDraggingCanvas] = useState<boolean>(false);
+  const zoomRef = useRef<number>(canvasViewport.zoom);
+  zoomRef.current = canvasViewport.zoom;
 
   const showTransientNotice = useCallback((msg: string) => {
     setStatusNotice(msg);
@@ -608,28 +622,34 @@ export default function InteractiveStudio({
     });
   }, [externalPresetRequest, activeUser.id, loadProjectById, newProjectNonce]);
 
-  // Persist Studio viewport & sync route query params (?projectId=...&zoom=...&panX=...&panY=...) so F5 never resets positions or zoom
+  // Persist Studio viewport & sync route query params (debounced & paused during active pointer drag)
   useEffect(() => {
-    if (typeof window === "undefined" || !activeProjectId) return;
-    saveProjectFlowMeta(activeProjectId, {
-      positions: nodePositions,
-      parentVariantByTurn,
-      snapshotsByTurn,
-      viewport: canvasViewport,
-    });
-    const params = new URLSearchParams(window.location.search);
-    params.set("projectId", activeProjectId);
-    params.set("zoom", String(Math.round(canvasViewport.zoom * 100)));
-    params.set("panX", String(Math.round(canvasViewport.x)));
-    params.set("panY", String(Math.round(canvasViewport.y)));
-    const nextUrl = `${window.location.pathname}?${params.toString()}`;
-    const currentUrl = `${window.location.pathname}${window.location.search}`;
-    if (currentUrl !== nextUrl) {
-      window.history.replaceState(null, "", nextUrl);
+    if (typeof window === "undefined" || !activeProjectId || isDraggingCanvas) {
+      return;
     }
+    const timer = window.setTimeout(() => {
+      saveProjectFlowMeta(activeProjectId, {
+        positions: nodePositions,
+        parentVariantByTurn,
+        snapshotsByTurn,
+        viewport: canvasViewport,
+      });
+      const params = new URLSearchParams(window.location.search);
+      params.set("projectId", activeProjectId);
+      params.set("zoom", String(Math.round(canvasViewport.zoom * 100)));
+      params.set("panX", String(Math.round(canvasViewport.x)));
+      params.set("panY", String(Math.round(canvasViewport.y)));
+      const nextUrl = `${window.location.pathname}?${params.toString()}`;
+      const currentUrl = `${window.location.pathname}${window.location.search}`;
+      if (currentUrl !== nextUrl) {
+        window.history.replaceState(null, "", nextUrl);
+      }
+    }, 200);
+    return () => window.clearTimeout(timer);
   }, [
     activeProjectId,
     canvasViewport,
+    isDraggingCanvas,
     nodePositions,
     parentVariantByTurn,
     snapshotsByTurn,
@@ -701,7 +721,7 @@ export default function InteractiveStudio({
     setLightboxSlot(null);
     setLiveDraftSlots([]);
     setGenerationStage("idle");
-    showTransientNotice("✦ New project created — click '+' to start");
+    showTransientNotice("New project created — click '+ New Step' to start");
   }, [newProjectNonce, showTransientNotice]);
 
   // Clipboard image paste support when Creation Modal is open on Step 1 -> Tab 2 ("reference")
@@ -731,7 +751,7 @@ export default function InteractiveStudio({
                 dataUrl: reader.result,
               });
               setReferenceCardInfo(null);
-              showTransientNotice("✦ Reference image pasted from clipboard");
+              showTransientNotice("Reference image pasted from clipboard");
             }
           };
           reader.readAsDataURL(file);
@@ -749,22 +769,22 @@ export default function InteractiveStudio({
     wizardStep,
   ]);
 
-  // Global mousemove / mouseup listeners for Canvas Panning & Node Drag-and-Drop Organization
+  // Global Pointer Event listeners for Canvas Panning & Node Drag-and-Drop Organization
   useEffect(() => {
-    const handleMouseMove = (e: MouseEvent) => {
+    const handlePointerMove = (e: PointerEvent) => {
       const state = dragStateRef.current;
-      if (!state) return;
+      if (!state || e.pointerId !== state.pointerId) return;
 
       if (state.mode === "pan") {
         const dx = e.clientX - state.startClientX;
         const dy = e.clientY - state.startClientY;
         setCanvasViewport((prev) => ({
           ...prev,
-          x: state.originX + dx,
-          y: state.originY + dy,
+          x: Math.round(state.originX + dx),
+          y: Math.round(state.originY + dy),
         }));
       } else if (state.mode === "node") {
-        const zoom = canvasViewport.zoom || 1;
+        const zoom = zoomRef.current || 1;
         const dx = (e.clientX - state.startClientX) / zoom;
         const dy = (e.clientY - state.startClientY) / zoom;
         const nextX = Math.round(state.originX + dx);
@@ -783,41 +803,40 @@ export default function InteractiveStudio({
               : prev
           );
         } else {
-          setNodePositions((prev) => {
-            const updated = {
-              ...prev,
-              [state.nodeId]: { x: nextX, y: nextY },
-            };
-            saveProjectFlowMeta(activeProjectId, {
-              positions: updated,
-              parentVariantByTurn,
-              snapshotsByTurn,
-            });
-            return updated;
-          });
+          setNodePositions((prev) => ({
+            ...prev,
+            [state.nodeId]: { x: nextX, y: nextY },
+          }));
         }
       }
     };
 
-    const handleMouseUp = () => {
+    const endPointerDrag = (e?: PointerEvent) => {
+      const state = dragStateRef.current;
+      if (!state) return;
+      if (e && e.pointerId !== state.pointerId) return;
+      dragStateRef.current = null;
+      setIsDraggingCanvas(false);
+    };
+
+    const handleWindowBlur = () => {
       if (dragStateRef.current) {
         dragStateRef.current = null;
         setIsDraggingCanvas(false);
       }
     };
 
-    window.addEventListener("mousemove", handleMouseMove);
-    window.addEventListener("mouseup", handleMouseUp);
+    window.addEventListener("pointermove", handlePointerMove);
+    window.addEventListener("pointerup", endPointerDrag);
+    window.addEventListener("pointercancel", endPointerDrag);
+    window.addEventListener("blur", handleWindowBlur);
     return () => {
-      window.removeEventListener("mousemove", handleMouseMove);
-      window.removeEventListener("mouseup", handleMouseUp);
+      window.removeEventListener("pointermove", handlePointerMove);
+      window.removeEventListener("pointerup", endPointerDrag);
+      window.removeEventListener("pointercancel", endPointerDrag);
+      window.removeEventListener("blur", handleWindowBlur);
     };
-  }, [
-    activeProjectId,
-    canvasViewport.zoom,
-    parentVariantByTurn,
-    snapshotsByTurn,
-  ]);
+  }, []);
 
   // Opens Creation Modal on Step 1 / Tab 1 ("From Prompt") for a fresh root generation
   const openCreationModalAsNewRoot = useCallback(() => {
@@ -926,7 +945,7 @@ export default function InteractiveStudio({
     });
     applyFitViewportToPositions(Object.values(autoMap));
     showTransientNotice(
-      "✦ Flow auto-organized with collision-free wire corridors"
+      "Flow auto-organized with collision-free wire corridors"
     );
   }, [
     activeProjectId,
@@ -976,7 +995,7 @@ export default function InteractiveStudio({
             dataUrl: reader.result,
           });
           setReferenceCardInfo(null);
-          showTransientNotice(`✦ Reference photo "${file.name}" loaded`);
+          showTransientNotice(`Reference photo "${file.name}" loaded`);
         }
       };
       reader.readAsDataURL(file);
@@ -1013,7 +1032,7 @@ export default function InteractiveStudio({
       }
     }
     showTransientNotice(
-      `🧬 Turn #${turnNum} (${slot.label}) pinned as Canonical Character DNA`
+      `Turn #${turnNum} (${slot.label}) pinned as Canonical Character DNA`
     );
   };
 
@@ -1026,7 +1045,7 @@ export default function InteractiveStudio({
 
     setPromptInput(chosenSlot.prompt);
     showTransientNotice(
-      `✓ "${chosenSlot.label}" selected — prompt loaded into editor`
+      `"${chosenSlot.label}" selected — prompt loaded into editor`
     );
 
     setInteractions((prev) =>
@@ -1509,13 +1528,13 @@ export default function InteractiveStudio({
         ).length;
         if (!apiKey.trim()) {
           showTransientNotice(
-            `✦ ${persistedVariants.length} blueprint ${
+            `${persistedVariants.length} blueprint ${
               persistedVariants.length === 1 ? "card" : "cards"
-            } created! Add your Gemini API key in Settings to render PNGs.`
+            } created. Add your Gemini API key in Settings to render PNGs.`
           );
         } else if (renderedCount > 0) {
           showTransientNotice(
-            `✦ ${persistedVariants.length} ${
+            `${persistedVariants.length} ${
               persistedVariants.length === 1 ? "card" : "cards"
             } created for Step #${nextTurnNumber} (${renderedCount}/${
               persistedVariants.length
@@ -1830,7 +1849,7 @@ export default function InteractiveStudio({
         setActiveProjectId(created.id);
       }
     }
-    showTransientNotice(`✦ Project renamed to "${nextTitle}"`);
+    showTransientNotice(`Project renamed to "${nextTitle}"`);
   };
 
   // ==================== SHARED SUB-SECTIONS INSIDE CREATION STEP 1 ====================
@@ -2199,42 +2218,64 @@ export default function InteractiveStudio({
           <div className="ref-flow-toolbar">
             <div className="ref-flow-toolbar-left">
               <div className="ref-flow-project-title-group">
-                <button
-                  type="button"
-                  className="ref-flow-project-edit-btn"
-                  onClick={handleOpenEditProjectTitleModal}
-                  title="Edit project name"
-                  aria-label="Edit project name"
-                >
-                  <svg
-                    width="13"
-                    height="13"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    aria-hidden="true"
+                {isProjectTitleModalOpen ? (
+                  <form
+                    className="ref-flow-inline-title-form"
+                    onSubmit={handleSaveProjectTitleModal}
                   >
-                    <path
-                      d="M12 20.5H21"
-                      stroke="currentColor"
-                      strokeWidth="2.2"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
+                    <input
+                      ref={projectTitleInputRef}
+                      type="text"
+                      value={projectTitleDraft}
+                      onChange={(e) => setProjectTitleDraft(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Escape") {
+                          e.stopPropagation();
+                          setIsProjectTitleModalOpen(false);
+                        }
+                      }}
+                      aria-label="Edit project name"
+                      className="ref-input ref-flow-inline-title-input"
+                      placeholder="Project name..."
                     />
-                    <path
-                      d="M16.5 4a2.121 2.121 0 0 1 3 3L7 19.5l-4 1 1-4L16.5 4z"
-                      stroke="currentColor"
-                      strokeWidth="2.2"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    />
-                  </svg>
-                </button>
-                <span
-                  className="ref-flow-project-title-text"
-                  title={projectTitle || "New Project"}
-                >
-                  {projectTitle || "New Project"}
-                </span>
+                    <button
+                      type="submit"
+                      className="ref-flow-project-edit-btn"
+                      title="Save project name"
+                      aria-label="Save project name"
+                    >
+                      <IconCheck size={12} />
+                    </button>
+                    <button
+                      type="button"
+                      className="ref-flow-project-edit-btn"
+                      onClick={() => setIsProjectTitleModalOpen(false)}
+                      title="Cancel editing"
+                      aria-label="Cancel editing project name"
+                    >
+                      <IconClose size={11} />
+                    </button>
+                  </form>
+                ) : (
+                  <>
+                    <button
+                      type="button"
+                      className="ref-flow-project-edit-btn"
+                      onClick={handleOpenEditProjectTitleModal}
+                      title="Edit project name"
+                      aria-label="Edit project name"
+                    >
+                      <IconEditPencil size={13} strokeWidth={2.2} />
+                    </button>
+                    <h1
+                      className="ref-flow-project-title-text"
+                      title={projectTitle || "New Project"}
+                      onDoubleClick={handleOpenEditProjectTitleModal}
+                    >
+                      {projectTitle || "New Project"}
+                    </h1>
+                  </>
+                )}
               </div>
             </div>
 
@@ -2276,15 +2317,7 @@ export default function InteractiveStudio({
                 </button>
                 <select
                   id="studio-zoom-preset-select"
-                  className="ref-flow-zoom-readout"
-                  style={{
-                    padding: "0 8px",
-                    fontSize: "12px",
-                    fontWeight: 800,
-                    cursor: "pointer",
-                    outline: "none",
-                    appearance: "auto",
-                  }}
+                  className="ref-flow-zoom-readout ref-harness-zoom-select"
                   value={String(Math.round(canvasViewport.zoom * 100))}
                   onChange={(e) => {
                     const val = e.target.value;
@@ -2375,7 +2408,8 @@ export default function InteractiveStudio({
             className={`ref-flow-canvas-viewport ${
               isDraggingCanvas ? "is-grabbing" : ""
             }`}
-            onMouseDown={(e) => {
+            onPointerDown={(e) => {
+              if (e.pointerType === "mouse" && e.button !== 0) return;
               const target = e.target as HTMLElement;
               if (
                 target.closest(".ref-flow-step-card") ||
@@ -2384,8 +2418,10 @@ export default function InteractiveStudio({
               ) {
                 return;
               }
+              if (dragStateRef.current) return;
               dragStateRef.current = {
                 mode: "pan",
+                pointerId: e.pointerId,
                 startClientX: e.clientX,
                 startClientY: e.clientY,
                 originX: canvasViewport.x,
@@ -2503,8 +2539,8 @@ export default function InteractiveStudio({
                               fill="none"
                               stroke={
                                 isHighlighted
-                                  ? "var(--ref-lime-accent)"
-                                  : "var(--ref-moss-outer)"
+                                  ? "var(--atelier-steel)"
+                                  : "var(--ref-wire-stroke)"
                               }
                               strokeWidth={isHighlighted ? "3" : "2.2"}
                               strokeLinecap="round"
@@ -2517,8 +2553,8 @@ export default function InteractiveStudio({
                             cx={anchor.startX}
                             cy={anchor.startY}
                             r="4.5"
-                            fill="var(--ref-lime-accent)"
-                            stroke="var(--ref-moss-outer)"
+                            fill="var(--atelier-steel)"
+                            stroke="var(--ref-border-strong)"
                             strokeWidth="1.8"
                           />
                         )}
@@ -2534,7 +2570,7 @@ export default function InteractiveStudio({
                         key={`${key}-bridge`}
                         d={wire.path}
                         fill="none"
-                        stroke="var(--ref-canvas)"
+                        stroke="var(--atelier-canvas)"
                         strokeWidth="6"
                         strokeLinecap="round"
                         strokeLinejoin="round"
@@ -2546,7 +2582,7 @@ export default function InteractiveStudio({
                         data-flow-wire="draft"
                         d={wire.path}
                         fill="none"
-                        stroke="var(--ref-lime-accent)"
+                        stroke="var(--atelier-steel)"
                         strokeWidth="2.8"
                         strokeLinecap="round"
                         strokeLinejoin="round"
@@ -2557,8 +2593,8 @@ export default function InteractiveStudio({
                       cx={draftEdgeItems[0].wire.startX}
                       cy={draftEdgeItems[0].wire.startY}
                       r="5"
-                      fill="var(--ref-lime-accent)"
-                      stroke="var(--ref-ink-primary)"
+                      fill="var(--atelier-steel)"
+                      stroke="var(--ref-border-strong)"
                       strokeWidth="1.8"
                     />
                   </g>
@@ -2630,15 +2666,20 @@ export default function InteractiveStudio({
                       {/* Draggable Card Header */}
                       <div
                         className="ref-flow-node-header"
-                        onMouseDown={(e) => {
+                        onPointerDown={(e) => {
+                          if (e.pointerType === "mouse" && e.button !== 0) {
+                            return;
+                          }
                           if ((e.target as HTMLElement).closest("button")) {
                             return;
                           }
+                          if (dragStateRef.current) return;
                           e.stopPropagation();
                           setActiveInteractionIndex(roundIdx);
                           setSelectedCanvasNodeId(cardId);
                           dragStateRef.current = {
                             mode: "node",
+                            pointerId: e.pointerId,
                             nodeId: cardId,
                             startClientX: e.clientX,
                             startClientY: e.clientY,
@@ -2691,6 +2732,8 @@ export default function InteractiveStudio({
                             <img
                               src={slot.imageUrl}
                               alt={slot.label}
+                              loading="lazy"
+                              decoding="async"
                               className="ref-flow-hero-img"
                             />
                             <span className="ref-flow-slot-num-badge">
@@ -2812,13 +2855,18 @@ export default function InteractiveStudio({
 
                       <div
                         className="ref-flow-node-header"
-                        onMouseDown={(e) => {
+                        onPointerDown={(e) => {
+                          if (e.pointerType === "mouse" && e.button !== 0) {
+                            return;
+                          }
                           if ((e.target as HTMLElement).closest("button")) {
                             return;
                           }
+                          if (dragStateRef.current) return;
                           e.stopPropagation();
                           dragStateRef.current = {
                             mode: "node",
+                            pointerId: e.pointerId,
                             nodeId: `draft::${draftIdx}`,
                             startClientX: e.clientX,
                             startClientY: e.clientY,
@@ -2846,6 +2894,7 @@ export default function InteractiveStudio({
                           <img
                             src={liveSlot.imageUrl}
                             alt={liveSlot.label}
+                            decoding="async"
                             className="ref-flow-hero-img"
                           />
                         ) : (
@@ -2906,6 +2955,8 @@ export default function InteractiveStudio({
       {/* ==================== UNIFIED 3-STEP CREATION MODAL & CARD INSPECTOR MODAL ==================== */}
       {isStepModalOpen && (
         <div
+          ref={stepDialogRef}
+          data-atelier-modal="true"
           className="ref-modal-backdrop"
           role="dialog"
           aria-modal="true"
@@ -2914,15 +2965,16 @@ export default function InteractiveStudio({
               ? "Card Inspector Modal"
               : "Creation Flow Wizard Modal"
           }
+          tabIndex={-1}
           onClick={(e) => {
             if (e.target === e.currentTarget) setIsStepModalOpen(false);
           }}
         >
-          <div
-            className={`ref-wizard-modal-stack ${
-              isInspectingLockedCard ? "is-inspector" : "is-wizard"
-            }`}
-          >
+        <div
+          className={`ref-wizard-modal-stack ${
+            isInspectingLockedCard ? "is-inspector" : "is-wizard"
+          }`}
+        >
             {/* STEPPER CONTROL ABOVE THE MODAL SCREEN (Shown during Creation Mode) */}
             {!isInspectingLockedCard && (
               <nav
@@ -3081,6 +3133,7 @@ export default function InteractiveStudio({
                           <img
                             src={selectedLockedSlot.imageUrl}
                             alt={selectedLockedSlot.label}
+                            decoding="async"
                             className="ref-flow-hero-img"
                           />
                           <span className="ref-flow-slot-num-badge">
@@ -3253,12 +3306,12 @@ export default function InteractiveStudio({
                                 }
                               >
                                 {showPromptHints
-                                  ? "Hide Scene Hints ▴"
-                                  : `+ Scene Hints (${
+                                  ? "Hide Scene Hints"
+                                  : `Scene Hints (${
                                       PROMPT_COMPLETENESS_PILLARS.filter((p) =>
                                         p.regex.test(promptInput)
                                       ).length
-                                    }/5) ▾`}
+                                    }/5)`}
                               </button>
                             </div>
 
@@ -3306,8 +3359,12 @@ export default function InteractiveStudio({
                                           )
                                         }
                                       >
-                                        {isDetected ? "✓ " : "+ "}
-                                        {pillar.label}
+                                        {isDetected ? (
+                                          <IconCheck size={10} />
+                                        ) : (
+                                          <IconPlus size={10} />
+                                        )}
+                                        <span>{pillar.label}</span>
                                       </button>
                                     );
                                   })}
@@ -3369,6 +3426,7 @@ export default function InteractiveStudio({
                               <img
                                 src={activeReferencePreviewUrl}
                                 alt={activeReferenceSourceLabel}
+                                decoding="async"
                                 className="ref-refimage-preview-img"
                               />
                               <div className="ref-refimage-preview-actions">
@@ -3475,8 +3533,10 @@ export default function InteractiveStudio({
                               }`}
                               onClick={() => handleToggleLock("keepCharacter")}
                             >
-                              {preservationLocks.keepCharacter ? "✓ " : ""}
-                              Character
+                              {preservationLocks.keepCharacter && (
+                                <IconCheck size={10} />
+                              )}
+                              <span>Character</span>
                             </button>
                             <button
                               type="button"
@@ -3486,8 +3546,10 @@ export default function InteractiveStudio({
                               }`}
                               onClick={() => handleToggleLock("keepPose")}
                             >
-                              {preservationLocks.keepPose ? "✓ " : ""}
-                              Pose
+                              {preservationLocks.keepPose && (
+                                <IconCheck size={10} />
+                              )}
+                              <span>Pose</span>
                             </button>
                             <button
                               type="button"
@@ -3499,8 +3561,10 @@ export default function InteractiveStudio({
                                 handleToggleLock("keepBackground")
                               }
                             >
-                              {preservationLocks.keepBackground ? "✓ " : ""}
-                              Background
+                              {preservationLocks.keepBackground && (
+                                <IconCheck size={10} />
+                              )}
+                              <span>Background</span>
                             </button>
                           </div>
                         </div>
@@ -3926,7 +3990,7 @@ export default function InteractiveStudio({
                 )}
               </div>
             </div>
-          </div>
+        </div>
         </div>
       )}
 
@@ -3955,9 +4019,13 @@ export default function InteractiveStudio({
 
           return (
             <div
+              ref={lightboxDialogRef}
+              data-atelier-modal="true"
               className="ref-modal-backdrop"
               role="dialog"
               aria-modal="true"
+              aria-label="Full-size image inspection lightbox"
+              tabIndex={-1}
               onClick={(e) => {
                 if (e.target === e.currentTarget) setLightboxSlot(null);
               }}
@@ -4032,7 +4100,7 @@ export default function InteractiveStudio({
                         }
                         title={`Compare side-by-side with ${compareReference.label}`}
                       >
-                        ⇄ Compare ({compareReference.label})
+                        Compare ({compareReference.label})
                       </button>
                     )}
                   </div>
@@ -4082,6 +4150,7 @@ export default function InteractiveStudio({
                       <img
                         src={compareReference.imageUrl}
                         alt={compareReference.label}
+                        decoding="async"
                         className="ref-lightbox-img"
                       />
                     </div>
@@ -4093,6 +4162,7 @@ export default function InteractiveStudio({
                       <img
                         src={lightboxSlot.slot.imageUrl}
                         alt={lightboxSlot.slot.label}
+                        decoding="async"
                         className="ref-lightbox-img"
                       />
                     </div>
@@ -4102,6 +4172,7 @@ export default function InteractiveStudio({
                     <img
                       src={lightboxSlot.slot.imageUrl}
                       alt={lightboxSlot.slot.label}
+                      decoding="async"
                       className="ref-lightbox-img"
                     />
                   </div>
@@ -4114,74 +4185,6 @@ export default function InteractiveStudio({
             </div>
           );
         })()}
-
-      {/* ==================== MODAL FOR EDITING PROJECT NAME ==================== */}
-      {isProjectTitleModalOpen && (
-        <div
-          className="ref-modal-backdrop"
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="edit-project-title-modal-heading"
-          onClick={(e) => {
-            if (e.target === e.currentTarget) {
-              setIsProjectTitleModalOpen(false);
-            }
-          }}
-        >
-          <form
-            className="ref-modal-card ref-project-rename-modal"
-            onSubmit={handleSaveProjectTitleModal}
-          >
-            <div className="ref-modal-header">
-              <strong
-                id="edit-project-title-modal-heading"
-                className="ref-soft-card-title"
-              >
-                Edit Project Name
-              </strong>
-              <button
-                type="button"
-                aria-label="Close modal"
-                className="ref-circle-icon-btn sm"
-                onClick={() => setIsProjectTitleModalOpen(false)}
-              >
-                <IconClose size={12} />
-              </button>
-            </div>
-
-            <div>
-              <label
-                className="ref-field-label"
-                htmlFor="edit-project-title-input"
-              >
-                Project Name
-              </label>
-              <input
-                ref={projectTitleInputRef}
-                id="edit-project-title-input"
-                type="text"
-                value={projectTitleDraft}
-                onChange={(e) => setProjectTitleDraft(e.target.value)}
-                className="ref-input"
-                placeholder="Enter project name..."
-              />
-            </div>
-
-            <div className="ref-project-rename-actions">
-              <button
-                type="button"
-                className="ref-mura-btn-outline lg"
-                onClick={() => setIsProjectTitleModalOpen(false)}
-              >
-                Cancel
-              </button>
-              <button type="submit" className="ref-dark-pill-btn">
-                <span>Save Name</span>
-              </button>
-            </div>
-          </form>
-        </div>
-      )}
     </div>
   );
 }

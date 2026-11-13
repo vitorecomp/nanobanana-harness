@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { GoogleUserProfile } from "../types/auth.types";
 import { useStudioSession } from "@/core/context/StudioSessionContext";
 import {
@@ -16,6 +16,7 @@ import {
   IconClose,
   IconRefresh,
 } from "@/shared/components/icons/AtelierIcons";
+import { useDialogFocusTrap } from "@/shared/hooks/useDialogFocusTrap";
 
 export interface ProfileEditModalProps {
   isOpen: boolean;
@@ -34,6 +35,8 @@ export default function ProfileEditModal({
     setApiKey,
     rememberKeyInVault,
     setRememberKeyInVault,
+    themeMode,
+    setThemeMode,
     imagesOutputDir,
     setImagesOutputDir,
     enhanceSystemPrompt,
@@ -62,6 +65,15 @@ export default function ProfileEditModal({
   const [refinerPromptInput, setRefinerPromptInput] =
     useState<string>(harnessRefinerPrompt);
   const [isSaving, setIsSaving] = useState<boolean>(false);
+  const settingsDialogRef = useRef<HTMLDivElement | null>(null);
+  useDialogFocusTrap(
+    settingsDialogRef,
+    isOpen,
+    () => {
+      if (!isSaving) onClose();
+    },
+    !isSaving
+  );
 
   useEffect(() => {
     if (!isOpen) return;
@@ -82,15 +94,6 @@ export default function ProfileEditModal({
     harnessCriticPrompt,
     harnessRefinerPrompt,
   ]);
-
-  useEffect(() => {
-    if (!isOpen) return;
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape" && !isSaving) onClose();
-    };
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [isOpen, isSaving, onClose]);
 
   if (!isOpen) return null;
 
@@ -130,10 +133,13 @@ export default function ProfileEditModal({
 
   return (
     <div
+      ref={settingsDialogRef}
+      data-atelier-modal="true"
       className="ref-modal-backdrop ref-settings-modal-backdrop"
       role="dialog"
       aria-modal="true"
       aria-labelledby="config-vault-modal-title"
+      tabIndex={-1}
       onClick={(e) => {
         if (e.target === e.currentTarget && !isSaving) onClose();
       }}
@@ -148,7 +154,8 @@ export default function ProfileEditModal({
               Studio Settings
             </h2>
             <span className="ref-settings-subtitle">
-              API credentials, local storage & AI prompt instructions
+              Appearance, API credentials, local storage & AI prompt
+              instructions
             </span>
           </div>
 
@@ -222,6 +229,34 @@ export default function ProfileEditModal({
                       rememberKeyInVault ? "is-on" : ""
                     }`}
                     onClick={() => setRememberKeyInVault(!rememberKeyInVault)}
+                  >
+                    <span className="ref-atelier-switch-thumb" />
+                  </button>
+                </div>
+
+                <div className="ref-toggle-switch-row ref-settings-vault-toggle">
+                  <div className="ref-toggle-switch-copy">
+                    <label
+                      htmlFor="toggle-dark-theme"
+                      className="ref-toggle-switch-title"
+                    >
+                      Dark Theme
+                    </label>
+                    <span className="ref-toggle-switch-sub">
+                      Switch workspace surfaces to the Cool-Slate dark palette
+                    </span>
+                  </div>
+                  <button
+                    id="toggle-dark-theme"
+                    type="button"
+                    role="switch"
+                    aria-checked={themeMode === "dark"}
+                    className={`ref-atelier-switch ${
+                      themeMode === "dark" ? "is-on" : ""
+                    }`}
+                    onClick={() =>
+                      setThemeMode(themeMode === "dark" ? "light" : "dark")
+                    }
                   >
                     <span className="ref-atelier-switch-thumb" />
                   </button>
@@ -597,9 +632,6 @@ export default function ProfileEditModal({
             disabled={isSaving}
           >
             <span>{isSaving ? "Saving..." : "Save Settings"}</span>
-            <span className="ref-lime-badge">
-              {apiKey.trim() ? "ON" : "KEY"}
-            </span>
           </button>
         </div>
       </form>

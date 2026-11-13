@@ -10,7 +10,9 @@ import {
   IconClose,
   IconDoubleChevron,
   IconPlus,
+  IconSettingsGear,
 } from "../icons/AtelierIcons";
+import { useDialogFocusTrap } from "../../hooks/useDialogFocusTrap";
 
 export default function Navbar() {
   const pathname = usePathname();
@@ -34,6 +36,12 @@ export default function Navbar() {
     "studio"
   );
   const newProjectInputRef = useRef<HTMLInputElement | null>(null);
+  const newProjectDialogRef = useRef<HTMLDivElement | null>(null);
+  useDialogFocusTrap(
+    newProjectDialogRef,
+    isNewProjectModalOpen,
+    () => setNewProjectModalOpen(false)
+  );
 
   const activeUser = user || LOCAL_DEV_USER;
   const isProjects =
@@ -43,20 +51,19 @@ export default function Navbar() {
   const isCreate = !isProjects && !isModifiers && !isHarness;
 
   useEffect(() => {
+    if (typeof window !== "undefined" && window.innerWidth < 960) {
+      setCollapsed(true);
+    }
+  }, []);
+
+  useEffect(() => {
     if (!isNewProjectModalOpen) return;
     const focusTimer = window.setTimeout(() => {
       newProjectInputRef.current?.focus();
       newProjectInputRef.current?.select();
     }, 30);
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
-        setNewProjectModalOpen(false);
-      }
-    };
-    window.addEventListener("keydown", handleKeyDown);
     return () => {
       window.clearTimeout(focusTimer);
-      window.removeEventListener("keydown", handleKeyDown);
     };
   }, [isNewProjectModalOpen]);
 
@@ -192,7 +199,7 @@ export default function Navbar() {
                 cx="12"
                 cy="12"
                 r="4.2"
-                stroke="#778da9"
+                stroke="var(--atelier-steel)"
                 strokeWidth="2"
               />
               <circle cx="12" cy="12" r="1.5" fill="currentColor" />
@@ -243,7 +250,7 @@ export default function Navbar() {
                 cx="9"
                 cy="6"
                 r="2.2"
-                fill="#778da9"
+                fill="var(--atelier-steel)"
                 stroke="currentColor"
                 strokeWidth="1.8"
               />
@@ -251,7 +258,7 @@ export default function Navbar() {
                 cx="15"
                 cy="12"
                 r="2.2"
-                fill="#778da9"
+                fill="var(--atelier-steel)"
                 stroke="currentColor"
                 strokeWidth="1.8"
               />
@@ -259,7 +266,7 @@ export default function Navbar() {
                 cx="10"
                 cy="18"
                 r="2.2"
-                fill="#778da9"
+                fill="var(--atelier-steel)"
                 stroke="currentColor"
                 strokeWidth="1.8"
               />
@@ -288,7 +295,9 @@ export default function Navbar() {
                 <span
                   className="ref-sidebar-status-dot"
                   style={{
-                    backgroundColor: hasKeyInRam ? "#415a77" : "#1b263b",
+                    backgroundColor: hasKeyInRam
+                      ? "var(--atelier-steel)"
+                      : "var(--ref-danger)",
                   }}
                 />
                 <span className="ref-sidebar-status-text">
@@ -313,28 +322,15 @@ export default function Navbar() {
             title="Settings • Gemini API Key & Images Folder"
             aria-label="Settings"
           >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
-              <circle
-                cx="12"
-                cy="12"
-                r="3.2"
-                stroke="currentColor"
-                strokeWidth="2"
-              />
-              <path
-                d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9c.26.604.852.997 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1Z"
-                stroke="currentColor"
-                strokeWidth="1.9"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-            </svg>
+            <IconSettingsGear size={16} strokeWidth={1.9} />
             {!collapsed && <span>Settings</span>}
             {collapsed && (
               <span
                 className="ref-sidebar-status-dot"
                 style={{
-                  backgroundColor: hasKeyInRam ? "#415a77" : "#9e2a2b",
+                  backgroundColor: hasKeyInRam
+                    ? "var(--atelier-steel)"
+                    : "var(--ref-danger)",
                 }}
               />
             )}
@@ -366,125 +362,130 @@ export default function Navbar() {
 
       {isNewProjectModalOpen && (
         <div
+          ref={newProjectDialogRef}
+          data-atelier-modal="true"
           className="ref-modal-backdrop"
           role="dialog"
           aria-modal="true"
           aria-labelledby="new-project-modal-title"
+          tabIndex={-1}
           onClick={(e) => {
             if (e.target === e.currentTarget) {
               setNewProjectModalOpen(false);
             }
           }}
         >
-          <form
-            className="ref-modal-card ref-new-project-modal-card"
-            onSubmit={handleConfirmCreateNewProject}
-          >
-            <div className="ref-modal-header">
-              <strong
-                id="new-project-modal-title"
-                className="ref-soft-card-title"
-              >
-                ✦ Create New Project
-              </strong>
+        <form
+          className="ref-modal-card ref-new-project-modal-card"
+          onSubmit={handleConfirmCreateNewProject}
+        >
+          <div className="ref-modal-header">
+            <strong
+              id="new-project-modal-title"
+              className="ref-soft-card-title"
+              style={{ display: "inline-flex", alignItems: "center", gap: "8px" }}
+            >
+              <IconAtelierStar size={14} />
+              <span>Create New Project</span>
+            </strong>
+            <button
+              type="button"
+              aria-label="Close modal"
+              className="ref-circle-icon-btn sm"
+              onClick={() => setNewProjectModalOpen(false)}
+            >
+              <IconClose size={12} />
+            </button>
+          </div>
+
+          <div>
+            <span className="ref-field-label">Creation Process</span>
+            <div
+              className="ref-new-project-kind-grid"
+              role="radiogroup"
+              aria-label="Creation Process"
+            >
               <button
                 type="button"
-                aria-label="Close modal"
-                className="ref-circle-icon-btn sm"
-                onClick={() => setNewProjectModalOpen(false)}
+                id="new-project-kind-studio"
+                role="radio"
+                aria-checked={newProjectKind === "studio"}
+                className={`ref-new-project-kind-card ${
+                  newProjectKind === "studio" ? "active" : ""
+                }`}
+                onClick={() => setNewProjectKind("studio")}
               >
-                <IconClose size={12} />
+                <strong className="ref-new-project-kind-title">
+                  Studio Flow
+                </strong>
+                <span className="ref-new-project-kind-sub">
+                  2×2 interactive batch generation &amp; DNA locks
+                </span>
               </button>
-            </div>
 
-            <div>
-              <span className="ref-field-label">Creation Process</span>
-              <div
-                className="ref-new-project-kind-grid"
-                role="radiogroup"
-                aria-label="Creation Process"
-              >
-                <button
-                  type="button"
-                  id="new-project-kind-studio"
-                  role="radio"
-                  aria-checked={newProjectKind === "studio"}
-                  className={`ref-new-project-kind-card ${
-                    newProjectKind === "studio" ? "active" : ""
-                  }`}
-                  onClick={() => setNewProjectKind("studio")}
-                >
-                  <strong className="ref-new-project-kind-title">
-                    Studio Flow
-                  </strong>
-                  <span className="ref-new-project-kind-sub">
-                    2×2 interactive batch generation &amp; DNA locks
-                  </span>
-                </button>
-
-                <button
-                  type="button"
-                  id="new-project-kind-harness"
-                  role="radio"
-                  aria-checked={newProjectKind === "harness"}
-                  className={`ref-new-project-kind-card ${
-                    newProjectKind === "harness" ? "active" : ""
-                  }`}
-                  onClick={() => setNewProjectKind("harness")}
-                >
-                  <strong className="ref-new-project-kind-title">
-                    Goal Harness
-                  </strong>
-                  <span className="ref-new-project-kind-sub">
-                    Planner → Generator → Critic → TRACE loop
-                  </span>
-                </button>
-              </div>
-            </div>
-
-            <div>
-              <label
-                className="ref-field-label"
-                htmlFor="new-project-name-input"
-              >
-                Project Name
-              </label>
-              <input
-                ref={newProjectInputRef}
-                id="new-project-name-input"
-                type="text"
-                value={newProjectNameInput}
-                onChange={(e) => setNewProjectNameInput(e.target.value)}
-                className="ref-input"
-                placeholder={
-                  newProjectKind === "harness"
-                    ? "E.g.: Isometric Space Asset Pack..."
-                    : "E.g.: Cyber Samurai Storyboard..."
-                }
-              />
-            </div>
-
-            <div className="ref-new-project-modal-actions">
               <button
                 type="button"
-                className="ref-mura-btn-outline lg"
-                onClick={() => setNewProjectModalOpen(false)}
+                id="new-project-kind-harness"
+                role="radio"
+                aria-checked={newProjectKind === "harness"}
+                className={`ref-new-project-kind-card ${
+                  newProjectKind === "harness" ? "active" : ""
+                }`}
+                onClick={() => setNewProjectKind("harness")}
               >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                id="new-project-confirm-btn"
-                className="ref-dark-pill-btn"
-              >
-                <span>
-                  {newProjectKind === "harness"
-                    ? "Create Goal Harness"
-                    : "Create Studio Project"}
+                <strong className="ref-new-project-kind-title">
+                  Goal Harness
+                </strong>
+                <span className="ref-new-project-kind-sub">
+                  Planner → Generator → Critic → TRACE loop
                 </span>
               </button>
             </div>
-          </form>
+          </div>
+
+          <div>
+            <label
+              className="ref-field-label"
+              htmlFor="new-project-name-input"
+            >
+              Project Name
+            </label>
+            <input
+              ref={newProjectInputRef}
+              id="new-project-name-input"
+              type="text"
+              value={newProjectNameInput}
+              onChange={(e) => setNewProjectNameInput(e.target.value)}
+              className="ref-input"
+              placeholder={
+                newProjectKind === "harness"
+                  ? "E.g.: Isometric Space Asset Pack..."
+                  : "E.g.: Cyber Samurai Storyboard..."
+              }
+            />
+          </div>
+
+          <div className="ref-new-project-modal-actions">
+            <button
+              type="button"
+              className="ref-mura-btn-outline lg"
+              onClick={() => setNewProjectModalOpen(false)}
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              id="new-project-confirm-btn"
+              className="ref-dark-pill-btn"
+            >
+              <span>
+                {newProjectKind === "harness"
+                  ? "Create Goal Harness"
+                  : "Create Studio Project"}
+              </span>
+            </button>
+          </div>
+        </form>
         </div>
       )}
     </>

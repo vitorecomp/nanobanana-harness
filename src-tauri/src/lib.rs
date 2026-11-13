@@ -860,6 +860,40 @@ fn tauri_vault_set_ai_prompts(
     Ok(normalized)
 }
 
+#[tauri::command]
+fn tauri_vault_get_theme(state: State<'_, AppDatabase>) -> Result<Option<String>, String> {
+    let conn = state.conn.lock().map_err(|e| e.to_string())?;
+    let val: Option<String> = conn
+        .query_row(
+            "SELECT value FROM app_vault WHERE key = 'studio_theme_mode'",
+            [],
+            |r| r.get(0),
+        )
+        .ok();
+    Ok(val.filter(|v| v == "dark" || v == "light"))
+}
+
+#[tauri::command]
+fn tauri_vault_set_theme(
+    state: State<'_, AppDatabase>,
+    theme_mode: String,
+) -> Result<String, String> {
+    let conn = state.conn.lock().map_err(|e| e.to_string())?;
+    let now = Utc::now().to_rfc3339();
+    let normalized = if theme_mode.trim() == "dark" {
+        "dark".to_string()
+    } else {
+        "light".to_string()
+    };
+    conn.execute(
+        "INSERT INTO app_vault (key, value, updated_at) VALUES ('studio_theme_mode', ?1, ?2)
+         ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at",
+        params![normalized, now],
+    )
+    .map_err(|e| e.to_string())?;
+    Ok(normalized)
+}
+
 // ==================== GOAL HARNESS NATIVE COMMANDS ====================
 
 #[tauri::command]
@@ -1397,6 +1431,8 @@ pub fn run() {
             tauri_vault_set_modifiers,
             tauri_vault_get_ai_prompts,
             tauri_vault_set_ai_prompts,
+            tauri_vault_get_theme,
+            tauri_vault_set_theme,
             tauri_list_harness_missions,
             tauri_get_harness_mission,
             tauri_save_harness_mission,

@@ -28,16 +28,20 @@ import {
 } from "@/features/harness";
 import { createConversation } from "@/features/history";
 import {
+  STUDIO_THEME_LOCAL_KEY,
+  StudioThemeMode,
   localDbSaveHarnessMission,
   vaultClearApiKey,
   vaultGetAiPrompts,
   vaultGetImagesOutputDir,
   vaultGetModifierCategories,
   vaultGetSavedApiKey,
+  vaultGetThemeMode,
   vaultSaveApiKey,
   vaultSetAiPrompts,
   vaultSetImagesOutputDir,
   vaultSetModifierCategories,
+  vaultSetThemeMode,
 } from "@/core/tauri/tauriBridge";
 
 export interface RemixPresetRequest {
@@ -56,6 +60,8 @@ interface StudioSessionContextValue {
   rememberKeyInVault: boolean;
   setRememberKeyInVault: (remember: boolean) => void;
   hasKeyInRam: boolean;
+  themeMode: StudioThemeMode;
+  setThemeMode: (mode: StudioThemeMode) => void;
   imagesOutputDir: string;
   setImagesOutputDir: (dirPath: string) => Promise<string>;
   user: GoogleUserProfile | null;
@@ -108,6 +114,7 @@ export function StudioSessionProvider({ children }: { children: ReactNode }) {
   const [apiKey, setApiKeyState] = useState<string>("");
   const [rememberKeyInVault, setRememberKeyInVaultState] =
     useState<boolean>(true);
+  const [themeMode, setThemeModeState] = useState<StudioThemeMode>("light");
   const [imagesOutputDir, setImagesOutputDirState] = useState<string>(
     "~/Pictures/nanobanana"
   );
@@ -248,6 +255,22 @@ export function StudioSessionProvider({ children }: { children: ReactNode }) {
       void vaultClearApiKey();
     }
   };
+
+  const applyDomTheme = useCallback((mode: StudioThemeMode) => {
+    if (typeof document !== "undefined") {
+      document.documentElement.dataset.theme = mode;
+    }
+  }, []);
+
+  const setThemeMode = useCallback(
+    (nextMode: StudioThemeMode) => {
+      const normalized: StudioThemeMode = nextMode === "dark" ? "dark" : "light";
+      setThemeModeState(normalized);
+      applyDomTheme(normalized);
+      void vaultSetThemeMode(normalized);
+    },
+    [applyDomTheme]
+  );
 
   const setImagesOutputDir = async (dirPath: string): Promise<string> => {
     setImagesOutputDirState(dirPath);
@@ -402,6 +425,22 @@ export function StudioSessionProvider({ children }: { children: ReactNode }) {
         setImagesOutputDirState(savedDir);
       }
     });
+    if (typeof window !== "undefined") {
+      try {
+        const localTheme = window.localStorage.getItem(STUDIO_THEME_LOCAL_KEY);
+        if (localTheme === "dark" || localTheme === "light") {
+          setThemeModeState(localTheme);
+          applyDomTheme(localTheme);
+        }
+      } catch {
+        // Ignore storage access errors
+      }
+    }
+    vaultGetThemeMode().then((savedTheme) => {
+      if (!mounted) return;
+      setThemeModeState(savedTheme);
+      applyDomTheme(savedTheme);
+    });
     vaultGetAiPrompts().then((savedPrompts) => {
       if (!mounted) return;
       setEnhanceSystemPrompt(
@@ -449,6 +488,8 @@ export function StudioSessionProvider({ children }: { children: ReactNode }) {
         rememberKeyInVault,
         setRememberKeyInVault,
         hasKeyInRam,
+        themeMode,
+        setThemeMode,
         imagesOutputDir,
         setImagesOutputDir,
         user,

@@ -1,12 +1,33 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
+import { JetBrains_Mono, Plus_Jakarta_Sans } from "next/font/google";
 import "./globals.css";
 import { StudioSessionProvider } from "@/core/context/StudioSessionContext";
 import { AppShell } from "@/shared";
 
+const plusJakartaSans = Plus_Jakarta_Sans({
+  subsets: ["latin", "latin-ext"],
+  weight: ["500", "600", "700", "800"],
+  display: "swap",
+  variable: "--font-sans",
+});
+
+const jetBrainsMono = JetBrains_Mono({
+  subsets: ["latin", "latin-ext"],
+  weight: ["500", "600", "700"],
+  display: "swap",
+  variable: "--font-mono",
+});
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
+};
+
 export const metadata: Metadata = {
-  title: "Nano Banana Studio — Interactive Image Creation with Google Gemini",
+  title: "Nano Banana Studio — Interactive Image Creation & Goal Harness",
   description:
-    "Interactive art direction and multi-turn image creation system powered by Google Nano Banana (gemini-2.5-flash-image), Python Co-Pilot, PostgreSQL, RustFS Bucket, and Zero-Storage RAM architecture.",
+    "Local-first desktop and web art-direction workstation powered by Google Nano Banana (gemini-2.5-flash-image), Goal-Driven Agent Harness, Tauri v2, SQLite, Native OS Filesystem storage, and Zero-Storage RAM key security.",
 };
 
 export default function RootLayout({
@@ -15,17 +36,16 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
+    <html
+      lang="en"
+      suppressHydrationWarning
+      className={`${plusJakartaSans.variable} ${jetBrainsMono.variable}`}
+    >
       <head>
-        <link rel="preconnect" href="https://fonts.googleapis.com" />
-        <link
-          rel="preconnect"
-          href="https://fonts.gstatic.com"
-          crossOrigin="anonymous"
-        />
-        <link
-          href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@500;600;700&family=Plus+Jakarta+Sans:wght@500;600;700;800&display=swap"
-          rel="stylesheet"
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `try{var t=localStorage.getItem("nanobanana_theme_mode");if(t==="dark"||t==="light"){document.documentElement.dataset.theme=t;}}catch(e){}`,
+          }}
         />
       </head>
       <body>

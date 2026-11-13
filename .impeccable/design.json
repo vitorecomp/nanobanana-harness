@@ -1,299 +1,304 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-11-02T19:55:43-03:00",
+  "generatedAt": "2026-11-13T01:03:30-03:00",
   "title": "Design System: Nano Banana Studio",
   "extensions": {
     "colorMeta": {
-      "prussian-ink": {
+      "atelier-ink": {
         "role": "primary",
-        "displayName": "Prussian Ink",
-        "canonical": "#003049",
+        "displayName": "Deepest Ink",
+        "canonical": "#0d1b2a",
         "tonalRamp": [
-          "oklch(18% 0.05 240)",
-          "oklch(28% 0.075 240)",
-          "oklch(38% 0.085 240)",
-          "oklch(48% 0.09 240)",
-          "oklch(60% 0.08 240)",
-          "oklch(72% 0.06 240)",
-          "oklch(84% 0.035 240)",
-          "oklch(94% 0.015 240)"
+          "oklch(16% 0.035 248)",
+          "oklch(22% 0.04 248)",
+          "oklch(32% 0.045 248)",
+          "oklch(44% 0.05 248)",
+          "oklch(58% 0.045 248)",
+          "oklch(72% 0.035 248)",
+          "oklch(85% 0.02 248)",
+          "oklch(94% 0.01 248)"
         ]
       },
-      "crimson-vermilion": {
+      "atelier-navy": {
         "role": "primary",
-        "displayName": "Crimson Vermilion",
-        "canonical": "#d62828",
+        "displayName": "Slate Navy",
+        "canonical": "#1b263b",
         "tonalRamp": [
-          "oklch(22% 0.09 27)",
-          "oklch(34% 0.14 27)",
-          "oklch(46% 0.19 27)",
-          "oklch(56% 0.215 27)",
-          "oklch(66% 0.18 27)",
-          "oklch(76% 0.13 27)",
-          "oklch(86% 0.07 27)",
-          "oklch(95% 0.025 27)"
+          "oklch(20% 0.035 252)",
+          "oklch(27% 0.045 252)",
+          "oklch(38% 0.05 252)",
+          "oklch(50% 0.05 252)",
+          "oklch(62% 0.045 252)",
+          "oklch(75% 0.035 252)",
+          "oklch(87% 0.02 252)",
+          "oklch(95% 0.01 252)"
         ]
       },
-      "tangerine-signal": {
-        "role": "tertiary",
-        "displayName": "Tangerine Signal",
-        "canonical": "#f77f00",
-        "tonalRamp": [
-          "oklch(24% 0.07 55)",
-          "oklch(38% 0.12 55)",
-          "oklch(52% 0.16 55)",
-          "oklch(64% 0.19 55)",
-          "oklch(72% 0.195 55)",
-          "oklch(80% 0.15 55)",
-          "oklch(88% 0.09 55)",
-          "oklch(95% 0.035 55)"
-        ]
-      },
-      "solar-amber": {
+      "atelier-slate": {
         "role": "secondary",
-        "displayName": "Solar Amber",
-        "canonical": "#fcbf49",
+        "displayName": "Mid Slate",
+        "canonical": "#415a77",
         "tonalRamp": [
-          "oklch(26% 0.06 80)",
-          "oklch(40% 0.10 80)",
-          "oklch(54% 0.13 80)",
-          "oklch(68% 0.15 80)",
-          "oklch(82% 0.155 80)",
-          "oklch(88% 0.12 80)",
-          "oklch(93% 0.07 80)",
-          "oklch(97% 0.03 80)"
+          "oklch(24% 0.04 248)",
+          "oklch(35% 0.05 248)",
+          "oklch(46% 0.058 248)",
+          "oklch(56% 0.055 248)",
+          "oklch(68% 0.045 248)",
+          "oklch(79% 0.035 248)",
+          "oklch(89% 0.02 248)",
+          "oklch(96% 0.01 248)"
         ]
       },
-      "warm-parchment": {
-        "role": "neutral",
-        "displayName": "Warm Parchment",
-        "canonical": "#eae2b7",
+      "atelier-steel": {
+        "role": "secondary",
+        "displayName": "Steel Blue",
+        "canonical": "#778da9",
         "tonalRamp": [
-          "oklch(25% 0.03 95)",
-          "oklch(38% 0.04 95)",
-          "oklch(52% 0.05 95)",
-          "oklch(66% 0.055 95)",
-          "oklch(78% 0.06 95)",
-          "oklch(86% 0.055 95)",
-          "oklch(91% 0.05 95)",
-          "oklch(96% 0.025 95)"
+          "oklch(26% 0.035 248)",
+          "oklch(38% 0.045 248)",
+          "oklch(50% 0.05 248)",
+          "oklch(63% 0.05 248)",
+          "oklch(74% 0.042 248)",
+          "oklch(83% 0.03 248)",
+          "oklch(91% 0.018 248)",
+          "oklch(97% 0.008 248)"
         ]
       },
-      "ivory-card-surface": {
+      "atelier-canvas": {
         "role": "neutral",
-        "displayName": "Ivory Cream Surface",
-        "canonical": "#f5f0d5",
+        "displayName": "Warm Alabaster Canvas",
+        "canonical": "#e0e1dd",
         "tonalRamp": [
-          "oklch(28% 0.025 95)",
-          "oklch(42% 0.035 95)",
-          "oklch(56% 0.04 95)",
-          "oklch(70% 0.045 95)",
-          "oklch(82% 0.045 95)",
-          "oklch(90% 0.04 95)",
-          "oklch(95% 0.035 95)",
-          "oklch(98% 0.015 95)"
+          "oklch(28% 0.008 106)",
+          "oklch(42% 0.008 106)",
+          "oklch(56% 0.008 106)",
+          "oklch(70% 0.008 106)",
+          "oklch(82% 0.008 106)",
+          "oklch(90% 0.007 106)",
+          "oklch(95% 0.005 106)",
+          "oklch(98% 0.003 106)"
         ]
       },
-      "ivory-card-elevated": {
+      "atelier-surface": {
         "role": "neutral",
-        "displayName": "Elevated Ivory Cream",
-        "canonical": "#fbf8e8",
+        "displayName": "Tinted Card Surface",
+        "canonical": "#f7f8f6",
         "tonalRamp": [
-          "oklch(30% 0.02 95)",
-          "oklch(45% 0.03 95)",
-          "oklch(60% 0.035 95)",
-          "oklch(74% 0.035 95)",
-          "oklch(85% 0.03 95)",
-          "oklch(92% 0.025 95)",
-          "oklch(97% 0.02 95)",
-          "oklch(99% 0.01 95)"
+          "oklch(32% 0.005 110)",
+          "oklch(46% 0.005 110)",
+          "oklch(60% 0.005 110)",
+          "oklch(74% 0.005 110)",
+          "oklch(86% 0.005 110)",
+          "oklch(93% 0.004 110)",
+          "oklch(97% 0.003 110)",
+          "oklch(99% 0.002 110)"
         ]
       },
-      "parchment-dock": {
+      "atelier-white": {
         "role": "neutral",
-        "displayName": "Parchment Dock",
-        "canonical": "#f7f2da",
+        "displayName": "Crisp White",
+        "canonical": "#ffffff",
         "tonalRamp": [
-          "oklch(28% 0.025 95)",
-          "oklch(42% 0.035 95)",
-          "oklch(56% 0.04 95)",
-          "oklch(70% 0.045 95)",
-          "oklch(82% 0.045 95)",
-          "oklch(90% 0.04 95)",
-          "oklch(96% 0.03 95)",
-          "oklch(98% 0.015 95)"
+          "oklch(35% 0 0)",
+          "oklch(50% 0 0)",
+          "oklch(65% 0 0)",
+          "oklch(78% 0 0)",
+          "oklch(88% 0 0)",
+          "oklch(94% 0 0)",
+          "oklch(98% 0 0)",
+          "oklch(100% 0 0)"
+        ]
+      },
+      "atelier-danger": {
+        "role": "tertiary",
+        "displayName": "Atelier Crimson",
+        "canonical": "#9e2a2b",
+        "tonalRamp": [
+          "oklch(22% 0.09 25)",
+          "oklch(32% 0.13 25)",
+          "oklch(44% 0.155 25)",
+          "oklch(56% 0.15 25)",
+          "oklch(68% 0.12 25)",
+          "oklch(80% 0.08 25)",
+          "oklch(90% 0.04 25)",
+          "oklch(96% 0.015 25)"
         ]
       }
     },
     "typographyMeta": {
       "display": {
         "displayName": "Display Telemetry",
-        "purpose": "Numeric telemetry readouts and primary focal counters (tabular-nums)."
+        "purpose": "Rubric score readouts (94/100) and focal numeric counters."
       },
       "headline": {
-        "displayName": "Folder-Tab Headline",
-        "purpose": "Sculpted top-left folder tab brand title (NANOBANANA // STUDIO)."
+        "displayName": "Atelier Headline",
+        "purpose": "Sidebar brand lockup (Nano Banana / Atelier Studio) and modal headers."
       },
       "title": {
-        "displayName": "Project & Card Title",
-        "purpose": "Project titles in Gallery cards and active project header inputs."
+        "displayName": "Toolbar & Card Title",
+        "purpose": "Inline-editable Flow Toolbar h1 titles, Gallery card h2 titles, and Modifier category headers."
       },
       "body": {
-        "displayName": "Prompt & Studio Body",
-        "purpose": "Prompt editor textarea, lightbox prompt inspection copy, and card prompt descriptions."
+        "displayName": "Scene & Critique Body",
+        "purpose": "Prompt editor textareas, Critic diagnosis summaries (65ch max), and Lightbox prompt copy."
       },
       "label": {
-        "displayName": "Uppercase Section Label",
-        "purpose": "Section headers, variant badges (Variação 1..4), and parameter group titles."
+        "displayName": "Monospace Telemetry Label",
+        "purpose": "Turn badges (#1.1), round pills (ROUND 01), zoom readouts (92%), and tabular counters."
       }
     },
     "shadows": [
       {
-        "name": "card-rest",
-        "value": "0 4px 16px rgba(0, 48, 73, 0.05)",
-        "purpose": "Subtle lift separating the 4 generated image cards from the Warm Parchment canvas."
+        "name": "shadow-hard-xs",
+        "value": "2px 3px 0 #0d1b2a",
+        "purpose": "Compact filter chips, inline badges, and pressed button states."
       },
       {
-        "name": "card-selected-ring",
-        "value": "0 0 0 2px #003049, 0 8px 22px rgba(0, 48, 73, 0.12)",
-        "purpose": "High-confidence selection lock combining a 2px Prussian Ink ring with ambient lift."
+        "name": "shadow-hard-sm",
+        "value": "3px 4px 0 #0d1b2a",
+        "purpose": "Sidebar navigation buttons, card action buttons (Open, Remove), and status boxes."
       },
       {
-        "name": "project-card-hover",
-        "value": "0 10px 28px rgba(0, 48, 73, 0.12)",
-        "purpose": "Tactile elevation on hovered Gallery project cards."
+        "name": "shadow-hard-md",
+        "value": "4px 5px 0 #0d1b2a",
+        "purpose": "Floating Flow Toolbars, Gallery project cards, and focused inputs."
       },
       {
-        "name": "bottom-scrubber-dock",
-        "value": "0 6px 22px rgba(24, 26, 23, 0.05)",
-        "purpose": "Anchors the bottom project bar slightly above the parchment floor."
-      },
-      {
-        "name": "modal-overlay",
-        "value": "0 24px 60px rgba(0, 48, 73, 0.35)",
-        "purpose": "Deep theatrical focus for the Lightbox and API Key / Folder Configuration modal."
+        "name": "shadow-hard-canvas",
+        "value": "6px 8px 0 #0d1b2a",
+        "purpose": "Immutable Flow Canvas step cards (8px 10px 0 #0d1b2a when hovered or selected)."
       }
     ],
     "motion": [
       {
-        "name": "ease-atelier",
-        "value": "0.15s ease",
-        "purpose": "Snappy tactile transition for pill buttons, chips, and card selection states."
+        "name": "ease-out-expo",
+        "value": "cubic-bezier(0.16, 1, 0.3, 1)",
+        "purpose": "Programmatic Flow Canvas camera glides (320ms), card settle (260ms), and rubric bar reveal (420ms)."
       },
       {
-        "name": "ease-card-lift",
-        "value": "0.16s ease",
-        "purpose": "Gallery project card hover lift (translateY(-2px)) and border transition."
+        "name": "ease-out-quart",
+        "value": "cubic-bezier(0.25, 1, 0.5, 1)",
+        "purpose": "Crisp 120ms-200ms state transitions on boxed buttons, chips, and focus rings."
       }
     ],
     "breakpoints": [
       {
-        "name": "desktop-viewport",
+        "name": "sm",
+        "value": "767px"
+      },
+      {
+        "name": "md",
+        "value": "959px"
+      },
+      {
+        "name": "desktop-shell",
         "value": "100vw x 100vh"
       }
     ]
   },
   "components": [
     {
-      "name": "Primary Pill Button",
+      "name": "Primary Boxed Button",
       "kind": "button",
       "refersTo": "button-primary",
-      "description": "Primary capsule CTA button in Prussian Ink that shifts to Crimson Vermilion on hover.",
-      "html": "<button class=\"ds-btn-primary\"><span>✦ Gerar 4 Variações</span><span class=\"ds-btn-badge\">4x</span></button>",
-      "css": ".ds-btn-primary { height: 40px; padding: 0 18px; border-radius: 999px; border: none; background-color: var(--ref-charcoal, #003049); color: var(--ref-canvas, #eae2b7); font-family: 'Plus Jakarta Sans', sans-serif; font-size: 0.8rem; font-weight: 600; display: inline-flex; align-items: center; gap: 8px; cursor: pointer; transition: background-color 0.15s ease, color 0.15s ease, transform 0.15s ease; } .ds-btn-primary:hover { background-color: var(--ref-red-accent, #d62828); color: #FFFFFF; } .ds-btn-primary:focus-visible { outline: 2px solid var(--ref-orange-accent, #f77f00); outline-offset: 2px; } .ds-btn-badge { height: 20px; min-width: 20px; padding: 0 6px; border-radius: 999px; background-color: var(--ref-lime-accent, #fcbf49); color: var(--ref-ink-primary, #003049); font-size: 0.68rem; font-weight: 800; display: inline-flex; align-items: center; justify-content: center; }"
+      "description": "Primary boxed CTA button in Slate Navy with a 1.5px Deepest Ink border and hard offset shadow.",
+      "html": "<button class=\"ds-btn-primary\"><svg width=\"12\" height=\"12\" viewBox=\"0 0 12 12\" fill=\"none\"><path d=\"M6 2.25V9.75M2.25 6H9.75\" stroke=\"currentColor\" stroke-width=\"2.2\" stroke-linecap=\"round\"/></svg><span>New Step</span></button>",
+      "css": ".ds-btn-primary { height: 36px; padding: 0 16px; border-radius: 8px; border: 1.5px solid var(--atelier-ink, #0d1b2a); background-color: var(--atelier-navy, #1b263b); color: var(--atelier-white, #ffffff); font-family: 'Plus Jakarta Sans', sans-serif; font-size: 0.8rem; font-weight: 700; display: inline-flex; align-items: center; gap: 8px; cursor: pointer; box-shadow: 3px 4px 0 var(--atelier-ink, #0d1b2a); transition: background-color 0.14s ease, transform 0.12s ease, box-shadow 0.12s ease; } .ds-btn-primary:hover { background-color: var(--atelier-ink, #0d1b2a); } .ds-btn-primary:active { transform: translate(1px, 1px); box-shadow: 2px 3px 0 var(--atelier-ink, #0d1b2a); } .ds-btn-primary:focus-visible { outline: 2px solid var(--atelier-steel, #778da9); outline-offset: 2px; }"
     },
     {
-      "name": "Parameter & Filter Pill Chip",
+      "name": "White Outline Action Button",
+      "kind": "button",
+      "refersTo": "button-outline",
+      "description": "Crisp White boxed button used for paired Gallery card actions (Open Harness, Remove) and secondary controls.",
+      "html": "<div class=\"ds-action-pair\"><button class=\"ds-btn-outline\">Open Harness</button><button class=\"ds-btn-outline\"><svg width=\"13\" height=\"13\" viewBox=\"0 0 16 16\" fill=\"none\"><path d=\"M2.75 4.25H13.25M6.25 4.25V2.75C6.25 2.34 6.59 2 7 2H9C9.41 2 9.75 2.34 9.75 2.75V4.25M4 4.25L4.65 12.85C4.71 13.5 5.25 14 5.9 14H10.1C10.75 14 11.29 13.5 11.35 12.85L12 4.25\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\"/></svg><span>Remove</span></button></div>",
+      "css": ".ds-action-pair { display: inline-flex; gap: 8px; justify-content: flex-end; } .ds-btn-outline { height: 34px; padding: 0 12px; border-radius: 8px; border: 1.5px solid var(--atelier-ink, #0d1b2a); background-color: var(--atelier-white, #ffffff); color: var(--atelier-ink, #0d1b2a); font-family: 'Plus Jakarta Sans', sans-serif; font-size: 0.78rem; font-weight: 700; display: inline-flex; align-items: center; gap: 6px; cursor: pointer; box-shadow: 3px 4px 0 var(--atelier-ink, #0d1b2a); transition: background-color 0.14s ease, transform 0.12s ease; } .ds-btn-outline:hover { background-color: var(--atelier-canvas, #e0e1dd); } .ds-btn-outline:active { transform: translate(1px, 1px); } .ds-btn-outline:focus-visible { outline: 2px solid var(--atelier-steel, #778da9); outline-offset: 2px; }"
+    },
+    {
+      "name": "Boxed Filter & Suggestion Chip",
       "kind": "chip",
-      "refersTo": "chip-pill",
-      "description": "Selectable capsule chip for style presets, aspect ratios, scene modifiers, and category filters.",
-      "html": "<div class=\"ds-chip-group\"><button class=\"ds-chip active\">Editorial Anime</button><button class=\"ds-chip\">Cyberpunk Noir</button></div>",
-      "css": ".ds-chip-group { display: inline-flex; gap: 8px; align-items: center; } .ds-chip { height: 36px; padding: 0 14px; border-radius: 999px; border: 1px solid rgba(0, 48, 73, 0.16); background-color: rgba(255, 255, 255, 0.45); color: var(--ref-ink-primary, #003049); font-family: 'Plus Jakarta Sans', sans-serif; font-size: 0.78rem; font-weight: 500; display: inline-flex; align-items: center; gap: 6px; cursor: pointer; transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease; } .ds-chip:hover { background-color: rgba(252, 191, 73, 0.35); border-color: var(--ref-orange-accent, #f77f00); } .ds-chip.active { background-color: var(--ref-lime-accent, #fcbf49); border-color: var(--ref-orange-accent, #f77f00); color: var(--ref-ink-primary, #003049); font-weight: 700; } .ds-chip:focus-visible { outline: 2px solid var(--ref-orange-accent, #f77f00); outline-offset: 2px; }"
+      "refersTo": "chip-box",
+      "description": "8px rounded-box filter and AI refinement suggestion chip that fills with Steel Blue when active.",
+      "html": "<div class=\"ds-chips\"><button class=\"ds-chip active\">All (9)</button><button class=\"ds-chip\">Studio (3)</button><button class=\"ds-chip\">Goal Harness (6)</button></div>",
+      "css": ".ds-chips { display: inline-flex; gap: 8px; } .ds-chip { height: 36px; padding: 0 12px; border-radius: 8px; border: 1.5px solid var(--atelier-ink, #0d1b2a); background-color: var(--atelier-white, #ffffff); color: var(--atelier-navy, #1b263b); font-family: 'Plus Jakarta Sans', sans-serif; font-size: 0.78rem; font-weight: 700; cursor: pointer; box-shadow: 2px 3px 0 var(--atelier-ink, #0d1b2a); transition: background-color 0.14s ease, transform 0.12s ease; } .ds-chip:hover { background-color: var(--atelier-canvas, #e0e1dd); } .ds-chip.active { background-color: var(--atelier-steel, #778da9); color: var(--atelier-ink, #0d1b2a); font-weight: 800; } .ds-chip:focus-visible { outline: 2px solid var(--atelier-steel, #778da9); outline-offset: 2px; }"
     },
     {
-      "name": "Top Channel Navigation Pill",
+      "name": "Sidebar Navigation & Collapse Item",
       "kind": "nav",
-      "refersTo": "nav-pill",
-      "description": "Navigation pill housed inside the recessed Prussian Ink top bar.",
-      "html": "<nav class=\"ds-top-nav\"><a class=\"ds-nav-pill active\" href=\"#studio\">Studio</a><a class=\"ds-nav-pill\" href=\"#gallery\">Galeria (4)</a></nav>",
-      "css": ".ds-top-nav { background-color: var(--ref-moss-outer, #003049); padding: 8px 14px; border-radius: 999px; display: inline-flex; gap: 8px; align-items: center; } .ds-nav-pill { height: 32px; padding: 0 14px; border-radius: 999px; border: 1px solid rgba(234, 226, 183, 0.25); background-color: rgba(234, 226, 183, 0.16); color: var(--ref-canvas, #eae2b7); font-family: 'Plus Jakarta Sans', sans-serif; font-size: 0.76rem; font-weight: 600; display: inline-flex; align-items: center; text-decoration: none; transition: background-color 0.15s ease, color 0.15s ease, transform 0.15s ease; } .ds-nav-pill:hover { background-color: rgba(252, 191, 73, 0.28); color: var(--ref-lime-accent, #fcbf49); transform: translateY(-1px); } .ds-nav-pill.active { background-color: var(--ref-lime-accent, #fcbf49); border-color: var(--ref-lime-accent, #fcbf49); color: var(--ref-ink-primary, #003049); font-weight: 700; box-shadow: 0 4px 14px rgba(0, 0, 0, 0.18); }"
+      "refersTo": "nav-item",
+      "description": "Boxed 10px-radius vertical sidebar item used for primary routes, Settings, and the bottom Collapse button.",
+      "html": "<nav class=\"ds-sidebar\"><a class=\"ds-nav-item active\" href=\"#create\">Studio</a><a class=\"ds-nav-item\" href=\"#harness\">Goal Harness</a><button class=\"ds-nav-item\">Collapse</button></nav>",
+      "css": ".ds-sidebar { width: 196px; padding: 12px; border-radius: 16px; border: 1.5px solid var(--atelier-ink, #0d1b2a); background-color: var(--atelier-surface, #f7f8f6); display: flex; flex-direction: column; gap: 8px; } .ds-nav-item { height: 38px; padding: 0 12px; border-radius: 10px; border: 1.5px solid var(--atelier-ink, #0d1b2a); background-color: var(--atelier-white, #ffffff); color: var(--atelier-navy, #1b263b); font-family: 'Plus Jakarta Sans', sans-serif; font-size: 0.8rem; font-weight: 700; display: flex; align-items: center; text-decoration: none; cursor: pointer; box-shadow: 3px 4px 0 var(--atelier-ink, #0d1b2a); } .ds-nav-item:hover { background-color: var(--atelier-canvas, #e0e1dd); color: var(--atelier-ink, #0d1b2a); } .ds-nav-item.active { background-color: var(--atelier-steel, #778da9); color: var(--atelier-ink, #0d1b2a); font-weight: 800; } .ds-nav-item:focus-visible { outline: 2px solid var(--atelier-steel, #778da9); outline-offset: 2px; }"
     },
     {
-      "name": "Studio Quad Image Card",
-      "kind": "card",
-      "refersTo": "card-quad-image",
-      "description": "Selectable 2x2 variation card with emphasis badge, full-screen expand button, and prompt caption.",
-      "html": "<div class=\"ds-quad-card selected\"><div class=\"ds-quad-header\"><span class=\"ds-quad-badge\">Variação 2 • Iluminação</span><button class=\"ds-quad-expand\" title=\"Expandir\">⤢</button></div><div class=\"ds-quad-frame\"><span>1024 × 1024 PNG</span></div><p class=\"ds-quad-caption\">Ênfase dramática nos reflexos âmbar e contraluz volumétrica</p></div>",
-      "css": ".ds-quad-card { width: 260px; background-color: var(--ref-card-surface, #f5f0d5); border: 1.5px solid rgba(0, 48, 73, 0.15); border-radius: 24px; padding: 12px 14px; display: flex; flex-direction: column; gap: 8px; cursor: pointer; box-shadow: 0 4px 16px rgba(0, 48, 73, 0.05); font-family: 'Plus Jakarta Sans', sans-serif; transition: background-color 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease; } .ds-quad-card:hover { border-color: var(--ref-orange-accent, #f77f00); } .ds-quad-card.selected { background-color: var(--ref-card-elevated, #fbf8e8); border-color: var(--ref-ink-primary, #003049); box-shadow: 0 0 0 2px #003049, 0 8px 22px rgba(0, 48, 73, 0.12); } .ds-quad-header { display: flex; align-items: center; justify-content: space-between; gap: 8px; } .ds-quad-badge { height: 24px; padding: 0 10px; border-radius: 999px; background-color: var(--ref-canvas, #eae2b7); border: 1px solid rgba(0, 48, 73, 0.16); color: var(--ref-ink-primary, #003049); font-size: 0.72rem; font-weight: 700; display: inline-flex; align-items: center; } .ds-quad-expand { width: 30px; height: 30px; border-radius: 50%; border: 1px solid rgba(0, 48, 73, 0.18); background-color: var(--ref-canvas, #eae2b7); color: var(--ref-ink-primary, #003049); font-size: 0.74rem; font-weight: 700; cursor: pointer; transition: background-color 0.15s ease, color 0.15s ease, transform 0.15s ease; } .ds-quad-expand:hover { background-color: var(--ref-orange-accent, #f77f00); border-color: var(--ref-orange-accent, #f77f00); color: #FFFFFF; transform: scale(1.05); } .ds-quad-frame { height: 120px; border-radius: 16px; background-color: rgba(0, 48, 73, 0.08); display: flex; align-items: center; justify-content: center; color: rgba(0, 48, 73, 0.56); font-size: 0.75rem; font-weight: 600; } .ds-quad-caption { font-size: 0.72rem; color: rgba(0, 48, 73, 0.78); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin: 0; }"
-    },
-    {
-      "name": "Timeline Interaction Lineage Card",
-      "kind": "custom",
-      "refersTo": "card-interaction",
-      "description": "Compact interaction node in the top 15% timeline strip showing branch origin badges.",
-      "html": "<div class=\"ds-timeline-row\"><span class=\"ds-branch-badge\">de #1 ➔</span><button class=\"ds-interaction-card active\"><div class=\"ds-interaction-thumb\">#3</div><div class=\"ds-interaction-meta\"><div class=\"ds-interaction-title\">Interação #3 <span class=\"ds-origin-tag\">#1 ➔ #3</span></div><div class=\"ds-interaction-sub\">Samurai sob chuva neon...</div></div></button></div>",
-      "css": ".ds-timeline-row { display: inline-flex; align-items: center; gap: 8px; font-family: 'Plus Jakarta Sans', sans-serif; } .ds-branch-badge { height: 22px; padding: 0 8px; border-radius: 999px; background-color: var(--ref-orange-accent, #f77f00); color: #FFFFFF; font-size: 0.66rem; font-weight: 700; display: inline-flex; align-items: center; } .ds-interaction-card { height: 58px; padding: 6px 12px 6px 8px; border-radius: 16px; border: 1.5px solid rgba(0, 48, 73, 0.16); background-color: var(--ref-card-surface, #f5f0d5); display: inline-flex; align-items: center; gap: 10px; cursor: pointer; text-align: left; transition: background-color 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease; } .ds-interaction-card:hover { background-color: var(--ref-card-elevated, #fbf8e8); border-color: var(--ref-orange-accent, #f77f00); } .ds-interaction-card.active { background-color: var(--ref-card-elevated, #fbf8e8); border-color: var(--ref-ink-primary, #003049); box-shadow: 0 0 0 2px #003049; } .ds-interaction-thumb { width: 40px; height: 40px; border-radius: 10px; background-color: rgba(0, 48, 73, 0.12); color: var(--ref-ink-primary, #003049); font-size: 0.74rem; font-weight: 700; display: flex; align-items: center; justify-content: center; } .ds-interaction-meta { display: flex; flex-direction: column; gap: 2px; } .ds-interaction-title { font-size: 0.72rem; font-weight: 700; color: var(--ref-ink-primary, #003049); display: flex; align-items: center; gap: 6px; } .ds-origin-tag { height: 18px; padding: 0 6px; border-radius: 999px; background-color: var(--ref-lime-accent, #fcbf49); color: var(--ref-ink-primary, #003049); font-size: 0.62rem; font-weight: 700; display: inline-flex; align-items: center; } .ds-interaction-sub { font-size: 0.68rem; color: rgba(0, 48, 73, 0.78); }"
-    },
-    {
-      "name": "Atelier Prompt Input & Textarea",
+      "name": "Search & Prompt Input",
       "kind": "input",
       "refersTo": "input-field",
-      "description": "Elevated Ivory input field that shifts border to Tangerine Signal and background to crisp white on focus.",
-      "html": "<input class=\"ds-input\" type=\"text\" placeholder=\"Buscar projeto por título ou prompt...\" />",
-      "css": ".ds-input { width: 280px; height: 42px; padding: 0 14px; border-radius: 14px; border: 1.5px solid rgba(0, 48, 73, 0.22); background-color: var(--ref-card-elevated, #fbf8e8); color: var(--ref-ink-primary, #003049); font-family: 'Plus Jakarta Sans', sans-serif; font-size: 0.84rem; font-weight: 500; outline: none; transition: border-color 0.15s ease, background-color 0.15s ease; } .ds-input::placeholder { color: rgba(0, 48, 73, 0.56); } .ds-input:focus { border-color: var(--ref-orange-accent, #f77f00); background-color: #FFFFFF; }"
+      "description": "Compact 36px boxed search/text input with a 1.5px Deepest Ink border and hard focus shadow.",
+      "html": "<input class=\"ds-input\" type=\"search\" aria-label=\"Search projects\" placeholder=\"Search Studio projects & Goal Harness missions...\" />",
+      "css": ".ds-input { width: 320px; height: 36px; padding: 0 12px; border-radius: 10px; border: 1.5px solid var(--atelier-ink, #0d1b2a); background-color: var(--atelier-white, #ffffff); color: var(--atelier-ink, #0d1b2a); font-family: 'Plus Jakarta Sans', sans-serif; font-size: 0.8rem; font-weight: 600; outline: none; box-shadow: 2px 3px 0 var(--atelier-ink, #0d1b2a); } .ds-input:focus { box-shadow: 4px 5px 0 var(--atelier-ink, #0d1b2a); outline: 2px solid var(--atelier-steel, #778da9); outline-offset: 1px; }"
     },
     {
-      "name": "Bottom Project Scrubber Dock",
-      "kind": "custom",
-      "refersTo": "bottom-scrubber-dock",
-      "description": "Floating bottom capsule hosting the editable project name on the left and the + Novo Projeto button on the right.",
-      "html": "<div class=\"ds-bottom-dock\"><div class=\"ds-project-pill\"><span class=\"ds-project-label\">PROJETO:</span><input class=\"ds-project-input\" value=\"Samurai Neon\" readonly /></div><button class=\"ds-btn-new\">+ Novo Projeto</button></div>",
-      "css": ".ds-bottom-dock { height: 56px; width: 100%; max-width: 520px; background-color: var(--ref-white-dock, #f7f2da); border-radius: 999px; padding: 6px 14px; display: flex; align-items: center; justify-content: space-between; gap: 12px; box-shadow: 0 6px 22px rgba(24, 26, 23, 0.05); font-family: 'Plus Jakarta Sans', sans-serif; } .ds-project-pill { display: inline-flex; align-items: center; gap: 8px; height: 40px; padding: 0 14px; border-radius: 999px; background-color: var(--ref-canvas, #eae2b7); border: 1px solid rgba(0, 48, 73, 0.16); } .ds-project-label { font-size: 0.7rem; font-weight: 700; color: rgba(0, 48, 73, 0.78); letter-spacing: 0.04em; } .ds-project-input { border: none; background: transparent; font-size: 0.86rem; font-weight: 600; color: var(--ref-ink-primary, #003049); outline: none; width: 140px; } .ds-btn-new { height: 40px; padding: 0 18px; border-radius: 999px; border: none; background-color: var(--ref-charcoal, #003049); color: var(--ref-canvas, #eae2b7); font-size: 0.8rem; font-weight: 600; cursor: pointer; transition: background-color 0.15s ease, color 0.15s ease; } .ds-btn-new:hover { background-color: var(--ref-red-accent, #d62828); color: #FFFFFF; }"
+      "name": "Flow Canvas Step Card",
+      "kind": "card",
+      "refersTo": "card-flow-node",
+      "description": "Immutable Flow Canvas node with tabular badge header, artwork stage, 28x28px Steel Blue branch port, and prompt inspect footer.",
+      "html": "<article class=\"ds-flow-card\"><div class=\"ds-flow-head\"><span class=\"ds-flow-badge\">#1.1</span><span class=\"ds-flow-ratio\">3:4</span></div><div class=\"ds-flow-stage\">Frame #1 Preview</div><button class=\"ds-flow-port\" aria-label=\"Branch new step\">+</button><button class=\"ds-flow-foot\"><span>A formidable cyberpunk scene...</span><strong>Inspect ↗</strong></button></article>",
+      "css": ".ds-flow-card { position: relative; width: 248px; padding: 12px; border-radius: 16px; border: 1.5px solid var(--atelier-ink, #0d1b2a); background-color: var(--atelier-white, #ffffff); box-shadow: 6px 8px 0 var(--atelier-ink, #0d1b2a); display: flex; flex-direction: column; gap: 8px; font-family: 'Plus Jakarta Sans', sans-serif; } .ds-flow-head { display: flex; align-items: center; gap: 8px; } .ds-flow-badge { padding: 2px 8px; border-radius: 6px; background-color: var(--atelier-ink, #0d1b2a); color: var(--atelier-white, #ffffff); font-family: 'JetBrains Mono', monospace; font-size: 0.75rem; font-weight: 800; } .ds-flow-ratio { padding: 2px 8px; border-radius: 6px; background-color: var(--atelier-canvas, #e0e1dd); color: var(--atelier-navy, #1b263b); font-family: 'JetBrains Mono', monospace; font-size: 0.75rem; font-weight: 700; } .ds-flow-stage { height: 132px; border-radius: 12px; background-color: var(--atelier-canvas, #e0e1dd); border: 1px solid rgba(27,38,59,0.2); display: flex; align-items: center; justify-content: center; font-size: 0.78rem; font-weight: 700; color: var(--atelier-navy, #1b263b); } .ds-flow-port { position: absolute; right: -14px; top: 96px; width: 28px; height: 28px; border-radius: 8px; border: 1.5px solid var(--atelier-ink, #0d1b2a); background-color: var(--atelier-steel, #778da9); color: var(--atelier-ink, #0d1b2a); font-weight: 800; cursor: pointer; } .ds-flow-foot { height: 32px; padding: 0 8px; border-radius: 8px; border: 1px solid rgba(27,38,59,0.18); background-color: var(--atelier-surface, #f7f8f6); color: var(--atelier-navy, #1b263b); font-size: 0.75rem; display: flex; align-items: center; justify-content: space-between; gap: 8px; cursor: pointer; } .ds-flow-foot span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }"
     }
   ],
   "narrative": {
-    "northStar": "The Warm Prussian Atelier",
-    "overview": "Nano Banana Studio is designed as a tactile, sunlit art-direction workstation framed inside a deep Prussian-blue architectural shell. Rather than mimicking a generic dark-mode SaaS dashboard or a cluttered node-graph IDE, the interface pairs a recessed Prussian Ink outer bezel with a warm parchment drafting canvas joined by an organic sculpted folder tab and S-curve bridge. Every interaction feels physical, grounded, and deliberate—inviting illustrators and concept artists to compare four simultaneous scene interpretations and trace their creative lineage without visual fatigue.\n\nStructural clarity replaces decorative container nesting. Major workspace zones—the top 15% timeline and filter header, the 60% active quad-generation canvas, and the 40% prompt and parameter studio—are separated by crisp Prussian hairline dividers directly on the parchment surface. Elevated cards are reserved strictly for the artifacts that represent creative output: Gallery projects, the four generated images in the 2×2 grid, and individual interaction nodes along the branching timeline.\n\nThe system explicitly rejects nested card-in-card containers, full-page scrollbars, pure #000000 black or washed-out neutral grays, and decorative gradients. All surfaces, borders, and typographic hierarchies derive harmonically from the five-color atelier palette.",
+    "northStar": "The Cool-Slate Neo-Brutalist Flow Atelier",
+    "overview": "Nano Banana Studio is designed as a tactile, architectural drafting table framed inside a Deepest Ink (#0d1b2a) desktop shell. Rather than defaulting to generic dark-card SaaS chrome or soft-blurred glassmorphism, the interface pairs a Warm Alabaster (#e0e1dd) drafting canvas with Crisp White (#ffffff) rounded-box cards anchored by 1.5px solid #0d1b2a structural borders and crisp zero-blur offset shadows (3px 4px 0 #0d1b2a to 6px 8px 0 #0d1b2a).\n\nEvery interactive element—navigation items, toolbar controls, canvas branch ports, filter chips, and card actions—follows a unified boxed rounded-border language (4px–16px), explicitly rejecting circular (50%) and stadium capsule (9999px) pills. Across both the Studio Flow Canvas (/create) and the 4-stage Goal Harness (/harness), orthogonal SVG wires with directional signal pulses trace creative lineage directly across the dotted alabaster plane.",
     "keyCharacteristics": [
-      "Sculpted desktop frame in Prussian Ink (#003049) housing a Warm Parchment (#eae2b7) canvas with a raised left title tab and smooth S-curve SVG transition.",
-      "Fixed full-viewport geometry (100vw × 100vh, zero page scroll) partitioned into a 15% top context bar, an 85% main workspace, and a floating pill dock at the bottom.",
-      "Architectural hairline dividers (1.5px solid rgba(0, 48, 73, 0.2)) between workspace sections instead of outer wrapper cards.",
-      "Strictly scoped card surfaces (#f5f0d5 and #fbf8e8) reserved solely for Gallery projects, the 4 quad-generation images, and timeline interaction items.",
-      "Warm solar signal hierarchy using Solar Amber (#fcbf49) for active states, Tangerine Signal (#f77f00) for branch lineage and focus rings, and Crimson Vermilion (#d62828) for primary action hover and destructive confirmation."
+      "Full-viewport desktop shell (100vw × 100vh, zero outer scroll) in Deepest Ink (#0d1b2a) framing a rounded Warm Alabaster (#e0e1dd) canvas, adapting below 768px into a full-width workspace with a bottom navigation rail.",
+      "Strict 5-step Cool-Slate Atelier palette (#0d1b2a, #1b263b, #415a77, #778da9, #e0e1dd) plus #ffffff elevated surfaces and #9e2a2b two-step destructive confirmation.",
+      "Tactile Neo-Brutalist depth via zero-blur bottom-right offset shadows (--ref-shadow-hard-*) paired with 1.5px ink borders.",
+      "Strictly boxed controls with rounded corners (4px–14px)—never circular icon buttons or 9999px stadium pills.",
+      "Self-hosted Plus Jakarta Sans and JetBrains Mono typography enforcing a strict 12px (0.75rem) legibility floor and tabular-nums telemetry alignment."
     ],
     "rules": [
       {
-        "name": "The Prussian Contrast Rule",
-        "body": "All dark typography, structural borders, and primary button fills use Prussian Ink (#003049) or its alpha steps—never pure #000000 black or untinted gray.",
+        "name": "The Cool-Slate Purity Rule",
+        "body": "Every UI chrome surface, border, badge, and shadow derives from #0d1b2a, #1b263b, #415a77, #778da9, #e0e1dd, #f7f8f6, and #ffffff (with #9e2a2b for destructive confirmation)—never legacy neon lime, solar amber, or untinted gray.",
         "section": "colors"
       },
       {
-        "name": "The Solar Signal Rule",
-        "body": "Solar Amber (#fcbf49), Tangerine Signal (#f77f00), and Crimson Vermilion (#d62828) are reserved for interactive states, lineage badges, and focal CTAs; they must never flood large background zones.",
+        "name": "The Dark-Tab Contrast Rule",
+        "body": "When Slate Navy (#1b263b) fills an active tab, sub-labels render in Warm Alabaster (#e0e1dd, 11.2:1 contrast) rather than Steel Blue (#778da9, 4.45:1) so 12px metadata exceeds WCAG AAA.",
         "section": "colors"
       },
       {
-        "name": "The Tabular Telemetry Rule",
-        "body": "All turn numbers (#1, #2), aspect ratio labels (1:1, 16:9), and counter badges enforce font-variant-numeric: tabular-nums so layout width never jitters across iterations.",
+        "name": "The 12px Floor Rule",
+        "body": "No text element, badge, storage path, or pill in the interface renders below 0.75rem (12px).",
         "section": "typography"
       },
       {
-        "name": "The Scoped Elevation Rule",
-        "body": "Only Gallery project cards, the 4 quad-generation cards, timeline interaction cards, the bottom pill dock, and modals carry background fills or shadows; all surrounding layout sections remain flat and transparent on #eae2b7.",
+        "name": "The Tabular Telemetry Rule",
+        "body": "All turn identifiers, zoom percentages (92%), rubric weights (25%), and scores (94/100) enforce font-variant-numeric: tabular-nums in JetBrains Mono so counters never jitter across rounds.",
+        "section": "typography"
+      },
+      {
+        "name": "The Tactile Press Rule",
+        "body": "Buttons carry a 1.5px solid #0d1b2a border and hard offset shadow at rest, shifting transform: translate(1px, 1px) on :active—never diffuse ambient glow halos.",
         "section": "elevation"
+      },
+      {
+        "name": "The Boxed Button Rule",
+        "body": "Circular (border-radius: 50%) and stadium pill (border-radius: 9999px) shapes are banned across all buttons, ports, switches, and chips; every interactive control is a rounded box (4px–14px).",
+        "section": "shapes"
       }
     ],
     "dos": [
-      "Do restrict all colors strictly to the five-color Warm Prussian Atelier palette (#003049, #d62828, #f77f00, #fcbf49, #eae2b7) and its direct ivory/alpha derivatives (#f5f0d5, #fbf8e8, #f7f2da).",
-      "Do separate major workspace zones (top 15% bar, left 60% quad grid, right 40% prompt/parameters) using 1.5px solid rgba(0, 48, 73, 0.2) structural dividers directly on the #eae2b7 canvas.",
-      "Do reserve card containers exclusively for Gallery projects (.ref-project-card), the 4 generated quad images (.ref-quad-image-card), and timeline interaction nodes (.ref-interaction-history-item).",
-      "Do maintain the 100vw × 100vh zero-scroll desktop viewport constraint across all routes."
+      "Do reference semantic --atelier-* CSS custom properties (--atelier-ink, --atelier-navy, --atelier-slate, --atelier-steel, --atelier-canvas, --atelier-surface, --atelier-white, --atelier-danger) instead of hardcoded hex literals.",
+      "Do use authored stroke SVGs from AtelierIcons.tsx (1.8px–2px stroke) for all icons, badges, and status indicators.",
+      "Do use inline toolbar editing for quick project/mission renames and useDialogFocusTrap on true modal dialogs (Wizard, Inspector, Lightbox, Settings, Delete Confirmation).",
+      "Do maintain touch-action: none and Pointer Event capture/cancel cleanup on draggable Flow Canvas surfaces, while debouncing localStorage and URL state sync off the pointermove hot path."
     ],
     "donts": [
-      "Don't wrap the top 15% bar, the 60% image area, or the 40% parameter column in outer card boxes or nested container backgrounds.",
-      "Don't introduce pure #000000 black, untinted neutral grays, or legacy neon lime (#F2FA3C / #ECFF3B) into text, borders, or badges.",
-      "Don't populate new projects with placeholder or mocked images; empty slots in the 2×2 grid must render honest empty states until the user triggers generation.",
-      "Don't allow full-page vertical or horizontal scrollbars on html, body, or .ref-desktop-shell."
+      "Don't introduce border-radius: 50% circular buttons or border-radius: 9999px capsule pills anywhere in the UI.",
+      "Don't render raw Unicode or emoji glyphs (🏆, ⚙, ✦, 🔑, 🗑) in place of AtelierIcons.tsx SVG components.",
+      "Don't set any font-size below 0.75rem (12px) or animate layout-thrashing CSS properties (width, left, top, filter).",
+      "Don't persist Gemini API keys (AIza...) to localStorage, sessionStorage, cookies, or URL query parameters."
     ]
   }
 }

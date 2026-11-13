@@ -2,7 +2,14 @@
 
 import React, { useState, useMemo } from "react";
 import { useStudioSession } from "@/core/context/StudioSessionContext";
-import { IconAtelierStar, IconClose, IconPlus } from "@/shared";
+import {
+  IconAtelierStar,
+  IconBolt,
+  IconClose,
+  IconKey,
+  IconPlus,
+  IconRefresh,
+} from "@/shared";
 import {
   ModifierCategory,
   ModifierOption,
@@ -151,7 +158,7 @@ export default function ModifiersManagerPage() {
     setManualTargetCatId(id);
     setAiTargetCatId(id);
     setRightSidebarTab("edit");
-    showTransientNotice(`✓ Category "${title}" created!`);
+    showTransientNotice(`Category "${title}" created.`);
   };
 
   // 2. Delete a Category (with 2-step confirmation)
@@ -166,7 +173,7 @@ export default function ModifiersManagerPage() {
     setConfirmDeleteCatId(null);
     const nextList = categories.filter((c) => c.id !== cat.id);
     await updateModifierCategories(nextList);
-    showTransientNotice(`✓ Category "${cat.title}" removed.`);
+    showTransientNotice(`Category "${cat.title}" removed.`);
   };
 
   // 3. Add a Modifier Manually to Target Category
@@ -191,9 +198,7 @@ export default function ModifiersManagerPage() {
     setNewModToken("");
     const targetTitle =
       categories.find((c) => c.id === targetId)?.title || "Category";
-    showTransientNotice(
-      `✓ Modifier "${label}" added to "${targetTitle}"!`
-    );
+    showTransientNotice(`Modifier "${label}" added to "${targetTitle}".`);
   };
 
   // 4. Delete a Modifier from a Category
@@ -204,7 +209,7 @@ export default function ModifiersManagerPage() {
         : c
     );
     await updateModifierCategories(nextList);
-    showTransientNotice(`✓ Modifier "${mod.label}" removed.`);
+    showTransientNotice(`Modifier "${mod.label}" removed.`);
   };
 
   // 5. Generate Categories or Modifiers with Gemini AI
@@ -236,17 +241,17 @@ export default function ModifiersManagerPage() {
         );
         await updateModifierCategories(nextList);
         showTransientNotice(
-          `✦ ${newOpts.length} modifiers generated ${
+          `${newOpts.length} modifiers generated ${
             usedAiApi ? "via Gemini 2.5 Flash" : "(smart synthesis)"
-          } in "${targetCatObj.title}"!`
+          } in "${targetCatObj.title}".`
         );
       } else {
         const nextList = [...categories, ...generated];
         await updateModifierCategories(nextList);
         showTransientNotice(
-          `✦ ${generated.length} category(ies) created ${
+          `${generated.length} category(ies) created ${
             usedAiApi ? "with Gemini 2.5 Flash" : "(smart synthesis)"
-          }!`
+          }.`
         );
       }
       setAiPrompt("");
@@ -267,13 +272,13 @@ export default function ModifiersManagerPage() {
           <div className="ref-modifiers-top-bar">
             <div className="ref-modifiers-search-row">
               <div className="ref-modifiers-title-group">
-                <span className="ref-interactions-label">
+                <h1 className="ref-soft-card-title">
                   Visual Direction Library
-                </span>
-                <strong className="ref-soft-card-title">
+                </h1>
+                <span className="ref-interactions-label">
                   {categories.length} Categories • {totalModifiersCount}{" "}
                   Modifiers
-                </strong>
+                </span>
               </div>
 
               <input
@@ -282,6 +287,7 @@ export default function ModifiersManagerPage() {
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="ref-input ref-modifiers-search-input"
                 placeholder="Search category, camera, clothing, angle, light..."
+                aria-label="Search categories and modifiers"
               />
 
               <button
@@ -301,14 +307,19 @@ export default function ModifiersManagerPage() {
                   setConfirmRestoreDefaults(false);
                   await resetModifierCategories();
                   showTransientNotice(
-                    "✓ Default categories and modifiers restored!"
+                    "Default categories and modifiers restored."
                   );
                 }}
                 title="Restore default categories (Camera, Clothing, Angle, Lighting, Atmosphere)"
               >
-                {confirmRestoreDefaults
-                  ? "Confirm Restore Defaults?"
-                  : "↺ Restore Defaults"}
+                {confirmRestoreDefaults ? (
+                  <span>Confirm Restore Defaults?</span>
+                ) : (
+                  <>
+                    <IconRefresh size={12} />
+                    <span>Restore Defaults</span>
+                  </>
+                )}
               </button>
             </div>
           </div>
@@ -337,10 +348,22 @@ export default function ModifiersManagerPage() {
                         <span className="ref-mura-kv-label">
                           2×2 Matrix Sweep:
                         </span>
-                        <span className="ref-mura-kv-value">
-                          {isSweepReady
-                            ? "⚡ 4-Way Sweep Ready"
-                            : `${cat.options.length}/4 options for full sweep`}
+                        <span
+                          className="ref-mura-kv-value"
+                          style={{
+                            display: "inline-flex",
+                            alignItems: "center",
+                            gap: "4px",
+                          }}
+                        >
+                          {isSweepReady ? (
+                            <>
+                              <IconBolt size={12} />
+                              <span>4-Way Sweep Ready</span>
+                            </>
+                          ) : (
+                            `${cat.options.length}/4 options for full sweep`
+                          )}
                         </span>
                       </div>
 
@@ -446,8 +469,16 @@ export default function ModifiersManagerPage() {
                   }`}
                   onClick={() => setRightSidebarTab("ai")}
                 >
-                  <span className="ref-studio-param-tab-title">
-                    ✦ AI Generator
+                  <span
+                    className="ref-studio-param-tab-title"
+                    style={{
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: "4px",
+                    }}
+                  >
+                    <IconAtelierStar size={11} />
+                    <span>AI Generator</span>
                   </span>
                   <span className="ref-studio-param-tab-value">
                     {aiMode === "new-category"
@@ -504,14 +535,22 @@ export default function ModifiersManagerPage() {
                     onSubmit={handleGenerateWithAi}
                   >
                     <div className="ref-params-card-header">
-                      <strong className="ref-soft-card-title">
-                        ✦ Create with AI (Gemini)
+                      <strong
+                        className="ref-soft-card-title"
+                        style={{
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: "8px",
+                        }}
+                      >
+                        <IconAtelierStar size={13} />
+                        <span>Create with AI (Gemini)</span>
                       </strong>
                       <div
                         style={{
                           display: "flex",
                           alignItems: "center",
-                          gap: "6px",
+                          gap: "8px",
                         }}
                       >
                         {!apiKey.trim() && (
@@ -521,7 +560,8 @@ export default function ModifiersManagerPage() {
                             onClick={openSettingsModal}
                             title="Configure Gemini API Key for live Gemini 2.5 Flash synthesis"
                           >
-                            🔑 Set API Key
+                            <IconKey size={12} />
+                            <span>Set API Key</span>
                           </button>
                         )}
                         <span className="ref-pill-chip active">
