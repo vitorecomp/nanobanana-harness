@@ -5,6 +5,7 @@ on:
     tags:
       - "v*"
       - "[0-9]+.[0-9]+.[0-9]*"
+      - "[0-9]+.[0-9]+"
   workflow_dispatch:
     inputs:
       build_profile:
@@ -47,9 +48,52 @@ jobs:
       - name: Verify static Next.js Tauri export
         run: npm run build:tauri-web
 
+  prepare-release:
+    name: Create GitHub Release (${{ github.ref_name }})
+    needs: verify
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Ensure GitHub Release exists for tag
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+          if gh release view "${TAG}" >/dev/null 2>&1; then
+            echo "Release ${TAG} already exists."
+          else
+            PRERELEASE_FLAG=""
+            if [[ "${TAG}" == *-* ]]; then
+              PRERELEASE_FLAG="--prerelease"
+            fi
+            gh release create "${TAG}" \
+              --title "Nano Banana Goal Harness & Studio ${TAG}" \
+              ${PRERELEASE_FLAG} \
+              --notes "$(cat <<'EOF'
+          ## Nano Banana Goal Harness & Atelier Studio — `${{ github.ref_name }}`
+
+          Autonomous Multi-Agent Goal-Driven Image Evolution Harness (**AutoRef-Harness + EvoGen TRACE**) & 2×2 Interactive Studio for **Google Nano Banana (`gemini-2.5-flash-image` & `gemini-3-pro-image-preview`)**.
+
+          ### 📦 Native Desktop Installers
+          - **Windows 64-bit (`x64`)**: `*_x64-setup.exe` (NSIS) & `*_x64_en-US.msi` (WiX)
+          - **Windows 32-bit (`x86`)**: `*_x86-setup.exe` (NSIS) & `*_x86_en-US.msi` (WiX)
+          - **Linux (`x64`)**: `*.deb` (Debian / Ubuntu), `*.AppImage` (Portable AppImage), & `*.rpm` (Fedora / RHEL)
+          - **macOS (`Apple Silicon arm64` & `Intel x64`)**: `*_aarch64.dmg`, `*_x64.dmg`, & `.app.tar.gz`
+          - **Static Web Export**: `nanobanana-studio-web-${{ github.ref_name }}.tar.gz`
+          EOF
+          )"
+          fi
+
   build-installers:
     name: Build ${{ matrix.label }}
-    needs: verify
+    needs:
+      - verify
+      - prepare-release
+    if: always() && needs.verify.result == 'success' && (needs.prepare-release.result == 'success' || needs.prepare-release.result == 'skipped')
     strategy:
       fail-fast: false
       matrix:
@@ -139,6 +183,11 @@ jobs:
         run: |
           RAW_TAG="${GITHUB_REF_NAME}"
           CLEAN_VERSION="${RAW_TAG#v}"
+          if [[ "$CLEAN_VERSION" =~ ^[0-9]+\.[0-9]+$ ]]; then
+            CLEAN_VERSION="${CLEAN_VERSION}.0"
+          elif [[ "$CLEAN_VERSION" =~ ^([0-9]+\.[0-9]+)(-[0-9A-Za-z.-]+)$ ]]; then
+            CLEAN_VERSION="${BASH_REMATCH[1]}.0${BASH_REMATCH[2]}"
+          fi
           if [[ "$CLEAN_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
             echo "Syncing release version to ${CLEAN_VERSION}"
             node -e '
@@ -161,6 +210,7 @@ jobs:
           fi
 
       - name: Install NPM dependencies
+        shell: bash
         run: |
           npm ci
           npm --prefix frontend ci
