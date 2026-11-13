@@ -2943,12 +2943,6 @@ export default function GoalHarnessPage() {
                   {missionTitle}
                 </span>
               </div>
-              <span className="ref-flow-toolbar-divider" aria-hidden="true" />
-              <span className="ref-flow-toolbar-badge is-solved-pill">
-                {deliverables.length > 0
-                  ? `${rounds.length}R • 🏆 ${overallPackAverage}/100`
-                  : `${rounds.length}R • ${flowNodes.length} Steps`}
-              </span>
             </div>
 
             <div className="ref-flow-toolbar-right">
@@ -3651,20 +3645,6 @@ export default function GoalHarnessPage() {
                 <span className="ref-harness-next-round-tag">
                   NEXT: ROUND 0{rounds.length + 1}
                 </span>
-                <button
-                  type="button"
-                  id="harness-reiterate-anchor-btn"
-                  className={`ref-pill-chip ${
-                    reiterateAnchorToIncumbent ? "active" : ""
-                  }`}
-                  onClick={() =>
-                    setReiterateAnchorToIncumbent((prev) => !prev)
-                  }
-                >
-                  {reiterateAnchorToIncumbent
-                    ? "✓ Anchor Winner: ON"
-                    : "○ Anchor Winner: OFF"}
-                </button>
               </div>
 
               <label
@@ -3693,7 +3673,7 @@ export default function GoalHarnessPage() {
                 } (or leave blank for automatic TRACE refinement)...`}
               />
 
-              {/* Quick suggestion chips */}
+              {/* Full-width Gemini suggestion chips */}
               <div className="ref-harness-quick-chips">
                 {latestComplaints.length > 0
                   ? latestComplaints.map((comp, idx) => (
@@ -3704,7 +3684,7 @@ export default function GoalHarnessPage() {
                         onClick={() => setReiterateNote(comp)}
                         title={comp}
                       >
-                        ✦ Fix: {comp.length > 34 ? `${comp.slice(0, 34)}...` : comp}
+                        <span>✦ Fix: {comp}</span>
                       </button>
                     ))
                   : [
@@ -3721,7 +3701,7 @@ export default function GoalHarnessPage() {
                           )
                         }
                       >
-                        + {chip}
+                        <span>+ {chip}</span>
                       </button>
                     ))}
               </div>
@@ -3760,6 +3740,21 @@ export default function GoalHarnessPage() {
                   <option value={3}>+3 Rounds</option>
                 </select>
               </div>
+
+              <button
+                type="button"
+                id="harness-reiterate-anchor-btn"
+                className={`ref-pill-chip ref-harness-anchor-bottom-btn ${
+                  reiterateAnchorToIncumbent ? "active" : ""
+                }`}
+                onClick={() =>
+                  setReiterateAnchorToIncumbent((prev) => !prev)
+                }
+              >
+                {reiterateAnchorToIncumbent
+                  ? "✓ Anchor Winner: ON"
+                  : "○ Anchor Winner: OFF"}
+              </button>
             </div>
           )}
 

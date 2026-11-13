@@ -138,22 +138,21 @@ textarea {
   user-select: text;
 }
 
-/* Tactile neo-brutalist pill scrollbars matching the architectural palette */
+/* Tactile neo-brutalist boxed scrollbars matching the architectural palette */
 ::-webkit-scrollbar {
-  width: 10px;
-  height: 10px;
+  width: 8px;
+  height: 8px;
 }
 
 ::-webkit-scrollbar-track {
   background-color: #e0e1dd;
-  border-radius: var(--ref-radius-pill);
+  border-radius: 5px;
   border: 1.5px solid #0d1b2a;
-  margin: 8px 0;
 }
 
 ::-webkit-scrollbar-thumb {
   background-color: #778da9;
-  border-radius: var(--ref-radius-pill);
+  border-radius: 5px;
   border: 1.5px solid #0d1b2a;
 }
 
@@ -338,6 +337,8 @@ textarea {
 
 .ref-sidebar.collapsed .ref-sidebar-header {
   flex-direction: column;
+  justify-content: center;
+  align-items: center;
   gap: 8px;
 }
 
@@ -445,7 +446,7 @@ textarea {
   height: 38px;
   padding: 0 12px;
   line-height: 1;
-  border-radius: var(--ref-radius-pill);
+  border-radius: 10px;
   border: 1.5px solid #0d1b2a;
   background-color: #ffffff;
   color: #1b263b;
@@ -601,7 +602,7 @@ textarea {
   height: 40px;
   padding: 0;
   line-height: 1;
-  border-radius: 50%;
+  border-radius: 10px;
   border: 1.5px solid #1b263b;
   background-color: #ffffff;
   color: var(--ref-ink-primary);
@@ -612,17 +613,20 @@ textarea {
   justify-content: center;
   flex-shrink: 0;
   cursor: pointer;
+  box-shadow: var(--ref-shadow-hard-xs);
   transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease, transform 0.15s ease;
 }
 
 .ref-circle-icon-btn.sm {
   width: 32px;
   height: 32px;
+  border-radius: 8px;
 }
 
 .ref-circle-icon-btn.md {
   width: 36px;
   height: 36px;
+  border-radius: 9px;
 }
 
 .ref-circle-icon-btn:hover {
@@ -644,7 +648,7 @@ textarea {
   height: 32px;
   padding: 0;
   line-height: 1;
-  border-radius: 50%;
+  border-radius: 8px;
   border: 1px solid rgba(27, 38, 59, 0.22);
   background-color: #e0e1dd;
   color: #1b263b;
@@ -769,7 +773,7 @@ textarea {
   height: 36px;
   padding: 0 14px;
   line-height: 1;
-  border-radius: var(--ref-radius-pill);
+  border-radius: 10px;
   border: 1.5px solid #0d1b2a;
   background-color: #ffffff;
   color: var(--ref-ink-primary);
@@ -830,7 +834,7 @@ textarea {
   height: 40px;
   padding: 0 18px;
   line-height: 1;
-  border-radius: var(--ref-radius-pill);
+  border-radius: 10px;
   border: 1.5px solid #0d1b2a;
   background-color: #1b263b;
   color: #ffffff;
@@ -943,7 +947,7 @@ textarea {
   padding: 0 6px;
   line-height: 1;
   font-variant-numeric: tabular-nums;
-  border-radius: var(--ref-radius-pill);
+  border-radius: 6px;
   background-color: #778da9;
   color: #0d1b2a;
   font-size: 0.75rem;
@@ -980,12 +984,43 @@ textarea {
 
 .ref-gallery-search-box {
   flex: 1;
-  min-width: 200px;
-  max-width: 440px;
+  min-width: 0;
+  max-width: none;
   display: flex;
   flex-direction: column;
   justify-content: center;
   gap: 4px;
+}
+
+.ref-gallery-search-filter-row {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 10px;
+  width: 100%;
+  flex-wrap: nowrap;
+}
+
+.ref-gallery-search-filter-row .ref-gallery-search-input {
+  flex: 0 1 360px;
+  width: 360px;
+  max-width: 360px;
+  min-width: 180px;
+  height: 36px;
+  padding: 0 14px;
+}
+
+.ref-gallery-filter-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+@media (max-width: 860px) {
+  .ref-gallery-search-filter-row {
+    flex-wrap: wrap;
+  }
 }
 
 .ref-gallery-toast-slot {
@@ -995,7 +1030,7 @@ textarea {
 }
 
 .ref-gallery-search-input {
-  border-radius: var(--ref-radius-pill);
+  border-radius: 12px;
   background-color: #ffffff;
   height: 42px;
   padding: 0 18px;
@@ -1005,6 +1040,7 @@ textarea {
   display: flex;
   align-items: center;
   gap: 8px;
+  padding: 2px 6px 8px 2px;
   overflow-x: auto;
   flex-shrink: 1;
 }
@@ -1015,10 +1051,11 @@ textarea {
   width: 100%;
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(296px, 1fr));
-  grid-auto-rows: max-content;
+  grid-auto-rows: auto;
   gap: 20px;
   padding: 4px 8px 16px 4px;
   overflow-y: auto;
+  align-items: stretch;
   align-content: start;
 }
 
@@ -1032,10 +1069,29 @@ textarea {
   display: flex;
   flex-direction: column;
   gap: 10px;
-  height: auto;
-  min-height: 344px;
+  min-height: 356px;
   cursor: pointer;
   transition: transform 0.16s ease, box-shadow 0.16s ease, background-color 0.16s ease;
+}
+
+.ref-project-card .ref-mura-card-body {
+  flex: 1 0 auto;
+  display: flex;
+  flex-direction: column;
+}
+
+.ref-project-card .ref-mura-card-title {
+  white-space: nowrap;
+  text-wrap: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ref-project-card .ref-mura-actions-row {
+  margin-top: auto;
+  padding-top: 8px;
+  justify-content: flex-end;
+  gap: 8px;
 }
 
 .ref-project-card:hover {
@@ -1065,10 +1121,10 @@ textarea {
 
 .ref-project-card-image-frame {
   position: relative;
-  flex: 0 0 184px;
   height: 184px;
   min-height: 184px;
   max-height: 184px;
+  flex-shrink: 0;
   border-radius: 14px;
   overflow: hidden;
   background-color: #e0e1dd;
@@ -1216,14 +1272,11 @@ textarea {
 
 /* PART 1: Top 15% Interactions Bar (Divider-separated, cards only on each interaction item) */
 .ref-studio-top-interactions {
-  flex: 0 0 15%;
-  height: 15%;
-  min-height: 68px;
-  max-height: 110px;
+  flex: 0 0 auto;
   background-color: transparent;
   border-radius: 0;
   border-bottom: 1.5px solid rgba(27, 38, 59, 0.22);
-  padding: 6px 4px 12px 4px;
+  padding: 2px 4px 12px 4px;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -1275,13 +1328,14 @@ textarea {
   max-height: 68px;
   max-width: 245px;
   padding: 6px 14px 6px 10px;
-  border-radius: 14px;
+  border-radius: 12px;
   border: 1.5px solid #0d1b2a;
   background-color: var(--ref-card-surface);
   box-shadow: var(--ref-shadow-hard-sm);
   display: inline-flex;
   align-items: center;
   gap: 10px;
+  overflow: hidden;
   cursor: pointer;
   flex-shrink: 0;
   text-align: left;
@@ -1355,16 +1409,21 @@ textarea {
 }
 
 .ref-interaction-meta {
+  flex: 1;
   display: flex;
   flex-direction: column;
   gap: 2px;
   min-width: 0;
+  overflow: hidden;
 }
 
 .ref-interaction-turn {
   font-size: 0.75rem;
   font-weight: 700;
   color: var(--ref-ink-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .ref-interaction-prompt-snippet {
@@ -1487,7 +1546,7 @@ textarea {
   height: 32px;
   padding: 0;
   line-height: 1;
-  border-radius: var(--ref-radius-pill);
+  border-radius: 8px;
   border: 1.5px solid #1b263b;
   background-color: #ffffff;
   color: #1b263b;
@@ -1632,7 +1691,7 @@ textarea {
   height: 31px;
   padding: 0 14px;
   line-height: 1;
-  border-radius: var(--ref-radius-pill);
+  border-radius: 8px;
   border: 1.5px solid #0d1b2a;
   background-color: #1b263b;
   color: #ffffff;
@@ -1669,7 +1728,7 @@ textarea {
   height: 31px;
   padding: 0 13px;
   line-height: 1;
-  border-radius: var(--ref-radius-pill);
+  border-radius: 8px;
   border: 1.5px solid #0d1b2a;
   background-color: #ffffff;
   color: #1b263b;
@@ -1692,6 +1751,7 @@ textarea {
 .ref-mura-btn-outline.lg {
   height: 40px;
   padding: 0 18px;
+  border-radius: 10px;
   font-size: 0.8rem;
 }
 
@@ -1837,6 +1897,7 @@ textarea {
 .ref-params-pills-wrap .ref-pill-chip {
   height: 32px;
   padding: 0 13px;
+  border-radius: 8px;
   font-size: 0.74rem;
 }
 
@@ -1918,6 +1979,7 @@ textarea {
   display: flex;
   align-items: center;
   gap: 8px;
+  padding: 2px 6px 8px 2px;
   flex-wrap: nowrap;
   overflow-x: auto;
 }
@@ -2093,7 +2155,7 @@ textarea {
   text-decoration: none;
   min-height: 28px;
   padding: 0 10px;
-  border-radius: var(--ref-radius-pill);
+  border-radius: 8px;
   background-color: #ffffff;
   border: 1.5px solid #1b263b;
   display: inline-flex;
@@ -2124,7 +2186,7 @@ textarea {
   min-width: 0;
   flex-wrap: nowrap;
   overflow-x: auto;
-  padding-bottom: 2px;
+  padding: 2px 4px 6px 2px;
   scrollbar-width: thin;
 }
 
@@ -2132,7 +2194,7 @@ textarea {
   height: 28px;
   padding: 0 11px;
   line-height: 1;
-  border-radius: var(--ref-radius-pill);
+  border-radius: 8px;
   background-color: #ffffff;
   border: 1px solid rgba(27, 38, 59, 0.25);
   color: #1b263b;
@@ -2164,7 +2226,7 @@ textarea {
   padding: 0 4px;
   line-height: 1;
   font-variant-numeric: tabular-nums;
-  border-radius: var(--ref-radius-pill);
+  border-radius: 5px;
   background-color: #778da9;
   color: #0d1b2a;
   font-size: 0.75rem;
@@ -2323,7 +2385,7 @@ textarea {
   height: 28px;
   padding: 0;
   line-height: 1;
-  border-radius: var(--ref-radius-pill);
+  border-radius: 6px;
   border: 1px solid rgba(27, 38, 59, 0.28);
   background-color: #ffffff;
   color: #1b263b;
@@ -2378,7 +2440,7 @@ textarea {
   align-items: center;
   background-color: var(--ref-card-surface);
   border: 1.5px solid var(--ref-moss-outer);
-  border-radius: var(--ref-radius-pill);
+  border-radius: 10px;
   padding: 2px;
   gap: 2px;
 }
@@ -2387,7 +2449,7 @@ textarea {
   height: 30px;
   padding: 0 13px;
   line-height: 1;
-  border-radius: var(--ref-radius-pill);
+  border-radius: 8px;
   border: none;
   background: transparent;
   color: var(--ref-ink-secondary);
@@ -2651,7 +2713,7 @@ textarea {
   min-height: 27px;
   padding: 0 10px;
   line-height: 1;
-  border-radius: var(--ref-radius-pill);
+  border-radius: 8px;
   border: 1px solid rgba(27, 38, 59, 0.26);
   background-color: var(--ref-canvas);
   color: var(--ref-ink-secondary);
@@ -2834,7 +2896,7 @@ textarea {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
-  padding-right: 4px;
+  padding: 2px 8px 10px 2px;
 }
 
 .ref-creation-modifiers-stack .ref-studio-param-tab-panel {
@@ -3022,6 +3084,7 @@ textarea {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  flex-wrap: nowrap;
   gap: 10px;
   padding: 8px 12px;
   border-radius: 14px;
@@ -3030,19 +3093,29 @@ textarea {
   box-shadow: var(--ref-shadow-hard-md);
 }
 
-.ref-flow-toolbar-left,
+.ref-flow-toolbar-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1 1 auto;
+  min-width: 0;
+  flex-wrap: nowrap;
+}
+
 .ref-flow-toolbar-right {
   display: flex;
   align-items: center;
   gap: 8px;
-  flex-wrap: wrap;
+  flex-shrink: 0;
+  flex-wrap: nowrap;
 }
 
 .ref-flow-project-title-group {
-  display: inline-flex;
+  display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
   padding-left: 2px;
+  flex: 1 1 auto;
   min-width: 0;
 }
 
@@ -3050,7 +3123,9 @@ textarea {
   font-size: 0.86rem;
   font-weight: 800;
   color: #1b263b;
-  max-width: 240px;
+  flex: 1 1 auto;
+  min-width: 0;
+  max-width: none;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -3094,7 +3169,7 @@ textarea {
   font-variant-numeric: tabular-nums;
   color: #1b263b;
   padding: 0 10px;
-  border-radius: var(--ref-radius-pill);
+  border-radius: 8px;
   background-color: #e0e1dd;
   border: 1px solid rgba(27, 38, 59, 0.22);
   display: inline-flex;
@@ -3107,7 +3182,7 @@ textarea {
 .ref-flow-zoom-pill {
   display: inline-flex;
   align-items: center;
-  border-radius: var(--ref-radius-pill);
+  border-radius: 8px;
   border: 1px solid rgba(27, 38, 59, 0.25);
   background-color: #ffffff;
   overflow: hidden;
@@ -3253,7 +3328,7 @@ textarea {
   width: 22px;
   height: 22px;
   padding: 0;
-  border-radius: var(--ref-radius-pill);
+  border-radius: 5px;
   background-color: #778da9;
   border: 1.5px solid #0d1b2a;
   color: #0d1b2a;
@@ -3723,23 +3798,23 @@ textarea {
   width: 64px;
   height: 64px;
   padding: 0;
-  border-radius: 50%;
-  border: 2.5px solid var(--ref-moss-outer);
+  border-radius: 14px;
+  border: 2px solid var(--ref-moss-outer);
   background-color: var(--ref-lime-accent);
   color: var(--ref-ink-primary);
   display: inline-flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  box-shadow: 0 10px 24px var(--ref-shadow-soft);
+  box-shadow: var(--ref-shadow-hard-md);
   transition: transform 0.16s ease, background-color 0.16s ease, color 0.16s ease, box-shadow 0.16s ease;
 }
 
 .ref-flow-starter-plus-btn:hover {
-  transform: scale(1.08);
+  transform: translateY(-2px);
   background-color: var(--ref-moss-outer);
   color: var(--ref-lime-accent);
-  box-shadow: 0 14px 28px var(--ref-shadow-elevated);
+  box-shadow: var(--ref-shadow-hard-lg);
 }
 
 .ref-flow-starter-plus-btn:focus-visible {
@@ -3783,8 +3858,8 @@ textarea {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  padding: 6px 12px;
-  border-radius: 24px;
+  padding: 6px 10px;
+  border-radius: 14px;
   background-color: var(--ref-card-surface);
   border: 2px solid var(--ref-moss-outer);
   box-shadow: 0 12px 28px var(--ref-shadow-elevated);
@@ -3793,7 +3868,7 @@ textarea {
 .ref-wizard-step-pill {
   min-height: 34px;
   padding: 0 12px;
-  border-radius: 20px;
+  border-radius: 10px;
   border: 1.5px solid transparent;
   background-color: transparent;
   color: var(--ref-ink-secondary);
@@ -3840,7 +3915,7 @@ textarea {
 .ref-wizard-step-index {
   width: 22px;
   height: 22px;
-  border-radius: 50%;
+  border-radius: 6px;
   background-color: var(--ref-canvas);
   color: var(--ref-ink-secondary);
   font-size: 0.75rem;
@@ -4015,7 +4090,7 @@ textarea {
   width: 44px;
   height: 24px;
   padding: 2px;
-  border-radius: 16px;
+  border-radius: 8px;
   border: 1.5px solid var(--ref-moss-outer);
   background-color: var(--ref-canvas);
   display: inline-flex;
@@ -4039,7 +4114,7 @@ textarea {
 .ref-atelier-switch-thumb {
   width: 18px;
   height: 18px;
-  border-radius: 50%;
+  border-radius: 5px;
   background-color: var(--ref-card-surface);
   border: 1px solid var(--ref-moss-outer);
   transform: translateX(0);
@@ -4085,7 +4160,7 @@ textarea {
 .ref-refimage-dropzone-icon {
   width: 48px;
   height: 48px;
-  border-radius: 50%;
+  border-radius: 12px;
   background-color: var(--ref-canvas);
   color: var(--ref-moss-outer);
   border: 1.5px solid var(--ref-border-subtle);
@@ -4245,8 +4320,8 @@ textarea {
 
 .ref-slider-count-badge {
   height: 24px;
-  padding: 0 12px;
-  border-radius: 12px;
+  padding: 0 10px;
+  border-radius: 7px;
   background-color: var(--ref-moss-outer);
   color: var(--ref-lime-accent);
   font-size: 0.76rem;
@@ -4460,7 +4535,7 @@ textarea {
   overflow-y: auto;
   display: flex;
   flex-direction: column;
-  padding-right: 4px;
+  padding: 2px 10px 10px 2px;
 }
 
 .ref-variation-review-row {
@@ -4628,7 +4703,7 @@ textarea {
   display: flex;
   flex-direction: column;
   gap: 20px;
-  padding-right: 4px;
+  padding: 2px 10px 10px 2px;
 }
 
 .ref-settings-section {
@@ -5465,10 +5540,16 @@ textarea {
   flex-shrink: 0;
 }
 
+.ref-harness-flow-toolbar .ref-flow-project-title-group {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
 .ref-harness-flow-toolbar .ref-flow-project-title-text {
-  min-width: 96px;
-  max-width: 180px;
-  font-size: 0.81rem;
+  flex: 1 1 auto;
+  min-width: 0;
+  max-width: none;
+  font-size: 0.86rem;
 }
 
 .ref-flow-toolbar-badge.is-solved-pill {
@@ -5507,7 +5588,7 @@ textarea {
   align-items: center;
   gap: 8px;
   padding: 4px 12px;
-  border-radius: var(--ref-radius-pill);
+  border-radius: 8px;
   font-size: 0.75rem;
   font-weight: 800;
   background-color: var(--ref-moss-outer);
@@ -5937,17 +6018,29 @@ textarea {
 
 .ref-harness-quick-chips {
   display: flex;
+  flex-direction: column;
   gap: 8px;
-  flex-wrap: wrap;
+  width: 100%;
 }
 
 .ref-harness-quick-chips .ref-pill-chip {
-  height: 28px;
-  padding: 0 10px;
+  width: 100%;
+  height: auto;
+  min-height: 32px;
+  padding: 7px 12px;
+  border-radius: 8px;
   font-size: 0.75rem;
-  max-width: 100%;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  line-height: 1.35;
+  justify-content: flex-start;
+  text-align: left;
+  white-space: normal;
+}
+
+.ref-harness-anchor-bottom-btn {
+  width: 100%;
+  height: 34px;
+  border-radius: 8px;
+  font-size: 0.76rem;
 }
 
 .ref-harness-reiterate-controls-row {
@@ -6002,7 +6095,7 @@ textarea {
   color: var(--ref-moss-outer);
   font-variant-numeric: tabular-nums;
   padding: 2px 8px;
-  border-radius: var(--ref-radius-pill);
+  border-radius: 6px;
   background-color: var(--ref-amber-soft);
 }
 
@@ -6020,7 +6113,7 @@ textarea {
   display: flex;
   flex-direction: column;
   gap: 10px;
-  padding: 2px 6px 8px 2px;
+  padding: 4px 8px 10px 4px;
 }
 
 .ref-harness-iteration-card {
@@ -6094,7 +6187,7 @@ textarea {
   display: flex;
   gap: 8px;
   overflow-x: auto;
-  padding-top: 4px;
+  padding: 4px 6px 10px 4px;
 }
 
 .ref-harness-iteration-thumb-btn {
@@ -6105,25 +6198,27 @@ textarea {
   border-radius: 8px;
   overflow: hidden;
   flex-shrink: 0;
-  border: 1.5px solid var(--ref-border-subtle);
+  border: 1.5px solid var(--ref-moss-outer);
   background-color: var(--ref-canvas);
   cursor: pointer;
-  transition: transform 0.14s ease, border-color 0.14s ease;
+  transition: transform 0.14s ease, border-color 0.14s ease, box-shadow 0.14s ease;
 }
 
 .ref-harness-iteration-thumb-btn:hover {
-  transform: scale(1.05);
+  transform: translateY(-1px);
   border-color: var(--ref-moss-outer);
+  box-shadow: var(--ref-shadow-hard-xs);
 }
 
 .ref-harness-iteration-thumb-btn.is-winner {
   border: 2px solid var(--ref-lime-accent);
-  box-shadow: 0 0 0 1px var(--ref-moss-outer);
+  box-shadow: 0 0 0 1.5px var(--ref-moss-outer);
 }
 
 .ref-harness-iteration-thumb-img {
   width: 100%;
   height: 100%;
+  border-radius: 6px;
   object-fit: cover;
   display: block;
 }

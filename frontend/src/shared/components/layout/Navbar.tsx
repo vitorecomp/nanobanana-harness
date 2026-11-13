@@ -95,7 +95,7 @@ export default function Navbar() {
         className={`ref-sidebar ${collapsed ? "collapsed" : ""}`}
         aria-label="Nano Banana Studio Sidebar"
       >
-        {/* 1. TOP BRAND HEADER + COLLAPSE TOGGLE */}
+        {/* 1. TOP BRAND HEADER */}
         <div className="ref-sidebar-header">
           <div className="ref-sidebar-brand">
             <span className="ref-sidebar-logo-mark" aria-hidden="true">
@@ -108,19 +108,6 @@ export default function Navbar() {
               </div>
             )}
           </div>
-
-          <button
-            type="button"
-            className="ref-sidebar-collapse-btn"
-            onClick={() => setCollapsed((prev) => !prev)}
-            title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-            aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-          >
-            <IconDoubleChevron
-              direction={collapsed ? "right" : "left"}
-              size={13}
-            />
-          </button>
         </div>
 
         <div className="ref-sidebar-divider" />
@@ -351,6 +338,21 @@ export default function Navbar() {
                 }}
               />
             )}
+          </button>
+
+          <button
+            type="button"
+            id="nav-btn-collapse-sidebar"
+            className="ref-sidebar-nav-item"
+            onClick={() => setCollapsed((prev) => !prev)}
+            title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+            aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+          >
+            <IconDoubleChevron
+              direction={collapsed ? "right" : "left"}
+              size={15}
+            />
+            {!collapsed && <span>Collapse</span>}
           </button>
         </div>
       </aside>

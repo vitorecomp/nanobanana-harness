@@ -206,9 +206,6 @@ export default function ProjectsWorkspacePage() {
     }
   };
 
-  // Latest worked-on item (Studio or Goal Harness, ordered by updated_at DESC)
-  const latestWorkedItem = unifiedItems.length > 0 ? unifiedItems[0] : null;
-
   // Filtered items by kind + search query
   const filteredItems = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
@@ -224,79 +221,23 @@ export default function ProjectsWorkspacePage() {
   return (
     <div className="ref-page-container">
       <div className="ref-studio-three-part-layout">
-        {/* ==================== TOP 15%: LAST WORKED ITEM + SEARCH & FILTER BAR ==================== */}
+        {/* ==================== TOP BAR: SEARCH & FILTER ==================== */}
         <section
           className="ref-studio-top-interactions"
-          aria-label="Latest project and search"
+          aria-label="Search and filter gallery"
         >
-          {/* Left: Last Worked Project / Mission */}
-          <div className="ref-gallery-last-project-box">
-            <span className="ref-interactions-label">
-              {latestWorkedItem?.kind === "harness"
-                ? "Latest Goal Harness"
-                : "Latest Project"}
-            </span>
-            {latestWorkedItem ? (
-              <button
-                type="button"
-                className="ref-interaction-history-item active"
-                onClick={() => handleOpenGalleryItem(latestWorkedItem)}
-                title={
-                  latestWorkedItem.kind === "harness"
-                    ? "Continue working on this Goal Harness mission"
-                    : "Continue working on this Studio project"
-                }
-              >
-                {latestWorkedItem.previewImageUrl ? (
-                  <img
-                    src={latestWorkedItem.previewImageUrl}
-                    alt={latestWorkedItem.title}
-                    className="ref-interaction-thumb"
-                  />
-                ) : (
-                  <div className="ref-interaction-thumb-empty" />
-                )}
-                <div className="ref-interaction-meta">
-                  <span className="ref-interaction-turn">
-                    {latestWorkedItem.title}
-                  </span>
-                  <span className="ref-interaction-prompt-snippet">
-                    {latestWorkedItem.promptOrGoal ||
-                      (latestWorkedItem.kind === "harness"
-                        ? "Click to open in Goal Harness"
-                        : "Click to open in Studio")}
-                  </span>
-                </div>
-              </button>
-            ) : (
-              <div className="ref-gallery-last-project-empty">
-                No recent project
-              </div>
-            )}
-          </div>
-
-          {/* Center: Search Bar + Type Filter Pills + Live Status Toast */}
           <div className="ref-gallery-search-box">
-            <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: "8px",
-                width: "100%",
-                flexWrap: "wrap",
-              }}
-            >
+            <div className="ref-gallery-search-filter-row">
               <input
                 type="search"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="ref-input ref-gallery-search-input"
-                style={{ flex: "1 1 240px" }}
                 placeholder="Search Studio projects & Goal Harness missions..."
                 aria-label="Search Studio projects and Goal Harness missions"
               />
               <div
-                style={{ display: "flex", alignItems: "center", gap: "6px" }}
+                className="ref-gallery-filter-group"
                 role="group"
                 aria-label="Filter gallery by workspace type"
               >
@@ -383,7 +324,7 @@ export default function ProjectsWorkspacePage() {
                         top: "10px",
                         left: "10px",
                         padding: "4px 10px",
-                        borderRadius: "999px",
+                        borderRadius: "8px",
                         fontSize: "12px",
                         fontWeight: 700,
                         letterSpacing: "0.02em",
@@ -409,7 +350,7 @@ export default function ProjectsWorkspacePage() {
                           top: "8px",
                           right: "8px",
                           padding: "4px 12px",
-                          borderRadius: "999px",
+                          borderRadius: "8px",
                           fontSize: "12px",
                           fontWeight: 800,
                           backgroundColor: "var(--ref-lime-accent)",
@@ -458,7 +399,7 @@ export default function ProjectsWorkspacePage() {
                     <div className="ref-mura-actions-row">
                       <button
                         type="button"
-                        className="ref-mura-btn-solid"
+                        className="ref-mura-btn-outline"
                         onClick={(e) => {
                           e.stopPropagation();
                           handleOpenGalleryItem(item);
@@ -473,8 +414,8 @@ export default function ProjectsWorkspacePage() {
                         title="Remove from Gallery"
                         aria-label={`Remove ${item.title}`}
                       >
+                        <IconTrash size={13} strokeWidth={1.9} />
                         <span>Remove</span>
-                        <IconClose size={10} strokeWidth={2.1} />
                       </button>
                     </div>
                   </div>

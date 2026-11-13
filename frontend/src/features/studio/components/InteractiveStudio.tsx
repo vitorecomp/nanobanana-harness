@@ -2236,23 +2236,6 @@ export default function InteractiveStudio({
                   {projectTitle || "New Project"}
                 </span>
               </div>
-              <span className="ref-flow-toolbar-divider" aria-hidden="true" />
-              <span className="ref-flow-toolbar-badge">
-                ⛓ Flow • {totalFlowCardsCount}{" "}
-                {totalFlowCardsCount === 1 ? "Card" : "Cards"} (
-                {interactions.length}{" "}
-                {interactions.length === 1 ? "Step" : "Steps"})
-              </span>
-              <button
-                type="button"
-                className="ref-mura-btn-solid"
-                onClick={openCreationModalAsNewRoot}
-                disabled={isGenerating}
-                title="Open creation modal to add a new step"
-              >
-                <IconPlus size={11} strokeWidth={2.3} />
-                <span>New Step</span>
-              </button>
             </div>
 
             <div className="ref-flow-toolbar-right">
@@ -2367,6 +2350,16 @@ export default function InteractiveStudio({
                   <IconPlus size={12} strokeWidth={2.1} />
                 </button>
               </div>
+              <button
+                type="button"
+                className="ref-mura-btn-solid"
+                onClick={openCreationModalAsNewRoot}
+                disabled={isGenerating}
+                title="Open creation modal to add a new step"
+              >
+                <IconPlus size={11} strokeWidth={2.3} />
+                <span>New Step</span>
+              </button>
             </div>
           </div>
 
