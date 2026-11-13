@@ -53,11 +53,14 @@ jobs:
     needs: verify
     if: startsWith(github.ref, 'refs/tags/')
     runs-on: ubuntu-latest
+    outputs:
+      release_id: ${{ steps.ensure_release.outputs.release_id }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
       - name: Ensure GitHub Release exists for tag
+        id: ensure_release
         shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -82,11 +85,14 @@ jobs:
           - **Windows 64-bit (`x64`)**: `*_x64-setup.exe` (NSIS) & `*_x64_en-US.msi` (WiX)
           - **Windows 32-bit (`x86`)**: `*_x86-setup.exe` (NSIS) & `*_x86_en-US.msi` (WiX)
           - **Linux (`x64`)**: `*.deb` (Debian / Ubuntu), `*.AppImage` (Portable AppImage), & `*.rpm` (Fedora / RHEL)
-          - **macOS (`Apple Silicon arm64` & `Intel x64`)**: `*_aarch64.dmg`, `*_x64.dmg`, & `.app.tar.gz`
+          - **macOS (`Apple Silicon arm64` & `Intel x64`)**: `*_aarch64.dmg` & `*_x64.dmg`
           - **Static Web Export**: `nanobanana-studio-web-${{ github.ref_name }}.tar.gz`
           EOF
           )"
           fi
+          REL_ID="$(gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${TAG}" --jq '.id')"
+          echo "Resolved release_id=${REL_ID}"
+          echo "release_id=${REL_ID}" >> "$GITHUB_OUTPUT"
 
   build-installers:
     name: Build ${{ matrix.label }}
@@ -103,35 +109,35 @@ jobs:
             artifact_slug: "linux-x64"
             os: ubuntu-22.04
             target: x86_64-unknown-linux-gnu
-            args: "--target x86_64-unknown-linux-gnu"
+            args: "--target x86_64-unknown-linux-gnu --bundles deb,rpm,appimage"
 
           # Windows 64-bit: x64 .exe (NSIS) & .msi (WiX)
           - label: "Windows x64 (.exe & .msi)"
             artifact_slug: "windows-x64"
             os: windows-latest
             target: x86_64-pc-windows-msvc
-            args: "--target x86_64-pc-windows-msvc"
+            args: "--target x86_64-pc-windows-msvc --bundles nsis,msi"
 
           # Windows 32-bit: x86 .exe (NSIS) & .msi (WiX)
           - label: "Windows x86 32-bit (.exe & .msi)"
             artifact_slug: "windows-x86"
             os: windows-latest
             target: i686-pc-windows-msvc
-            args: "--target i686-pc-windows-msvc"
+            args: "--target i686-pc-windows-msvc --bundles nsis,msi"
 
-          # macOS Apple Silicon: arm64 .dmg & .app
-          - label: "macOS Apple Silicon (arm64 .dmg & .app)"
+          # macOS Apple Silicon: arm64 .dmg
+          - label: "macOS Apple Silicon (arm64 .dmg)"
             artifact_slug: "macos-arm64"
             os: macos-latest
             target: aarch64-apple-darwin
-            args: "--target aarch64-apple-darwin"
+            args: "--target aarch64-apple-darwin --bundles dmg"
 
-          # macOS Intel: x64 .dmg & .app
-          - label: "macOS Intel (x64 .dmg & .app)"
+          # macOS Intel: x64 .dmg
+          - label: "macOS Intel (x64 .dmg)"
             artifact_slug: "macos-x64"
             os: macos-latest
             target: x86_64-apple-darwin
-            args: "--target x86_64-apple-darwin"
+            args: "--target x86_64-apple-darwin --bundles dmg"
 
     runs-on: ${{ matrix.os }}
 
@@ -155,6 +161,7 @@ jobs:
             librsvg2-dev \
             patchelf \
             libfuse2 \
+            xdg-utils \
             rpm
 
       - name: Setup Node.js 22
@@ -176,6 +183,12 @@ jobs:
         with:
           workspaces: "./src-tauri -> target"
           key: ${{ matrix.target }}
+
+      - name: Install NPM dependencies
+        shell: bash
+        run: |
+          npm ci
+          npm --prefix frontend ci
 
       - name: Sync version from Git tag
         if: startsWith(github.ref, 'refs/tags/')
@@ -209,13 +222,7 @@ jobs:
             echo "Tag '${RAW_TAG}' is not strict semver; keeping manifest version."
           fi
 
-      - name: Install NPM dependencies
-        shell: bash
-        run: |
-          npm ci
-          npm --prefix frontend ci
-
-      # 1. Tag Push -> Build & Publish Official GitHub Release (Release + Optional Dev/Debug Linux & Windows Binaries)
+      # 1. Tag Push -> Build & Upload Installers to Pre-Created GitHub Release
       - name: Build & Publish Tauri Release Installers (Tag Push)
         if: startsWith(github.ref, 'refs/tags/')
         uses: tauri-apps/tauri-action@v0
@@ -224,21 +231,9 @@ jobs:
           APPIMAGE_EXTRACT_AND_RUN: "1"
           NO_STRIP: "true"
         with:
-          tagName: ${{ github.ref_name }}
-          releaseName: "Nano Banana Goal Harness & Studio ${{ github.ref_name }}"
-          releaseBody: |
-            ## Nano Banana Goal Harness & Atelier Studio — `${{ github.ref_name }}`
-
-            Autonomous Multi-Agent Goal-Driven Image Evolution Harness (**AutoRef-Harness + EvoGen TRACE**) & 2×2 Interactive Studio for **Google Nano Banana (`gemini-2.5-flash-image` & `gemini-3-pro-image-preview`)**.
-
-            ### 📦 Native Desktop Installers
-            - **Windows 64-bit (`x64`)**: `*_x64-setup.exe` (NSIS) & `*_x64_en-US.msi` (WiX)
-            - **Windows 32-bit (`x86`)**: `*_x86-setup.exe` (NSIS) & `*_x86_en-US.msi` (WiX)
-            - **Linux (`x64`)**: `*.deb` (Debian / Ubuntu), `*.AppImage` (Portable AppImage), & `*.rpm` (Fedora / RHEL)
-            - **macOS (`Apple Silicon arm64` & `Intel x64`)**: `*_aarch64.dmg`, `*_x64.dmg`, & `.app.tar.gz`
-            - **Static Web Export**: `nanobanana-studio-web-${{ github.ref_name }}.tar.gz`
-          releaseDraft: false
-          prerelease: ${{ contains(github.ref_name, '-') }}
+          releaseId: ${{ needs.prepare-release.outputs.release_id }}
+          includeUpdaterJson: false
+          retryAttempts: 3
           args: ${{ matrix.args }}
 
       # 2. Manual Dispatch -> Build Release or Dev/Debug Installers & Upload Workflow Artifacts

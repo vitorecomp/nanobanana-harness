@@ -8,12 +8,13 @@
     "build": "npm --prefix frontend run build",
     "build:tauri-web": "npm --prefix frontend run build:tauri",
     "typecheck": "npm --prefix frontend exec -- tsc -p frontend/tsconfig.json --noEmit",
-    "tauri:dev": "./node_modules/.bin/tauri dev",
-    "tauri:build": "./node_modules/.bin/tauri build",
-    "tauri:build:debug": "./node_modules/.bin/tauri build --debug",
-    "tauri:build:linux": "./node_modules/.bin/tauri build --bundles deb,appimage,rpm",
-    "tauri:build:win-x64": "./node_modules/.bin/tauri build --target x86_64-pc-windows-msvc",
-    "tauri:build:win-x86": "./node_modules/.bin/tauri build --target i686-pc-windows-msvc"
+    "tauri": "tauri",
+    "tauri:dev": "tauri dev",
+    "tauri:build": "tauri build",
+    "tauri:build:debug": "tauri build --debug",
+    "tauri:build:linux": "tauri build --bundles deb,appimage,rpm",
+    "tauri:build:win-x64": "tauri build --target x86_64-pc-windows-msvc",
+    "tauri:build:win-x86": "tauri build --target i686-pc-windows-msvc"
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2.7.1"
