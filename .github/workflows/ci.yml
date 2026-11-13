@@ -82,5 +82,10 @@ jobs:
         with:
           workspaces: "./src-tauri -> target"
 
+      - name: Prepare frontendDist stub for Tauri macro check
+        run: |
+          mkdir -p frontend/out
+          printf '<!doctype html><html><body></body></html>\n' > frontend/out/index.html
+
       - name: Check Tauri Rust crate
         run: cargo check --manifest-path src-tauri/Cargo.toml

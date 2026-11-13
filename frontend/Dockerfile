@@ -2,8 +2,8 @@ FROM node:24-slim AS base
 
 WORKDIR /app
 
-COPY package.json ./
-RUN npm install --no-audit --no-fund && test -x ./node_modules/.bin/next
+COPY package.json package-lock.json .npmrc ./
+RUN npm ci --no-audit --no-fund && test -x ./node_modules/.bin/next
 
 FROM base AS development
 COPY . .
